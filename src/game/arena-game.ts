@@ -1,4 +1,5 @@
-import { playMusic, stopMusic } from "../audio/music";
+import { setMusic } from "../audio/music";
+import { cueFor } from "../audio/score";
 import { Effects } from "../render/effects";
 import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
 import { WORLDS } from "../sim/arena/content";
@@ -94,9 +95,6 @@ export class ArenaGame {
       life: 260,
     };
     this.setScreen("run");
-    if (this.musicOn) {
-      void playMusic(1);
-    }
   }
 
   phase(): RunPhase {
@@ -121,6 +119,7 @@ export class ArenaGame {
   private setScreen(screen: Screen): void {
     this.screen = screen;
     this.hooks.onScreen(screen, this.state);
+    this.syncMusic();
   }
 
   keyDown(key: string): void {
@@ -205,8 +204,13 @@ export class ArenaGame {
 
   toggleMusic(): boolean {
     this.musicOn = !this.musicOn;
-    void (this.musicOn ? playMusic(this.state.tier) : stopMusic());
+    this.syncMusic();
     return this.musicOn;
+  }
+
+  private syncMusic(): void {
+    const { tier, bossesDown, bossId } = this.state;
+    setMusic(this.musicOn ? cueFor({ onTitle: this.screen === "title" || this.screen === "results", tier, bossesDown, bossId }) : null);
   }
 
   private input(): Input {
@@ -326,9 +330,6 @@ export class ArenaGame {
           break;
         }
         case "tierUp":
-          if (this.musicOn) {
-            void playMusic(event.tier);
-          }
           break;
         case "slam":
           this.renderer.shake = Math.max(this.renderer.shake, 1.1);
@@ -338,6 +339,7 @@ export class ArenaGame {
           break;
       }
     }
+    this.syncMusic();
   }
 
   private projectToHud(x: number, y: number): { readonly x: number; readonly y: number } {
