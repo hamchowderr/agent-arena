@@ -2,6 +2,9 @@
 
 A free, open-source (AGPL-3.0-or-later) browser autobattler. Players grow an agent from a raw LLM into a harnessed agent, then fight rival agents from fictional parody SaaS companies. Built with Claude Code. The game links out to Mastra ("Build your own agent with Mastra"); the game itself does not run on Mastra.
 
+## Where it's played
+Every merge to `main` deploys the build to GitHub Pages at https://hamchowderr.github.io/agent-arena/ (`.github/workflows/deploy.yml`). Vite uses `base: "./"` so the site works under that subpath, and `scripts/check-size.mjs` fails if `dist/index.html` links from the site root.
+
 ## Commands
 - `npm run dev`: local dev server
 - `npm run balance`: the balance bots play 1000 seeded runs of the old turn-based stage loop and print clear rates per stage. The targets in `src/sim/run.ts` (`BALANCE_TARGETS`) are tested in CI.
