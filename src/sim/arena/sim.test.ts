@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { playBotRun } from "./bot";
 import { offerCards } from "./cards";
 import { MAX_PASSIVES, MAX_WEAPONS, WEAPONS } from "./content";
-import { seconds } from "./math";
-import { choose, createArena, IDLE, maxHealth, step, xpToNext } from "./sim";
+import { distanceSquared, seconds, SUB } from "./math";
+import { BOSS_ENTRY_DISTANCE, choose, createArena, IDLE, maxHealth, step, xpToNext } from "./sim";
 
 describe("arena sim", () => {
   it("replays the same run from the same seed", () => {
@@ -37,7 +37,7 @@ describe("arena sim", () => {
     expect(state.kills).toBeGreaterThan(30);
   });
 
-  it("brings the first boss at two minutes", () => {
+  it("brings the first boss at two minutes, on screen just above the player", () => {
     const state = createArena(9);
     let arrived = -1;
     while (state.tick < seconds(130) && arrived < 0) {
@@ -47,6 +47,12 @@ describe("arena sim", () => {
       }
       if (state.events.some((event) => event.kind === "bossArrives")) {
         arrived = state.tick;
+        const boss = state.enemies.find((enemy) => enemy.id === state.bossId);
+        expect(boss).toBeDefined();
+        if (boss) {
+          expect(boss.y).toBeLessThan(state.player.y);
+          expect(distanceSquared(boss.x, boss.y, state.player.x, state.player.y)).toBeLessThanOrEqual(BOSS_ENTRY_DISTANCE * BOSS_ENTRY_DISTANCE + SUB * SUB * 4);
+        }
       }
       if (state.status === "dead") {
         break;

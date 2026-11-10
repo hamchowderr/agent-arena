@@ -8,6 +8,7 @@ import type { Tier } from "../sim/tiers";
 import {
   cardRects,
   drawBanner,
+  drawBossMarker,
   drawDialogue,
   drawFloats,
   drawLevelUp,
@@ -312,6 +313,9 @@ export class ArenaGame {
     const player = this.projectToHud(this.state.player.x, this.state.player.y);
     const boss = this.state.enemies.find((enemy) => enemy.id === this.state.bossId);
     drawRunHud(context, this.state, player, boss ? { name: currentWorld(this.state).boss, fraction: boss.health / boss.maxHealth } : null);
+    if (boss && !paused) {
+      drawBossMarker(context, this.projectToHud(boss.x, boss.y), this.frameCount);
+    }
     if (this.dialogue) {
       this.dialogue.age += paused ? 0 : 1;
       drawDialogue(context, this.dialogue);

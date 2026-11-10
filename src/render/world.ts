@@ -25,7 +25,7 @@ import {
   BEAM,
   BIG_GEM,
   BOLT,
-  BOSS,
+  BOSS_OUTLINED,
   BRUTE,
   CODE_BLOCK,
   GEM,
@@ -48,6 +48,8 @@ export const RENDER_WIDTH = 480;
 export const RENDER_HEIGHT = 270;
 const PITCH = (48 * Math.PI) / 180;
 const CAMERA_DISTANCE = 380;
+const BOSS_SCALE = 2;
+const BOSS_RING_RADIUS = 30;
 const CHUNK = 192;
 const PROPS_PER_CHUNK = 26;
 const FLASH_COLOR = new Color(4, 4, 4);
@@ -57,14 +59,15 @@ export interface WorldLook {
   readonly ground: readonly [string, string, string, string];
   readonly fog: string;
   readonly faction: string;
+  readonly boss: string;
 }
 
 export const WORLD_LOOKS: Readonly<Record<Tier, WorldLook>> = {
-  1: { ground: ["#3f7a3a", "#4a8a40", "#356b33", "#6aa84a"], fog: "#1b2a2a", faction: PALETTE.r },
-  2: { ground: ["#5a7a3a", "#6b8a44", "#4d6a32", "#9ab25a"], fog: "#2a2a1b", faction: PALETTE.p },
-  3: { ground: ["#3a6a6a", "#447a78", "#325a5c", "#6aa8a0"], fog: "#14222a", faction: PALETTE.o },
-  4: { ground: ["#5a4a6a", "#6a5a7a", "#4a3a5a", "#8a7aa8"], fog: "#1a1424", faction: PALETTE.B },
-  5: { ground: ["#6a5a3a", "#7a6a44", "#5a4a32", "#b29a5a"], fog: "#2a2014", faction: PALETTE.g },
+  1: { ground: ["#3f7a3a", "#4a8a40", "#356b33", "#6aa84a"], fog: "#1b2a2a", faction: PALETTE.r, boss: PALETTE.p },
+  2: { ground: ["#5a7a3a", "#6b8a44", "#4d6a32", "#9ab25a"], fog: "#2a2a1b", faction: PALETTE.p, boss: PALETTE.o },
+  3: { ground: ["#3a6a6a", "#447a78", "#325a5c", "#6aa8a0"], fog: "#14222a", faction: PALETTE.o, boss: PALETTE.p },
+  4: { ground: ["#5a4a6a", "#6a5a7a", "#4a3a5a", "#8a7aa8"], fog: "#1a1424", faction: PALETTE.B, boss: PALETTE.o },
+  5: { ground: ["#6a5a3a", "#7a6a44", "#5a4a32", "#b29a5a"], fog: "#2a2014", faction: PALETTE.g, boss: PALETTE.p },
 };
 
 class SpriteBatch {
@@ -223,6 +226,7 @@ export class ArenaRenderer {
   private readonly glow: Mesh<CircleGeometry, MeshBasicMaterial>;
   private readonly slamFill: Mesh<CircleGeometry, MeshBasicMaterial>;
   private readonly slamRing: Mesh<RingGeometry, MeshBasicMaterial>;
+  private readonly bossRing: Mesh<RingGeometry, MeshBasicMaterial>;
   private readonly shadows: ShadowBatch;
   private readonly enemies: Record<EnemyKind, SpriteBatch>;
   private readonly agent: SpriteBatch[];
@@ -295,13 +299,19 @@ export class ArenaRenderer {
     this.slamRing = new Mesh(slamRingGeometry, new MeshBasicMaterial({ color: "#ffe1a0", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
     this.slamRing.position.y = 0.5;
     this.scene.add(this.slamRing);
+    const bossRingGeometry = new RingGeometry(0.78, 1, 48);
+    bossRingGeometry.rotateX(-Math.PI / 2);
+    this.bossRing = new Mesh(bossRingGeometry, new MeshBasicMaterial({ color: "#ffcd75", transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, toneMapped: false }));
+    this.bossRing.position.y = 0.45;
+    this.bossRing.scale.setScalar(BOSS_RING_RADIUS);
+    this.scene.add(this.bossRing);
 
     this.shadows = new ShadowBatch(this.scene, 1400);
     this.enemies = {
       grunt: this.batch([GRUNT], 1, 500, false),
       runner: this.batch([RUNNER], 1, 300, false),
       brute: this.batch([BRUTE], 1, 120, false),
-      boss: this.batch([BOSS], 2, 2, false),
+      boss: this.bossBatch(WORLD_LOOKS[1].boss),
     };
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => this.batch(agentSprite(tier), 1, 1, false));
     this.gems = this.batch([GEM], 1, 900, false);
@@ -329,6 +339,14 @@ export class ArenaRenderer {
     return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
   }
 
+  private bossBatch(color: string): SpriteBatch {
+    const batch = this.batch([BOSS_OUTLINED], BOSS_SCALE, 2, false, color);
+    batch.mesh.renderOrder = 10;
+    const material = batch.mesh.material as MeshBasicMaterial;
+    material.depthTest = false;
+    return batch;
+  }
+
   setWorld(tier: Tier, seed: number): void {
     this.seed = seed;
     this.tier = tier;
@@ -345,8 +363,8 @@ export class ArenaRenderer {
       const old = this.enemies[kind];
       const capacity = old.mesh.instanceMatrix.count;
       old.dispose(this.scene);
-      const sprite = kind === "grunt" ? GRUNT : kind === "runner" ? RUNNER : kind === "brute" ? BRUTE : BOSS;
-      this.enemies[kind] = this.batch([sprite], kind === "boss" ? 2 : 1, capacity, false, look.faction);
+      const sprite = kind === "grunt" ? GRUNT : kind === "runner" ? RUNNER : BRUTE;
+      this.enemies[kind] = kind === "boss" ? this.bossBatch(look.boss) : this.batch([sprite], 1, capacity, false, look.faction);
     }
     this.propChunkX = Number.NaN;
   }
@@ -480,6 +498,15 @@ export class ArenaRenderer {
     }
     this.blocks.commit();
     this.shadows.commit();
+
+    const boss = state.enemies.find((enemy) => enemy.id === state.bossId);
+    if (boss) {
+      this.bossRing.position.x = boss.x / SUB;
+      this.bossRing.position.z = boss.y / SUB;
+      this.bossRing.material.opacity = 0.55 + 0.35 * Math.sin(state.tick / 6);
+    } else {
+      this.bossRing.material.opacity = 0;
+    }
 
     if (state.slam) {
       const progress = 1 - state.slam.ticksLeft / 60;

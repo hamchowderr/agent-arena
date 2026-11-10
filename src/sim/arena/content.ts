@@ -151,7 +151,7 @@ export const ENEMIES: Readonly<Record<EnemyKind, EnemyDefinition>> = {
   grunt: { health: 9, speed: 8, damage: 4, radius: 6, xp: 1 },
   runner: { health: 6, speed: 14, damage: 4, radius: 5, xp: 1 },
   brute: { health: 50, speed: 6, damage: 9, radius: 9, xp: 5 },
-  boss: { health: 0, speed: 7, damage: 18, radius: 18, xp: 40 },
+  boss: { health: 0, speed: 11, damage: 18, radius: 18, xp: 40 },
 };
 
 export interface World {

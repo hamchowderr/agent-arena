@@ -155,3 +155,22 @@ export const TUFT: Sprite = ["l.l.l.", ".lglg.", "gGgGgg"];
 export const CABLE: Sprite = ["..dddd..", ".dSSSSd.", "dS.dd.Sd", "dS.dd.Sd", ".dSSSSd.", "..dddd.."];
 
 export const PROPS: readonly Sprite[] = [BUSH, ROCK, SERVER, CRATE, FLOWER, TUFT, TUFT, FLOWER, CABLE];
+
+export function outlined(sprite: Sprite, key: string): Sprite {
+  const width = (sprite[0]?.length ?? 0) + 2;
+  const filled = (x: number, y: number) => {
+    const cell = sprite[y - 1]?.[x - 1];
+    return cell !== undefined && cell !== ".";
+  };
+  return Array.from({ length: sprite.length + 2 }, (_, y) =>
+    Array.from({ length: width }, (_, x) => {
+      if (filled(x, y)) {
+        return sprite[y - 1]?.[x - 1] ?? ".";
+      }
+      const touching = filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1);
+      return touching ? key : ".";
+    }).join(""),
+  );
+}
+
+export const BOSS_OUTLINED: Sprite = outlined(BOSS, "w");

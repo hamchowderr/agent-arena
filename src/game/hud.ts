@@ -27,6 +27,11 @@ const GOLD = "#ffcd75";
 const PANEL = "rgba(16, 18, 30, 0.86)";
 const PANEL_EDGE = "#5d6a8a";
 
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface Rect {
   readonly x: number;
   readonly y: number;
@@ -210,9 +215,50 @@ export function drawDialogue(context: CanvasRenderingContext2D, dialogue: Dialog
 export function drawBanner(context: CanvasRenderingContext2D, banner: Banner): void {
   const fade = Math.min(1, banner.age / 10, (banner.life - banner.age) / 15);
   context.globalAlpha = Math.max(0, fade);
-  text(context, banner.title, HUD_WIDTH / 2, 230, 56, GOLD, "center");
-  text(context, banner.subtitle, HUD_WIDTH / 2, 300, 22, INK, "center");
+  text(context, banner.title, HUD_WIDTH / 2, 160, 56, GOLD, "center");
+  text(context, banner.subtitle, HUD_WIDTH / 2, 222, 22, INK, "center");
   context.globalAlpha = 1;
+}
+
+const MARKER_AREA: Rect = { x: 56, y: 140, w: HUD_WIDTH - 112, h: HUD_HEIGHT - 140 - 130 };
+const BOSS_HEAD_OFFSET = 175;
+
+export function bossMarker(at: Point): { readonly x: number; readonly y: number; readonly angle: number; readonly onScreen: boolean } {
+  const headY = at.y - BOSS_HEAD_OFFSET;
+  const onScreen = inside(MARKER_AREA, at.x, Math.max(headY, MARKER_AREA.y)) && at.y < MARKER_AREA.y + MARKER_AREA.h + BOSS_HEAD_OFFSET;
+  if (onScreen) {
+    return { x: at.x, y: Math.max(headY, MARKER_AREA.y), angle: Math.PI / 2, onScreen };
+  }
+  const centerX = MARKER_AREA.x + MARKER_AREA.w / 2;
+  const centerY = MARKER_AREA.y + MARKER_AREA.h / 2;
+  const angle = Math.atan2(at.y - centerY, at.x - centerX);
+  const reachX = MARKER_AREA.w / 2 / Math.max(1e-6, Math.abs(Math.cos(angle)));
+  const reachY = MARKER_AREA.h / 2 / Math.max(1e-6, Math.abs(Math.sin(angle)));
+  const reach = Math.min(reachX, reachY);
+  return { x: centerX + Math.cos(angle) * reach, y: centerY + Math.sin(angle) * reach, angle, onScreen };
+}
+
+export function drawBossMarker(context: CanvasRenderingContext2D, at: Point, frame: number): void {
+  const marker = bossMarker(at);
+  const bob = marker.onScreen ? Math.sin(frame / 8) * 6 : Math.sin(frame / 6) * 4;
+  const x = marker.x - (marker.onScreen ? 0 : Math.cos(marker.angle) * bob);
+  const y = marker.y + (marker.onScreen ? bob : -Math.sin(marker.angle) * bob);
+  context.save();
+  context.translate(x, y);
+  context.rotate(marker.angle);
+  context.beginPath();
+  context.moveTo(18, 0);
+  context.lineTo(-12, -16);
+  context.lineTo(-12, 16);
+  context.closePath();
+  context.fillStyle = "#ff4b5c";
+  context.strokeStyle = "#1a1c2c";
+  context.lineWidth = 4;
+  context.stroke();
+  context.fill();
+  context.restore();
+  const labelY = marker.onScreen ? y - 26 : y + (Math.sin(marker.angle) > 0.5 ? -30 : 38);
+  text(context, "Boss", x, labelY, 18, "#ff9b9b", "center");
 }
 
 export function cardRects(count: number): Rect[] {
