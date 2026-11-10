@@ -11,7 +11,7 @@ for (let seed = 1; seed <= RUNS; seed += 1) {
   const { state } = playBotRun(seed, seconds(720));
   bossTotal += state.bossesDown;
   secondsTotal += elapsedSeconds(state);
-  rows.push(`${seed}\t${state.status}\t${elapsedSeconds(state)}s\tlv${state.level}\tkills ${state.kills}\tbosses ${state.bossesDown}\t${state.killedBy ?? ""}\t${state.weapons.map((weapon) => `${weapon.id}${weapon.level}`).join(",")}`);
+  rows.push(`${seed}\t${state.status}\t${elapsedSeconds(state)}s\tlv${state.level}\tkills ${state.kills}\tbosses ${state.bossesDown}\t${state.killedBy ? `${state.killedBy.world} ${state.killedBy.enemy}` : ""}\t${state.weapons.map((weapon) => `${weapon.id}${weapon.level}`).join(",")}`);
 }
 console.log(rows.slice(0, 12).join("\n"));
 console.log(`avg survival ${Math.round(secondsTotal / RUNS)}s, avg bosses ${(bossTotal / RUNS).toFixed(2)}`);

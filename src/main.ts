@@ -2,19 +2,56 @@ const worldCanvas = document.querySelector<HTMLCanvasElement>("#world");
 const hudCanvas = document.querySelector<HTMLCanvasElement>("#hud");
 const loadingNote = document.querySelector<HTMLElement>("#status");
 
+const LOCALE_KEY = "agent-arena.locale";
+
+function readSavedLocale(): string | null {
+  try {
+    return window.localStorage.getItem(LOCALE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveLocale(code: string): void {
+  try {
+    window.localStorage.setItem(LOCALE_KEY, code);
+  } catch {
+    return;
+  }
+}
+
+function loadPixelCjkFont(): void {
+  if (document.querySelector("link[data-font=cjk]")) {
+    return;
+  }
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=DotGothic16&display=swap";
+  link.dataset["font"] = "cjk";
+  document.head.append(link);
+}
+
 async function boot(): Promise<void> {
   const hud = hudCanvas?.getContext("2d");
   if (!worldCanvas || !hudCanvas || !hud) {
     return;
   }
-  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH } = await import("./game/arena-game");
+  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale } = await import("./game/arena-game");
   hudCanvas.width = HUD_WIDTH;
   hudCanvas.height = HUD_HEIGHT;
   const query = new URLSearchParams(window.location.search);
   const fixedSeed = Number(query.get("seed"));
+  const wanted = query.get("lang");
   const game = new ArenaGame(worldCanvas, hud, {
     newSeed: () => (Number.isInteger(fixedSeed) && fixedSeed > 0 ? fixedSeed : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0),
     now: () => performance.now(),
+    onLocale: (code) => {
+      document.documentElement.lang = code;
+      if (code === "ja" || code === "zh-Hans") {
+        loadPixelCjkFont();
+      }
+      saveLocale(code);
+    },
     onScreen: (screen, state) => {
       hudCanvas.dataset["screen"] = screen;
       if (screen === "results") {
@@ -24,6 +61,7 @@ async function boot(): Promise<void> {
       }
     },
   });
+  await game.changeLocale(detectLocale([wanted, readSavedLocale(), ...navigator.languages]));
   loadingNote?.remove();
   const toHud = (event: PointerEvent) => {
     const box = hudCanvas.getBoundingClientRect();

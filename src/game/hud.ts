@@ -1,7 +1,7 @@
 import { BEAM, BOLT, CODE_BLOCK, SEEKER } from "../art/arena-sprites";
 import type { Sprite } from "../art/sprites";
-import { cardBlurb, cardName, type Card } from "../sim/arena/cards";
-import { isEvolvedWeapon, PASSIVES, WEAPONS, WORLDS, type WeaponId, type WeaponKind } from "../sim/arena/content";
+import type { Card } from "../sim/arena/cards";
+import { isEvolvedWeapon, WEAPONS, WORLDS, type WeaponId, type WeaponKind } from "../sim/arena/content";
 import {
   critPercent,
   currentWorld,
@@ -16,11 +16,12 @@ import {
   type ArenaState,
 } from "../sim/arena/sim";
 import { spriteImage } from "../render/textures";
-import { abbreviation, clock, compact, tierLabel } from "./format";
+import { currentLocale, localeName, t, usesSpaces } from "../i18n";
+import { abbreviation, cardBlurb, cardName, changeLabel, changeValue, clock, compact, killerName, passiveName, rivalName, tierLabel, weaponName } from "./format";
 
 export const HUD_WIDTH = 1440;
 export const HUD_HEIGHT = 810;
-const FONT = '"Silkscreen", "Press Start 2P", ui-monospace, monospace';
+const FONT = '"Silkscreen", "DotGothic16", "Press Start 2P", ui-monospace, monospace';
 const INK = "#f4f1e8";
 const SHADOW = "#10121a";
 const GOLD = "#ffcd75";
@@ -118,15 +119,35 @@ function bar(context: CanvasRenderingContext2D, rect: Rect, fraction: number, fi
   context.fillRect(rect.x, rect.y, Math.round(rect.w * Math.max(0, Math.min(1, fraction))), rect.h);
 }
 
-function wrap(context: CanvasRenderingContext2D, value: string, width: number, size: number): string[] {
+function measure(context: CanvasRenderingContext2D, value: string, size: number): number {
   context.font = `${size}px ${FONT}`;
+  return context.measureText(value).width;
+}
+
+function fitSize(context: CanvasRenderingContext2D, value: string, width: number, size: number): number {
+  let fitted = size;
+  while (fitted > 10 && measure(context, value, fitted) > width) {
+    fitted -= 1;
+  }
+  return fitted;
+}
+
+export function wrapTokens(value: string, spaced: boolean): string[] {
+  if (spaced) {
+    return value.split(" ").filter(Boolean);
+  }
+  return [...value];
+}
+
+export function wrapLines(value: string, width: number, spaced: boolean, measureWidth: (line: string) => number): string[] {
+  const joiner = spaced ? " " : "";
   const lines: string[] = [];
   let line = "";
-  for (const word of value.split(" ")) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (context.measureText(candidate).width > width && line) {
+  for (const token of wrapTokens(value, spaced)) {
+    const candidate = line ? `${line}${joiner}${token}` : token;
+    if (measureWidth(candidate) > width && line) {
       lines.push(line);
-      line = word;
+      line = token;
     } else {
       line = candidate;
     }
@@ -135,6 +156,11 @@ function wrap(context: CanvasRenderingContext2D, value: string, width: number, s
     lines.push(line);
   }
   return lines;
+}
+
+function wrap(context: CanvasRenderingContext2D, value: string, width: number, size: number): string[] {
+  context.font = `${size}px ${FONT}`;
+  return wrapLines(value, width, usesSpaces(currentLocale()), (line) => context.measureText(line).width);
 }
 
 export function drawRunHud(
@@ -146,9 +172,9 @@ export function drawRunHud(
   const xpFraction = state.xp / xpToNext(state.level);
   bar(context, { x: 0, y: 0, w: HUD_WIDTH, h: 10 }, xpFraction, "#73eff7", "#1a2033");
 
-  text(context, `LV ${state.level}`, 24, 26, 30, GOLD);
+  text(context, t("hud.level", { level: state.level }), 24, 26, 30, GOLD);
   text(context, tierLabel(state.tier), 24, 64, 18);
-  text(context, `World ${Math.min(state.bossesDown + 1, WORLDS.length)} · ${currentWorld(state).rival}`, 24, 90, 16, "#9fb0d0");
+  text(context, t("hud.world", { world: Math.min(state.bossesDown + 1, WORLDS.length), rival: rivalName(currentWorld(state)) }), 24, 90, 16, "#9fb0d0");
 
   text(context, clock(elapsedSeconds(state)), HUD_WIDTH / 2, 22, 40, INK, "center");
   if (boss) {
@@ -156,8 +182,8 @@ export function drawRunHud(
     bar(context, { x: HUD_WIDTH / 2 - 260, y: 100, w: 520, h: 16 }, boss.fraction, "#e43b44");
   }
 
-  text(context, `Score ${compact(score(state))}`, HUD_WIDTH - 24, 26, 22, INK, "right");
-  text(context, `Kills ${compact(state.kills)}`, HUD_WIDTH - 24, 56, 18, "#9fb0d0", "right");
+  text(context, t("hud.score", { score: compact(score(state)) }), HUD_WIDTH - 24, 26, 22, INK, "right");
+  text(context, t("hud.kills", { kills: compact(state.kills) }), HUD_WIDTH - 24, 56, 18, "#9fb0d0", "right");
 
   const width = 72;
   const healthFraction = state.player.health / maxHealth(state);
@@ -183,7 +209,7 @@ export function drawRunHud(
   for (const [id, owned] of state.passives) {
     const rect = { x, y: y + 14, w: 48, h: 48 };
     panel(context, rect);
-    text(context, abbreviation(PASSIVES[id].name), x + 24, y + 26, 16, "#a7f070", "center");
+    text(context, abbreviation(passiveName(id)), x + 24, y + 26, 16, "#a7f070", "center");
     text(context, String(owned), x + 44, y + 44, 13, GOLD, "right");
     x += 54;
   }
@@ -205,7 +231,7 @@ export function drawDialogue(context: CanvasRenderingContext2D, dialogue: Dialog
   context.globalAlpha = Math.max(0, fade);
   panel(context, rect, dialogue.color);
   context.fillStyle = dialogue.color;
-  context.fillRect(rect.x + 20, rect.y - 18, Math.min(360, dialogue.speaker.length * 15 + 30), 34);
+  context.fillRect(rect.x + 20, rect.y - 18, Math.min(400, measure(context, dialogue.speaker, 18) + 30), 34);
   text(context, dialogue.speaker, rect.x + 34, rect.y - 12, 18, SHADOW);
   const shown = dialogue.line.slice(0, Math.floor(dialogue.age * 1.6));
   wrap(context, shown, rect.w - 60, 22).forEach((line, index) => text(context, line, rect.x + 30, rect.y + 30 + index * 32, 22));
@@ -258,7 +284,7 @@ export function drawBossMarker(context: CanvasRenderingContext2D, at: Point, fra
   context.fill();
   context.restore();
   const labelY = marker.onScreen ? y - 26 : y + (Math.sin(marker.angle) > 0.5 ? -30 : 38);
-  text(context, "Boss", x, labelY, 18, "#ff9b9b", "center");
+  text(context, t("hud.boss"), x, labelY, 18, "#ff9b9b", "center");
 }
 
 export function cardRects(count: number): Rect[] {
@@ -274,8 +300,8 @@ export const SKIP_RECT: Rect = { x: HUD_WIDTH / 2 + 30, y: 670, w: 300, h: 60 };
 export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState, hover: number): void {
   context.fillStyle = "rgba(8, 10, 18, 0.62)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  text(context, `Level ${state.level}!`, HUD_WIDTH / 2, 120, 60, GOLD, "center");
-  text(context, "Pick one. The arena waits for you.", HUD_WIDTH / 2, 196, 20, "#9fb0d0", "center");
+  text(context, t("levelUp.title", { level: state.level }), HUD_WIDTH / 2, 120, 60, GOLD, "center");
+  text(context, t("levelUp.hint"), HUD_WIDTH / 2, 196, 20, "#9fb0d0", "center");
   const rects = cardRects(state.cards.length);
   state.cards.forEach((card, index) => {
     const rect = rects[index];
@@ -283,14 +309,15 @@ export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState
       drawCard(context, card, rect, index, hover === index);
     }
   });
-  drawButton(context, REROLL_RECT, `[R] Reroll (${state.rerolls})`, state.rerolls > 0);
-  drawButton(context, SKIP_RECT, `[X] Skip (${state.skips})`, state.skips > 0);
+  drawButton(context, REROLL_RECT, t("levelUp.reroll", { count: state.rerolls }), state.rerolls > 0);
+  drawButton(context, SKIP_RECT, t("levelUp.skip", { count: state.skips }), state.skips > 0);
 }
 
 function drawButton(context: CanvasRenderingContext2D, rect: Rect, label: string, enabled: boolean): void {
   context.globalAlpha = enabled ? 1 : 0.4;
   panel(context, rect);
-  text(context, label, rect.x + rect.w / 2, rect.y + 20, 20, INK, "center");
+  const size = fitSize(context, label, rect.w - 24, 20);
+  text(context, label, rect.x + rect.w / 2, rect.y + 30 - size / 2, size, INK, "center");
   context.globalAlpha = 1;
 }
 
@@ -301,10 +328,11 @@ function drawCard(context: CanvasRenderingContext2D, card: Card, rect: Rect, ind
   panel(context, box, edge);
   if (card.recommended) {
     context.fillStyle = "#a7f070";
-    context.fillRect(box.x + box.w - 190, box.y - 16, 180, 30);
-    text(context, "★ RECOMMENDED", box.x + box.w - 100, box.y - 10, 15, SHADOW, "center");
+    const ribbon = Math.min(box.w - 20, measure(context, t("card.recommended"), 15) + 24);
+    context.fillRect(box.x + box.w - 10 - ribbon, box.y - 16, ribbon, 30);
+    text(context, t("card.recommended"), box.x + box.w - 10 - ribbon / 2, box.y - 10, 15, SHADOW, "center");
   }
-  const badge = card.kind === "evolve" ? "EVOLVE" : card.toLevel === 1 ? "NEW" : `LV ${card.toLevel - 1} → ${card.toLevel}`;
+  const badge = card.kind === "evolve" ? t("card.evolve") : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
   text(context, `[${index + 1}]`, box.x + 20, box.y + 22, 18, "#9fb0d0");
   text(context, badge, box.x + box.w - 20, box.y + 22, 18, card.kind === "evolve" ? GOLD : "#73eff7", "right");
   if (card.kind !== "passive") {
@@ -314,51 +342,51 @@ function drawCard(context: CanvasRenderingContext2D, card: Card, rect: Rect, ind
     context.drawImage(icon, box.x + box.w / 2 - (icon.width * scale) / 2, box.y + 60, icon.width * scale, icon.height * scale);
   } else {
     panel(context, { x: box.x + box.w / 2 - 34, y: box.y + 58, w: 68, h: 68 });
-    text(context, abbreviation(PASSIVES[card.id].name), box.x + box.w / 2, box.y + 80, 24, "#a7f070", "center");
+    text(context, abbreviation(passiveName(card.id)), box.x + box.w / 2, box.y + 80, 24, "#a7f070", "center");
   }
-  text(context, cardName(card), box.x + box.w / 2, box.y + 144, 26, INK, "center");
-  wrap(context, cardBlurb(card), box.w - 44, 16).forEach((line, lineIndex) =>
+  text(context, cardName(card), box.x + box.w / 2, box.y + 144, fitSize(context, cardName(card), box.w - 32, 26), INK, "center");
+  wrap(context, cardBlurb(card), box.w - 44, 16).slice(0, 3).forEach((line, lineIndex) =>
     text(context, line, box.x + box.w / 2, box.y + 184 + lineIndex * 24, 16, "#c8cfe0", "center"),
   );
   card.changes.slice(0, 4).forEach((change, lineIndex) => {
     const y = box.y + 256 + lineIndex * 28;
-    text(context, change.label, box.x + 24, y, 16, "#9fb0d0");
-    text(context, `${change.before} → ${change.after}`, box.x + box.w - 24, y, 16, "#a7f070", "right");
+    text(context, changeLabel(change), box.x + 24, y, 16, "#9fb0d0");
+    text(context, `${changeValue(change, change.before)} → ${changeValue(change, change.after)}`, box.x + box.w - 24, y, 16, "#a7f070", "right");
   });
 }
 
 export function drawPause(context: CanvasRenderingContext2D, state: ArenaState): void {
   context.fillStyle = "rgba(8, 10, 18, 0.78)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  text(context, "Paused", HUD_WIDTH / 2, 70, 52, GOLD, "center");
-  text(context, "[P] Resume   [M] Music", HUD_WIDTH / 2, 140, 18, "#9fb0d0", "center");
+  text(context, t("pause.title"), HUD_WIDTH / 2, 70, 52, GOLD, "center");
+  text(context, t("pause.keys"), HUD_WIDTH / 2, 140, 18, "#9fb0d0", "center");
   const left = { x: 160, y: 200, w: 540, h: 520 };
   const right = { x: 740, y: 200, w: 540, h: 520 };
   panel(context, left);
   panel(context, right);
-  text(context, "Build", left.x + 28, left.y + 24, 26, GOLD);
+  text(context, t("pause.build"), left.x + 28, left.y + 24, 26, GOLD);
   const seconds = Math.max(1, elapsedSeconds(state));
   state.weapons.forEach((owned, index) => {
     const y = left.y + 80 + index * 46;
     const damage = state.damageByWeapon.get(owned.id) ?? 0;
-    text(context, `${WEAPONS[owned.id].name}${isEvolvedWeapon(owned.id) ? " ★" : ` Lv ${owned.level}`}`, left.x + 28, y, 18);
-    text(context, `${Math.round(damage / seconds)} DPS`, left.x + left.w - 28, y, 18, "#a7f070", "right");
+    text(context, isEvolvedWeapon(owned.id) ? `${weaponName(owned.id)} ★` : t("pause.partLevel", { name: weaponName(owned.id), level: owned.level }), left.x + 28, y, 18);
+    text(context, t("pause.dps", { dps: Math.round(damage / seconds) }), left.x + left.w - 28, y, 18, "#a7f070", "right");
   });
   [...state.passives].forEach(([id, owned], index) => {
-    text(context, `${PASSIVES[id].name} Lv ${owned}`, left.x + 28, left.y + 330 + index * 32, 16, "#c8cfe0");
+    text(context, t("pause.partLevel", { name: passiveName(id), level: owned }), left.x + 28, left.y + 330 + index * 32, 16, "#c8cfe0");
   });
-  text(context, "Stats", right.x + 28, right.y + 24, 26, GOLD);
+  text(context, t("pause.stats"), right.x + 28, right.y + 24, 26, GOLD);
   const stats: [string, string][] = [
-    ["Max HP", String(maxHealth(state))],
-    ["Hallucination", `${hallucinationPercent(state)}%`],
-    ["Crit chance", `${critPercent(state)}%`],
-    ["Damage bonus", `+${statTotal(state, "damage")}%`],
-    ["Cooldowns", `${statTotal(state, "cooldown")}%`],
-    ["Move speed", `${playerSpeed(state)}`],
-    ["Pickup range", `${Math.round(pickupRadius(state) / 16)} px`],
-    ["Armor", String(statTotal(state, "armor"))],
-    ["Rerolls left", String(state.rerolls)],
-    ["Seed", `#${state.seed}`],
+    [t("stat.maxHealth"), String(maxHealth(state))],
+    [t("stat.hallucination"), `${hallucinationPercent(state)}%`],
+    [t("stat.crit"), `${critPercent(state)}%`],
+    [t("stat.damageBonus"), `+${statTotal(state, "damage")}%`],
+    [t("stat.cooldown"), `${statTotal(state, "cooldown")}%`],
+    [t("stat.speed"), `${playerSpeed(state)}`],
+    [t("stat.pickup"), t("unit.pixels", { value: Math.round(pickupRadius(state) / 16) })],
+    [t("stat.armor"), String(statTotal(state, "armor"))],
+    [t("stat.rerolls"), String(state.rerolls)],
+    [t("stat.seed"), `#${state.seed}`],
   ];
   stats.forEach(([label, value], index) => {
     const y = right.y + 80 + index * 40;
@@ -371,10 +399,10 @@ export function drawResults(context: CanvasRenderingContext2D, state: ArenaState
   context.fillStyle = "rgba(8, 10, 18, 0.84)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
   const won = state.status === "won";
-  text(context, won ? "You own your agent." : "Your agent went down.", HUD_WIDTH / 2, 60, 46, won ? GOLD : "#ff9b9b", "center");
+  text(context, won ? t("results.wonTitle") : t("results.lostTitle"), HUD_WIDTH / 2, 60, 46, won ? GOLD : "#ff9b9b", "center");
   text(
     context,
-    won ? "Every rival tried to rent you theirs. You built yours." : `Taken out by ${state.killedBy ?? "the swarm"}.`,
+    won ? t("results.wonLine") : t("results.killedBy", { killer: killerName(state.killedBy) }),
     HUD_WIDTH / 2,
     124,
     20,
@@ -386,42 +414,43 @@ export function drawResults(context: CanvasRenderingContext2D, state: ArenaState
   panel(context, left);
   panel(context, right);
   const rows: [string, string][] = [
-    ["Score", compact(score(state))],
-    ["Time", clock(elapsedSeconds(state))],
-    ["Level", String(state.level)],
-    ["Kills", compact(state.kills)],
-    ["Bosses beaten", `${state.bossesDown} / ${WORLDS.length}`],
-    ["Agent tier", tierLabel(state.tier)],
-    ["Seed", `#${state.seed}`],
+    [t("stat.score"), compact(score(state))],
+    [t("stat.time"), clock(elapsedSeconds(state))],
+    [t("stat.level"), String(state.level)],
+    [t("stat.kills"), compact(state.kills)],
+    [t("stat.bosses"), `${state.bossesDown} / ${WORLDS.length}`],
+    [t("stat.tier"), tierLabel(state.tier)],
+    [t("stat.seed"), `#${state.seed}`],
   ];
   rows.forEach(([label, value], index) => {
     const y = left.y + 32 + index * 58;
     text(context, label, left.x + 28, y, 20, "#c8cfe0");
     text(context, value, left.x + left.w - 28, y, 20, INK, "right");
   });
-  text(context, "Damage by part", right.x + 28, right.y + 28, 22, GOLD);
+  text(context, t("results.damageByPart"), right.x + 28, right.y + 28, 22, GOLD);
   const total = [...state.damageByWeapon.values()].reduce((sum, value) => sum + value, 0) || 1;
   [...state.damageByWeapon].sort((a, b) => b[1] - a[1]).slice(0, 7).forEach(([id, damage], index) => {
     const y = right.y + 80 + index * 52;
-    text(context, WEAPONS[id].name, right.x + 28, y, 16, INK);
+    text(context, weaponName(id), right.x + 28, y, 16, INK);
     text(context, compact(damage), right.x + right.w - 28, y, 16, "#a7f070", "right");
     bar(context, { x: right.x + 28, y: y + 26, w: right.w - 56, h: 10 }, damage / total, "#41a6f6");
   });
-  text(context, "[Enter] Run again    [T] Title", HUD_WIDTH / 2, 700, 22, GOLD, "center");
-  text(context, "Build your own agent with Mastra: mastra.ai", HUD_WIDTH / 2, 746, 16, "#9fb0d0", "center");
+  text(context, t("results.keys"), HUD_WIDTH / 2, 700, 22, GOLD, "center");
+  text(context, t("mastra.link"), HUD_WIDTH / 2, 746, 16, "#9fb0d0", "center");
 }
 
 export function drawTitle(context: CanvasRenderingContext2D, pulse: number): void {
   context.fillStyle = "rgba(8, 10, 18, 0.45)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  text(context, "AGENT ARENA", HUD_WIDTH / 2, 170, 96, GOLD, "center");
-  text(context, "Build your agent. Own it. Every rival wants you to rent theirs.", HUD_WIDTH / 2, 300, 22, INK, "center");
+  text(context, t("game.title"), HUD_WIDTH / 2, 170, 96, GOLD, "center");
+  text(context, t("title.tagline"), HUD_WIDTH / 2, 300, 22, INK, "center");
   context.globalAlpha = 0.6 + 0.4 * Math.sin(pulse / 12);
-  text(context, "Press Enter to start", HUD_WIDTH / 2, 430, 34, INK, "center");
+  text(context, t("title.start"), HUD_WIDTH / 2, 430, 34, INK, "center");
   context.globalAlpha = 1;
-  text(context, "WASD or arrows to move · Space to dash · P to pause · 1-3 to pick", HUD_WIDTH / 2, 520, 18, "#9fb0d0", "center");
-  text(context, "Your parts fire on their own. Grab tokens to level up. Bosses every 2 minutes.", HUD_WIDTH / 2, 556, 18, "#9fb0d0", "center");
-  text(context, "Build your own agent with Mastra: mastra.ai", HUD_WIDTH / 2, 730, 16, "#9fb0d0", "center");
+  text(context, t("title.controls"), HUD_WIDTH / 2, 520, 18, "#9fb0d0", "center");
+  text(context, t("title.howTo"), HUD_WIDTH / 2, 556, 18, "#9fb0d0", "center");
+  text(context, t("title.language", { language: localeName(currentLocale()) }), HUD_WIDTH / 2, 620, 20, GOLD, "center");
+  text(context, t("mastra.link"), HUD_WIDTH / 2, 730, 16, "#9fb0d0", "center");
 }
 
 export function inside(rect: Rect, x: number, y: number): boolean {

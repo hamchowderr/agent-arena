@@ -6,6 +6,8 @@ import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
 import { choose, createArena, currentWorld, reroll, skip, step, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
 import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
+import { currentLocale, nextLocale, setLocale, t, type LocaleCode } from "../i18n";
+import { bossName, bossPitch, rivalName, tierStage } from "./format";
 import {
   cardRects,
   drawBanner,
@@ -38,6 +40,7 @@ export interface GameHooks {
   readonly newSeed: () => number;
   readonly now: () => number;
   readonly onScreen: (screen: Screen, state: ArenaState) => void;
+  readonly onLocale?: (code: LocaleCode) => void;
 }
 
 function runOver(state: ArenaState): boolean {
@@ -81,10 +84,11 @@ export class ArenaGame {
     this.renderedTier = 1;
     this.floats = [];
     this.effects.clear();
-    this.banner = { title: WORLDS[0]?.rival ?? "", subtitle: "World 1 · Pre-seed", age: 0, life: 150 };
+    const firstWorld = WORLDS[0];
+    this.banner = firstWorld ? { title: rivalName(firstWorld), subtitle: t("story.worldBanner", { world: 1, stage: tierStage(firstWorld.tier) }), age: 0, life: 150 } : null;
     this.dialogue = {
-      speaker: "You",
-      line: "My own agent. Raw, a bit hallucinate-y, but mine. Let's grow it.",
+      speaker: t("story.you"),
+      line: t("story.opening"),
       color: "#73eff7",
       age: 0,
       life: 260,
@@ -109,6 +113,11 @@ export class ArenaGame {
     return nextPhase(this.phase(), event) !== null;
   }
 
+  async changeLocale(code: LocaleCode): Promise<void> {
+    const applied = await setLocale(code);
+    this.hooks.onLocale?.(applied);
+  }
+
   private setScreen(screen: Screen): void {
     this.screen = screen;
     this.hooks.onScreen(screen, this.state);
@@ -124,6 +133,8 @@ export class ArenaGame {
     if (this.screen === "title") {
       if (lower === "enter" || lower === " ") {
         this.start();
+      } else if (lower === "l") {
+        void this.changeLocale(nextLocale(currentLocale()));
       }
       return;
     }
@@ -299,19 +310,21 @@ export class ArenaGame {
         case "bossArrives": {
           const world = WORLDS[event.world];
           if (world) {
-            this.banner = { title: world.boss, subtitle: `${world.rival} wants you to rent their agent`, age: 0, life: 170 };
-            this.dialogue = { speaker: `${world.boss} · ${world.rival}`, line: world.pitch, color: "#ff9b9b", age: 0, life: 300 };
+            this.banner = { title: bossName(world), subtitle: t("story.bossArrives", { rival: rivalName(world) }), age: 0, life: 170 };
+            this.dialogue = { speaker: `${bossName(world)} · ${rivalName(world)}`, line: bossPitch(world), color: "#ff9b9b", age: 0, life: 300 };
           }
           break;
         }
-        case "bossDown":
+        case "bossDown": {
           this.renderer.shake = 1.6;
           this.hitStop = Math.max(this.hitStop, 14);
           this.effects.spawn("pow", event.x, event.y);
           this.effects.spawn("burst", event.x, event.y);
-          this.banner = { title: "World cleared", subtitle: `${WORLDS[event.world]?.rival ?? ""} couldn't rent you anything`, age: 0, life: 170 };
-          this.dialogue = { speaker: "You", line: "No thanks. I'll keep my own agent.", color: "#73eff7", age: 0, life: 220 };
+          const cleared = WORLDS[event.world];
+          this.banner = { title: t("story.worldCleared"), subtitle: cleared ? t("story.couldNotRent", { rival: rivalName(cleared) }) : "", age: 0, life: 170 };
+          this.dialogue = { speaker: t("story.you"), line: t("story.keepMine"), color: "#73eff7", age: 0, life: 220 };
           break;
+        }
         case "tierUp":
           if (this.musicOn) {
             void playMusic(event.tier);
@@ -350,7 +363,7 @@ export class ArenaGame {
     drawFloats(context, this.floats, project);
     const player = this.projectToHud(this.state.player.x, this.state.player.y);
     const boss = this.state.enemies.find((enemy) => enemy.id === this.state.bossId);
-    drawRunHud(context, this.state, player, boss ? { name: currentWorld(this.state).boss, fraction: boss.health / boss.maxHealth } : null);
+    drawRunHud(context, this.state, player, boss ? { name: bossName(currentWorld(this.state)), fraction: boss.health / boss.maxHealth } : null);
     if (boss && !paused) {
       drawBossMarker(context, this.projectToHud(boss.x, boss.y), this.frameCount);
     }
@@ -381,3 +394,4 @@ export class ArenaGame {
 }
 
 export { HUD_HEIGHT, HUD_WIDTH, RENDER_HEIGHT, RENDER_WIDTH };
+export { detectLocale } from "../i18n";
