@@ -28,9 +28,11 @@ import {
   BOSS_OUTLINED,
   BRUTE,
   CODE_BLOCK,
+  ENEMY_SHOT,
   GEM,
   GRUNT,
   HALLUCINATION,
+  HAZARD,
   PROPS,
   RUNNER,
   SEEKER,
@@ -38,7 +40,7 @@ import {
 import { PALETTE } from "../art/palette";
 import { agentSprite, type Sprite } from "../art/sprites";
 import { WEAPONS, type EnemyKind } from "../sim/arena/content";
-import { SUB } from "../sim/arena/math";
+import { px, SUB } from "../sim/arena/math";
 import { orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
@@ -54,6 +56,11 @@ const SHAKE_UNITS = 6;
 const BOSS_RING_RADIUS = 30;
 const CHUNK = 192;
 const PROPS_PER_CHUNK = 26;
+const MAX_SHOT_SPRITES = 160;
+const MAX_HAZARD_SPRITES = 40;
+const HAZARD_PIXELS = 13;
+const BIG_HAZARD_SCALE = 18 / 13;
+const HAZARD_BLINK_TICKS = 40;
 const FLASH_COLOR = new Color(4, 4, 4);
 const PLAIN_COLOR = new Color(1, 1, 1);
 
@@ -241,6 +248,10 @@ export class ArenaRenderer {
   private readonly seekers: SpriteBatch;
   private readonly blocks: SpriteBatch;
   private readonly hallucinations: SpriteBatch;
+  private readonly shots: SpriteBatch;
+  private readonly seenFakes: SpriteBatch;
+  private readonly hazards: SpriteBatch;
+  private readonly bigHazards: SpriteBatch;
   private readonly props: SpriteBatch[];
   private readonly rings: Ring[] = [];
   private readonly heading = new Quaternion();
@@ -340,6 +351,18 @@ export class ArenaRenderer {
     this.seekers = this.batch([SEEKER], 1, 100, true);
     this.blocks = this.batch([CODE_BLOCK], 1, 16, false);
     this.hallucinations = this.batch([HALLUCINATION], 1, 100, true);
+    this.shots = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
+    this.shots.mesh.renderOrder = 12;
+    (this.shots.mesh.material as MeshBasicMaterial).depthTest = false;
+    this.seenFakes = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
+    this.seenFakes.mesh.renderOrder = 12;
+    const fakeMaterial = this.seenFakes.mesh.material as MeshBasicMaterial;
+    fakeMaterial.depthTest = false;
+    fakeMaterial.transparent = true;
+    fakeMaterial.opacity = 0.3;
+    fakeMaterial.depthWrite = false;
+    this.hazards = this.hazardBatch(1);
+    this.bigHazards = this.hazardBatch(BIG_HAZARD_SCALE);
     this.props = PROPS.map((sprite) => this.batch([sprite], 1, PROPS_PER_CHUNK * 25, false));
 
     for (let index = 0; index < 12; index += 1) {
@@ -356,6 +379,15 @@ export class ArenaRenderer {
   private batch(layers: readonly Sprite[], scale: number, capacity: number, flat: boolean, faction: string = WORLD_LOOKS[this.tier].faction): SpriteBatch {
     const image = spriteImage(layers, faction);
     return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
+  }
+
+  private hazardBatch(scale: number): SpriteBatch {
+    const batch = this.batch([HAZARD], scale, MAX_HAZARD_SPRITES, true);
+    const material = batch.mesh.material as MeshBasicMaterial;
+    material.transparent = true;
+    material.opacity = 0.75;
+    material.depthWrite = false;
+    return batch;
   }
 
   private bossBatch(color: string): SpriteBatch {
@@ -524,6 +556,30 @@ export class ArenaRenderer {
     this.beams.commit();
     this.seekers.commit();
     this.hallucinations.commit();
+
+    this.shots.begin();
+    this.seenFakes.begin();
+    const seesFakes = (state.passives.get("guardrails") ?? 0) > 0;
+    for (const shot of state.shots) {
+      const x = shot.x / SUB;
+      const z = shot.y / SUB;
+      (shot.fake && seesFakes ? this.seenFakes : this.shots).add(x, 3, z);
+      this.shadows.add(x, z, 4);
+    }
+    this.shots.commit();
+    this.seenFakes.commit();
+
+    this.hazards.begin();
+    this.bigHazards.begin();
+    for (const hazard of state.hazards) {
+      const fading = hazard.life < HAZARD_BLINK_TICKS && Math.floor(hazard.life / 4) % 2 === 0;
+      if (fading) {
+        continue;
+      }
+      (hazard.radius > px(HAZARD_PIXELS) ? this.bigHazards : this.hazards).add(hazard.x / SUB, 0.35, hazard.y / SUB);
+    }
+    this.hazards.commit();
+    this.bigHazards.commit();
 
     this.blocks.begin();
     for (const owned of state.weapons) {

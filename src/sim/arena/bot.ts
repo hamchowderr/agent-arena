@@ -3,6 +3,7 @@ import { choose, createArena, step, type ArenaState, type Input } from "./sim";
 
 const THREAT_RANGE = px(70);
 const PANIC_RANGE = px(14);
+const SHOT_DODGE_RANGE = px(36);
 
 function sign(value: number): -1 | 0 | 1 {
   return value > 1 ? 1 : value < -1 ? -1 : 0;
@@ -28,6 +29,25 @@ export function kitingBot(state: ArenaState): Input {
   if (state.slam && distanceSquared(state.slam.x, state.slam.y, player.x, player.y) < px(48) * px(48)) {
     awayX += Math.sign(player.x - state.slam.x) * 400;
     awayY += Math.sign(player.y - state.slam.y) * 400;
+  }
+  for (const shot of state.shots) {
+    const squared = distanceSquared(shot.x, shot.y, player.x, player.y);
+    if (squared > SHOT_DODGE_RANGE * SHOT_DODGE_RANGE) {
+      continue;
+    }
+    if (squared < PANIC_RANGE * PANIC_RANGE) {
+      panic = true;
+    }
+    const weight = Math.trunc((SHOT_DODGE_RANGE * SHOT_DODGE_RANGE * 2) / Math.max(squared, SUB * SUB));
+    awayX += Math.sign(player.x - shot.x) * weight;
+    awayY += Math.sign(player.y - shot.y) * weight;
+  }
+  for (const hazard of state.hazards) {
+    const reach = hazard.radius + px(12);
+    if (distanceSquared(hazard.x, hazard.y, player.x, player.y) < reach * reach) {
+      awayX += Math.sign(player.x - hazard.x) * 200;
+      awayY += Math.sign(player.y - hazard.y) * 200;
+    }
   }
   let best = Number.POSITIVE_INFINITY;
   let gemX = 0;

@@ -38,7 +38,7 @@ describe("format", () => {
 
   it("names whoever took you out", async () => {
     expect(killerName(null)).toBe("the swarm");
-    expect(killerName({ world: "meterly", enemy: "boss" })).toBe("The Meter");
+    expect(killerName({ world: "meterly", enemy: "boss" })).toBe("The Throttler");
     expect(killerName({ world: "hustlr", enemy: "runner" })).toBe("Hustlr runner");
     await setLocale("fr");
     expect(killerName({ world: "hustlr", enemy: "runner" })).toBe("un coureur de Hustlr");

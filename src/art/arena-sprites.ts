@@ -74,6 +74,37 @@ export const BOSS: Sprite = [
   "....kkkk....kkkk....",
 ];
 
+export const ENEMY_SHOT: Sprite = [".kkk.", "kroyk", "kowok", "kroyk", ".kkk."];
+
+export const HAZARD: Sprite = [
+  "..........pppppp..........",
+  ".......pppppppppppp.......",
+  ".....pppppXXXXXXppppp.....",
+  "....ppppXXXXXXXXXXpppp....",
+  "...pppXXXXXwwXXXXXXXppp...",
+  "..pppXXXXXXwwXXXXXXXXppp..",
+  ".pppXXXXXXXXXXXXXXwwXXppp.",
+  ".ppXXXXXXXXXXXXXXXwwXXXpp.",
+  "pppXXXXwwXXXXXXXXXXXXXXppp",
+  "ppXXXXXwwXXXXXXXXXXXXXXXpp",
+  "ppXXXXXXXXXXXXXXXXXXXXXXpp",
+  "ppXXXXXXXXXXXXwwXXXXXXXXpp",
+  "ppXXXXXXXXXXXXwwXXXXXXXXpp",
+  "ppXXXXXXXXXXXXXXXXXXXXXXpp",
+  "ppXXXwwXXXXXXXXXXXXXXXXXpp",
+  "ppXXXwwXXXXXXXXXXXXwwXXXpp",
+  "pppXXXXXXXXXXXXXXXXwwXXppp",
+  ".ppXXXXXXXXXXXXXXXXXXXXpp.",
+  ".pppXXXXXXXXwwXXXXXXXXppp.",
+  "..pppXXXXXXXwwXXXXXXXppp..",
+  "...pppXXXXXXXXXXXXXXppp...",
+  "....ppppXXXXXXXXXXpppp....",
+  ".....pppppXXXXXXppppp.....",
+  ".......pppppppppppp.......",
+  "..........pppppp..........",
+  "..........................",
+];
+
 export const GEM: Sprite = ["..m..", ".mcm.", "mcwcm", ".mcm.", "..m.."];
 
 export const BIG_GEM: Sprite = ["...y...", "..yoy..", ".yowoy.", "yowwwoy", ".yowoy.", "..yoy..", "...y..."];

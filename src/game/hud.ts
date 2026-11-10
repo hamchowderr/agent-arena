@@ -1,7 +1,8 @@
 import { BEAM, BOLT, CODE_BLOCK, SEEKER } from "../art/arena-sprites";
 import type { Sprite } from "../art/sprites";
 import type { Card } from "../sim/arena/cards";
-import { isEvolvedWeapon, WEAPONS, WORLDS, type WeaponId, type WeaponKind } from "../sim/arena/content";
+import { BOSS_PHASE_FLOORS, isEvolvedWeapon, WEAPONS, WORLDS, type WeaponId, type WeaponKind } from "../sim/arena/content";
+import { TICKS_PER_SECOND } from "../sim/arena/math";
 import {
   critPercent,
   currentWorld,
@@ -179,7 +180,20 @@ export function drawRunHud(
   text(context, clock(elapsedSeconds(state)), HUD_WIDTH / 2, 22, 40, INK, "center");
   if (boss) {
     text(context, boss.name, HUD_WIDTH / 2, 74, 18, "#ff9b9b", "center");
-    bar(context, { x: HUD_WIDTH / 2 - 260, y: 100, w: 520, h: 16 }, boss.fraction, "#e43b44");
+    const barRect = { x: HUD_WIDTH / 2 - 260, y: 100, w: 520, h: 16 };
+    bar(context, barRect, boss.fraction, "#e43b44");
+    context.fillStyle = "#1a1c2c";
+    for (const floor of BOSS_PHASE_FLOORS) {
+      if (floor > 0) {
+        context.fillRect(barRect.x + (barRect.w * floor) / 100 - 2, barRect.y - 4, 4, barRect.h + 8);
+      }
+    }
+    const fight = state.fight;
+    if (fight && fight.phase === 3) {
+      const seconds = Math.ceil(fight.acquireTicks / TICKS_PER_SECOND);
+      const urgent = seconds <= 10 && Math.floor(fight.acquireTicks / 15) % 2 === 0;
+      text(context, t("boss.acquire", { time: clock(seconds) }), HUD_WIDTH / 2, 128, 18, urgent ? "#ff4b5c" : GOLD, "center");
+    }
   }
 
   text(context, t("hud.score", { score: compact(score(state)) }), HUD_WIDTH - 24, 26, 22, INK, "right");
