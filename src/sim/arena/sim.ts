@@ -146,7 +146,7 @@ export interface SpawnOptions {
 const NO_OPTIONS: SpawnOptions = {};
 
 export function freeOrder(x: number, y: number) {
-  return { order: "free" as EnemyOrder, life: 0, driftX: 0, driftY: 0, goalX: x, goalY: y, anchorX: x, anchorY: y, fake: false, guardsFront: false };
+  return { order: "free" as EnemyOrder, life: 0, driftX: 0, driftY: 0, goalX: x, goalY: y, anchorX: x, anchorY: y, fake: false, guardsFront: false, wall: false };
 }
 
 export interface Enemy {
@@ -179,6 +179,7 @@ export interface Enemy {
   readonly anchorY: number;
   readonly fake: boolean;
   readonly guardsFront: boolean;
+  readonly wall: boolean;
 }
 
 export interface Projectile {
@@ -873,6 +874,7 @@ function spawnEnemyAt(state: ArenaState, kind: EnemyKind, x: number, y: number, 
     anchorY: options.anchorY ?? y,
     fake,
     guardsFront: options.guardsFront ?? false,
+    wall: options.wall ?? false,
   };
   state.nextId += 1;
   state.enemies.push(enemy);

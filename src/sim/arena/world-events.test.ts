@@ -132,6 +132,7 @@ describe("formations", () => {
     const walls = spawnedSince(state, before);
     expect(walls.length).toBeGreaterThanOrEqual(24);
     for (const wall of walls) {
+      expect(wall.wall).toBe(true);
       expect(wall.mass).toBe(100);
       expect(wall.order).toBe("hold");
     }
@@ -375,6 +376,7 @@ function makeNear(state: ArenaState, kind: RegularKind, dx: number, fake: boolea
     anchorY: 0,
     fake,
     guardsFront: false,
+    wall: false,
   };
   state.enemies.push(enemy);
   return enemy;
