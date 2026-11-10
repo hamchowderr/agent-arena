@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 const STRUDEL_PACKAGES = /node_modules\/(@strudel|@kabelsalat|superdough|fraction\.js|nanostores|supradough)\//;
+const THREE_PACKAGE = /node_modules\/three\//;
 
 export default defineConfig({
   base: "./",
@@ -17,7 +18,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
-        manualChunks: (id) => (STRUDEL_PACKAGES.test(id) ? "strudel" : undefined),
+        manualChunks: (id) => (STRUDEL_PACKAGES.test(id) ? "strudel" : THREE_PACKAGE.test(id) ? "three" : undefined),
       },
     },
   },
