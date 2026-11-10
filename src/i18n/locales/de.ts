@@ -90,7 +90,7 @@ export const de = {
   "enemy.charger": "einen Stürmer",
   "enemy.shooter": "einen Schützen",
   "enemy.exploder": "einen Zünder",
-  "enemy.splitter": "einen Teiler",
+  "enemy.splitter": "einen Spalter",
   "enemy.heavy": "ein Schwergewicht",
   "enemy.lootRunner": "einen Beuteläufer",
   "elite.arrives": "Ein gemieteter Agent taucht auf",

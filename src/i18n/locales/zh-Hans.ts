@@ -92,7 +92,7 @@ export const zhHans = {
   "enemy.exploder": "自爆者",
   "enemy.splitter": "分裂者",
   "enemy.heavy": "重量级",
-  "enemy.lootRunner": "宝藏逃兵",
+  "enemy.lootRunner": "背宝跑者",
   "elite.arrives": "租来的智能体出现了",
   "elite.subtitle": "{rival}派出了精英。击败它会掉落宝箱。",
   "chest.open": "宝箱！免费升级",
