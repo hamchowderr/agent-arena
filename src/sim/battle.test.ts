@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { MAX_BATTLE_TICKS, runBattle, type AgentBuild } from "./battle";
 import { createRng } from "./rng";
 
-const rawLlm: AgentBuild = { name: "Raw LLM", maxHealth: 120, attack: 9, ticksPerAction: 30, critPercent: 10 };
-const hustlrBot: AgentBuild = { name: "Hustlr Bot", maxHealth: 80, attack: 4, ticksPerAction: 12, critPercent: 25 };
+const rawLlm: AgentBuild = { name: "Raw LLM", maxHealth: 120, attack: 9, ticksPerAction: 30, critPercent: 10, hallucinationPercent: 30 };
+const hustlrBot: AgentBuild = { name: "Hustlr Bot", maxHealth: 80, attack: 4, ticksPerAction: 12, critPercent: 25, hallucinationPercent: 10 };
 
 describe("runBattle", () => {
   it("gives the same result for the same seed and builds", () => {
@@ -30,7 +30,7 @@ describe("runBattle", () => {
   });
 
   it("ends in a draw when nobody can finish the fight", () => {
-    const wall: AgentBuild = { name: "Wall", maxHealth: 1_000_000, attack: 1, ticksPerAction: 60, critPercent: 0 };
+    const wall: AgentBuild = { name: "Wall", maxHealth: 1_000_000, attack: 1, ticksPerAction: 60, critPercent: 0, hallucinationPercent: 0 };
     const result = runBattle(1, wall, wall);
     expect(result.winner).toBe("draw");
     expect(result.ticks).toBe(MAX_BATTLE_TICKS);
@@ -39,6 +39,16 @@ describe("runBattle", () => {
   it("rejects builds that would break determinism", () => {
     expect(() => runBattle(1, { ...rawLlm, attack: 2.5 }, hustlrBot)).toThrow(RangeError);
     expect(() => runBattle(1, rawLlm, { ...hustlrBot, critPercent: 101 })).toThrow(RangeError);
+    expect(() => runBattle(1, rawLlm, { ...hustlrBot, hallucinationPercent: -1 })).toThrow(RangeError);
+  });
+
+  it("deals no damage on a hallucinated action", () => {
+    const dreamer: AgentBuild = { ...rawLlm, hallucinationPercent: 100 };
+    const result = runBattle(5, dreamer, hustlrBot);
+    const dreamerEvents = result.events.filter((event) => event.actor === 0);
+    expect(dreamerEvents.length).toBeGreaterThan(0);
+    expect(dreamerEvents.every((event) => event.hallucinated && event.damage === 0 && !event.crit)).toBe(true);
+    expect(result.winner).toBe(1);
   });
 });
 
