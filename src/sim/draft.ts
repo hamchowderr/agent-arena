@@ -1,6 +1,6 @@
 import { assertValidLoadout, type AnyLoadout } from "./loadout";
 import { EVOLUTIONS, isEvolvedPart, PARTS, type PartId } from "./parts";
-import { createRng } from "./rng";
+import { createRng, mixSeed } from "./rng";
 import { SLOT_CAPACITY, unlockedSlots } from "./tiers";
 
 export const OFFER_SIZE = 3;
@@ -128,8 +128,4 @@ function withParts(loadout: AnyLoadout, parts: readonly PartId[]): AnyLoadout {
   const next = { ...loadout, parts };
   assertValidLoadout(next);
   return next as AnyLoadout;
-}
-
-function mixSeed(seed: number, draws: number): number {
-  return (Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) + Math.imul(draws + 1, 0xc2b2ae35)) >>> 0;
 }

@@ -4,6 +4,7 @@ A free, open-source (AGPL-3.0-or-later) browser autobattler. Players grow an age
 
 ## Commands
 - `npm run dev`: local dev server
+- `npm run balance`: the balance bots play 1000 seeded runs and print clear rates per stage. The targets in `src/sim/run.ts` (`BALANCE_TARGETS`) are tested in CI, so a balance change that drifts outside them fails the check.
 - `npm run check`: lint, typecheck, tests, build, and size budget. It must pass before every push.
 
 ## Rules that are enforced
@@ -29,6 +30,7 @@ PRs show proof: a failing test that now passes, a replay seed, or a screenshot. 
 - **pstack** (open-pstack for Claude Code) provides the engineering-rigor skills.
 
 ## Content rules
+- **Story: own your agent.** The player builds and owns their agent. Every rival company wants you to rent theirs, an agent you don't own or control. Rival names and plot get filled in over time, so use placeholders until then.
 - All companies, mascots and characters are fictional parodies. No real brands, products or people as targets.
 - Music is written in Strudel and played live in the browser (`@strudel/web`, AGPL). That's why this repo is AGPL.
 
