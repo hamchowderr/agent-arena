@@ -27,19 +27,27 @@ import {
   BOLT,
   BOSS_OUTLINED,
   BRUTE,
+  CHARGER,
+  CHEST,
   CODE_BLOCK,
+  eliteSprite,
+  EXPLODER,
   ENEMY_SHOT,
   GEM,
   GRUNT,
   HALLUCINATION,
   HAZARD,
+  HEAVY,
+  LOOT_RUNNER,
   PROPS,
   RUNNER,
   SEEKER,
+  SHOOTER,
+  SPLITTER,
 } from "../art/arena-sprites";
 import { PALETTE } from "../art/palette";
 import { agentSprite, type Sprite } from "../art/sprites";
-import { WEAPONS, type EnemyKind } from "../sim/arena/content";
+import { REGULAR_KINDS, WEAPONS, type EnemyKind, type RegularKind } from "../sim/arena/content";
 import { px, SUB } from "../sim/arena/math";
 import { orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
@@ -57,6 +65,29 @@ const BOSS_RING_RADIUS = 30;
 const CHUNK = 192;
 const PROPS_PER_CHUNK = 26;
 const MAX_SHOT_SPRITES = 160;
+const ENEMY_SPRITES: Readonly<Record<RegularKind, Sprite>> = {
+  grunt: GRUNT,
+  runner: RUNNER,
+  charger: CHARGER,
+  shooter: SHOOTER,
+  exploder: EXPLODER,
+  splitter: SPLITTER,
+  brute: BRUTE,
+  heavy: HEAVY,
+  lootRunner: LOOT_RUNNER,
+};
+const ENEMY_CAPACITY: Readonly<Record<RegularKind, number>> = {
+  grunt: 420,
+  runner: 300,
+  charger: 160,
+  shooter: 40,
+  exploder: 160,
+  splitter: 160,
+  brute: 160,
+  heavy: 80,
+  lootRunner: 2,
+};
+const ELITE_CAPACITY = 2;
 const MAX_HAZARD_SPRITES = 40;
 const HAZARD_PIXELS = 13;
 const BIG_HAZARD_SCALE = 18 / 13;
@@ -237,7 +268,9 @@ export class ArenaRenderer {
   private readonly slamRing: Mesh<RingGeometry, MeshBasicMaterial>;
   private readonly bossRing: Mesh<RingGeometry, MeshBasicMaterial>;
   private readonly shadows: ShadowBatch;
-  private readonly enemies: Record<EnemyKind, SpriteBatch>;
+  private enemies: Record<EnemyKind, SpriteBatch>;
+  private elites: Record<RegularKind, SpriteBatch>;
+  private readonly chests: SpriteBatch;
   private readonly agent: SpriteBatch[];
   private readonly ghosts: SpriteBatch[];
   private readonly trail: { x: number; z: number }[] = [];
@@ -323,12 +356,9 @@ export class ArenaRenderer {
     this.scene.add(this.bossRing);
 
     this.shadows = new ShadowBatch(this.scene, 1400);
-    this.enemies = {
-      grunt: this.batch([GRUNT], 1, 500, false),
-      runner: this.batch([RUNNER], 1, 300, false),
-      brute: this.batch([BRUTE], 1, 120, false),
-      boss: this.bossBatch(WORLD_LOOKS[1].boss),
-    };
+    this.enemies = this.enemyBatches(WORLD_LOOKS[1]);
+    this.elites = this.eliteBatches(WORLD_LOOKS[1]);
+    this.chests = this.batch([CHEST], 2, 4, false);
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
       const batch = this.batch(agentSprite(tier), 1, 1, false);
       batch.mesh.renderOrder = 11;
@@ -381,6 +411,22 @@ export class ArenaRenderer {
     return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
   }
 
+  private enemyBatches(look: WorldLook): Record<EnemyKind, SpriteBatch> {
+    const batches = { boss: this.bossBatch(look.boss) } as Record<EnemyKind, SpriteBatch>;
+    for (const kind of REGULAR_KINDS) {
+      batches[kind] = this.batch([ENEMY_SPRITES[kind]], 1, ENEMY_CAPACITY[kind], false, look.faction);
+    }
+    return batches;
+  }
+
+  private eliteBatches(look: WorldLook): Record<RegularKind, SpriteBatch> {
+    const batches = {} as Record<RegularKind, SpriteBatch>;
+    for (const kind of REGULAR_KINDS) {
+      batches[kind] = this.batch([eliteSprite(ENEMY_SPRITES[kind])], 2, ELITE_CAPACITY, false, look.faction);
+    }
+    return batches;
+  }
+
   private hazardBatch(scale: number): SpriteBatch {
     const batch = this.batch([HAZARD], scale, MAX_HAZARD_SPRITES, true);
     const material = batch.mesh.material as MeshBasicMaterial;
@@ -410,13 +456,11 @@ export class ArenaRenderer {
     map.repeat.set(40, 40);
     material.map = map;
     material.needsUpdate = true;
-    for (const kind of ["grunt", "runner", "brute", "boss"] as const) {
-      const old = this.enemies[kind];
-      const capacity = old.mesh.instanceMatrix.count;
-      old.dispose(this.scene);
-      const sprite = kind === "grunt" ? GRUNT : kind === "runner" ? RUNNER : BRUTE;
-      this.enemies[kind] = kind === "boss" ? this.bossBatch(look.boss) : this.batch([sprite], 1, capacity, false, look.faction);
+    for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites)]) {
+      batch.dispose(this.scene);
     }
+    this.enemies = this.enemyBatches(look);
+    this.elites = this.eliteBatches(look);
     this.propChunkX = Number.NaN;
   }
 
@@ -482,16 +526,19 @@ export class ArenaRenderer {
     this.placeProps(playerX, playerZ);
 
     this.shadows.begin();
-    for (const batch of Object.values(this.enemies)) {
+    const enemyBatches = [...Object.values(this.enemies), ...Object.values(this.elites)];
+    for (const batch of enemyBatches) {
       batch.begin();
     }
     for (const enemy of state.enemies) {
       const x = enemy.x / SUB;
       const z = enemy.y / SUB;
-      this.enemies[enemy.kind].add(x, 0, z, enemy.hitFlash > 0);
+      const telegraph = enemy.mode === "telegraph" && Math.floor(state.tick / 3) % 2 === 0;
+      const batch = enemy.elite && enemy.kind !== "boss" ? this.elites[enemy.kind] : this.enemies[enemy.kind];
+      batch.add(x, 0, z, enemy.hitFlash > 0 || telegraph);
       this.shadows.add(x, z, enemy.radius / SUB / 0.55);
     }
-    for (const batch of Object.values(this.enemies)) {
+    for (const batch of enemyBatches) {
       batch.commit();
     }
 
@@ -527,12 +574,14 @@ export class ArenaRenderer {
 
     this.gems.begin();
     this.bigGems.begin();
+    this.chests.begin();
     for (const gem of state.gems) {
       const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5;
-      (gem.value > 1 ? this.bigGems : this.gems).add(gem.x / SUB, bob, gem.y / SUB);
+      (gem.chest ? this.chests : gem.value > 1 ? this.bigGems : this.gems).add(gem.x / SUB, bob, gem.y / SUB);
     }
     this.gems.commit();
     this.bigGems.commit();
+    this.chests.commit();
 
     this.bolts.begin();
     this.beams.begin();

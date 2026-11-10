@@ -289,7 +289,7 @@ export class ArenaGame {
           if (event.enemy !== "grunt" || kills % 4 === 1) {
             this.effects.spawn("poof", event.x, event.y);
           }
-          if (event.enemy === "brute") {
+          if (event.enemy === "brute" || event.enemy === "heavy" || event.enemy === "lootRunner") {
             this.hitStop = Math.max(this.hitStop, 2);
             this.renderer.shake = Math.max(this.renderer.shake, 0.3);
           }
@@ -358,6 +358,24 @@ export class ArenaGame {
           this.effects.spawn("slam", event.x, event.y);
           break;
         case "dash":
+          break;
+        case "blast":
+          this.renderer.shake = Math.max(this.renderer.shake, 0.6);
+          this.renderer.pulse(event.x, event.y, event.radius, "#ef7d57");
+          this.effects.spawn("pow", event.x, event.y);
+          break;
+        case "eliteArrives":
+          this.renderer.shake = Math.max(this.renderer.shake, 0.5);
+          this.banner = { title: t("elite.arrives"), subtitle: t("elite.subtitle", { rival: rivalName(currentWorld(this.state).id) }), age: 0, life: 150 };
+          break;
+        case "chest":
+          this.hitStop = Math.max(this.hitStop, 4);
+          this.effects.spawn("pow", event.x, event.y);
+          if (this.floats.length < MAX_FLOATS) {
+            this.floats.push({ text: t("chest.open"), x: event.x, y: event.y, color: "#ffcd75", size: 22, age: 0 });
+          }
+          break;
+        case "lootEscaped":
           break;
       }
     }

@@ -5,13 +5,22 @@ import {
   ACQUISITION_SECONDS,
   BOSS_EVERY_SECONDS,
   BOSS_PHASE_FLOORS,
+  ELITE_SECOND,
+  ELITE_SLOT,
   ENEMIES,
   EVOLUTIONS,
+  LOOT_RUNNER_ESCAPE_SECONDS,
+  LOOT_RUNNER_SECOND,
+  SPLIT_COUNT,
+  SPLIT_INTO,
+  WAVES,
   PASSIVES,
   WEAPONS,
   WORLDS,
   type BossPattern,
   type EnemyKind,
+  type RegularKind,
+  type WaveRow,
   type WorldId,
   type PassiveId,
   type PassiveStat,
@@ -56,6 +65,25 @@ const FAKE_SHOT_PERCENT = 50;
 const GROWTH_HACK_HEAL_PERCENT = 25;
 const THROTTLE_PERCENT = 160;
 const CONFIDENT_EXPERT_HALLUCINATION = 25;
+export const ELITE_HEALTH_TIMES = 10;
+export const ELITE_DAMAGE_PERCENT = 130;
+export const ELITE_RADIUS_PERCENT = 170;
+export const TELEGRAPH_TICKS = 30;
+export const ENEMY_DASH_TICKS = 24;
+export const ENEMY_DASH_TIMES = 5;
+export const ENEMY_DASH_RANGE = px(110);
+export const ENEMY_DASH_REST = seconds(2);
+export const SHOOTER_RANGE = px(110);
+export const SHOOTER_EVERY = 170;
+export const ENEMY_SHOT_SPEED = 14;
+export const FUSE_RANGE = px(24);
+export const FUSE_TICKS = 36;
+export const BLAST_RADIUS = px(28);
+export const BLAST_DAMAGE = 18;
+export const LOOT_GEM_EVERY_HIT = 1;
+export const LOOT_PAYOUT = 12;
+export const MAX_SPAWNS_PER_TICK = 1;
+export const RAMP_SECONDS = 120;
 const BOSS_KNOCKBACK = 3;
 const KNOCKBACK_KEEP_PERCENT = 60;
 const SCREEN_TOP_ANGLE = (ANGLE_STEPS * 3) / 4;
@@ -68,9 +96,17 @@ export const SLAM_RADIUS = px(40);
 export const SLAM_EVERY = seconds(5);
 export const SLAM_DAMAGE = 22;
 
+export type EnemyMode = "move" | "telegraph" | "dash";
+
 export interface Enemy {
   readonly id: number;
   readonly kind: EnemyKind;
+  readonly elite: boolean;
+  readonly mass: number;
+  mode: EnemyMode;
+  timer: number;
+  dashX: number;
+  dashY: number;
   x: number;
   y: number;
   health: number;
@@ -103,6 +139,7 @@ export interface Gem {
   x: number;
   y: number;
   readonly value: number;
+  readonly chest: boolean;
   pulled: boolean;
 }
 
@@ -135,6 +172,7 @@ export interface HostileShot {
   life: number;
   readonly damage: number;
   readonly fake: boolean;
+  readonly source: EnemyKind;
 }
 
 export interface Hazard {
@@ -153,7 +191,7 @@ export interface Slam {
 export type ArenaEvent =
   | { readonly kind: "damage"; readonly x: number; readonly y: number; readonly amount: number; readonly crit: boolean; readonly boss: boolean }
   | { readonly kind: "kill"; readonly x: number; readonly y: number; readonly enemy: EnemyKind }
-  | { readonly kind: "hurt"; readonly amount: number }
+  | { readonly kind: "hurt"; readonly amount: number; readonly source: EnemyKind }
   | { readonly kind: "hallucinated"; readonly x: number; readonly y: number }
   | { readonly kind: "pulse"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
   | { readonly kind: "levelUp"; readonly level: number }
@@ -164,7 +202,11 @@ export type ArenaEvent =
   | { readonly kind: "slam"; readonly x: number; readonly y: number }
   | { readonly kind: "bossPhase"; readonly phase: BossPhase; readonly checkPassed: boolean }
   | { readonly kind: "bossHealed"; readonly x: number; readonly y: number; readonly amount: number }
-  | { readonly kind: "acquired" };
+  | { readonly kind: "acquired" }
+  | { readonly kind: "blast"; readonly x: number; readonly y: number; readonly radius: number }
+  | { readonly kind: "eliteArrives"; readonly x: number; readonly y: number }
+  | { readonly kind: "chest"; readonly x: number; readonly y: number }
+  | { readonly kind: "lootEscaped" };
 
 export type Status = SimPhase;
 
@@ -223,6 +265,9 @@ export interface ArenaState {
   readonly shots: HostileShot[];
   readonly hazards: Hazard[];
   spawnCarry: number;
+  worldStartTick: number;
+  eliteSpawned: boolean;
+  lootSpawned: boolean;
   nextId: number;
   killedBy: Killer | null;
   readonly damageByWeapon: Map<WeaponId, number>;
@@ -271,6 +316,9 @@ export function createArena(seed: number): ArenaState {
     shots: [],
     hazards: [],
     spawnCarry: 0,
+    worldStartTick: 0,
+    eliteSpawned: false,
+    lootSpawned: false,
     nextId: 1,
     killedBy: null,
     damageByWeapon: new Map(),
@@ -434,30 +482,72 @@ function regenerate(state: ArenaState): void {
   }
 }
 
-function minutesElapsed(state: ArenaState): number {
-  return state.tick / (TICKS_PER_SECOND * 60);
+export function worldSeconds(state: ArenaState): number {
+  return Math.trunc((state.tick - state.worldStartTick) / TICKS_PER_SECOND);
 }
 
-function spawnsPerSecondTimes100(state: ArenaState): number {
-  const seconds = Math.trunc(state.tick / TICKS_PER_SECOND);
-  return 220 + seconds * 6;
+export function currentWave(state: ArenaState): WaveRow {
+  const elapsed = worldSeconds(state);
+  let row = WAVES[0] as WaveRow;
+  for (const candidate of WAVES) {
+    if (candidate.fromSecond <= elapsed) {
+      row = candidate;
+    }
+  }
+  return row;
+}
+
+function regularsAlive(state: ArenaState): number {
+  return state.enemies.length - (state.bossId === null ? 0 : 1);
+}
+
+function pickSlot(state: ArenaState, row: WaveRow): RegularKind {
+  const world = currentWorld(state);
+  const total = row.weights.reduce((sum, weight) => sum + weight, 0);
+  let roll = state.rng.intBelow(total);
+  for (let slot = 0; slot < row.weights.length; slot += 1) {
+    roll -= row.weights[slot] ?? 0;
+    if (roll < 0) {
+      const kind = world.slots[slot] ?? world.slots[0];
+      const shooters = state.enemies.filter((enemy) => enemy.kind === "shooter").length;
+      return kind === "shooter" && shooters >= world.maxShooters ? world.slots[0] : kind;
+    }
+  }
+  return world.slots[0];
 }
 
 function spawnEnemies(state: ArenaState): void {
-  if (state.bossId !== null && state.enemies.length > MAX_ENEMIES / 2) {
-    return;
+  const world = currentWorld(state);
+  const ramp = Math.min(RAMP_SECONDS, worldSeconds(state));
+  const full = world.minAlive + Math.trunc(((world.maxAlive - world.minAlive) * ramp) / RAMP_SECONDS);
+  const ceiling = state.bossId === null ? full : Math.trunc(full / 2);
+  const floor = world.minAlive;
+  if (state.bossId === null) {
+    spawnSpecials(state);
   }
-  state.spawnCarry += spawnsPerSecondTimes100(state);
-  const threshold = TICKS_PER_SECOND * 100;
-  while (state.spawnCarry >= threshold) {
-    state.spawnCarry -= threshold;
-    if (state.enemies.length >= MAX_ENEMIES) {
-      continue;
-    }
-    const roll = state.rng.intBelow(100);
-    const elapsed = minutesElapsed(state);
-    const kind: EnemyKind = elapsed > 1 && roll < 8 ? "brute" : elapsed > 0.5 && roll < 35 ? "runner" : "grunt";
-    spawnEnemy(state, kind, state.rng.intBelow(ANGLE_STEPS), SPAWN_DISTANCE);
+  const row = currentWave(state);
+  const elapsed = state.tick - state.worldStartTick;
+  let wanted = elapsed % row.interval === 0 ? row.batch : 0;
+  if (state.bossId === null && regularsAlive(state) < floor) {
+    wanted = Math.max(wanted, Math.min(MAX_SPAWNS_PER_TICK, floor - regularsAlive(state)));
+  }
+  for (let index = 0; index < wanted && regularsAlive(state) < Math.min(ceiling, MAX_ENEMIES); index += 1) {
+    spawnEnemy(state, pickSlot(state, row), state.rng.intBelow(ANGLE_STEPS), SPAWN_DISTANCE, false);
+  }
+}
+
+function spawnSpecials(state: ArenaState): void {
+  const elapsed = worldSeconds(state);
+  if (!state.lootSpawned && elapsed >= LOOT_RUNNER_SECOND) {
+    state.lootSpawned = true;
+    const runner = spawnEnemy(state, "lootRunner", state.rng.intBelow(ANGLE_STEPS), px(140), false);
+    runner.timer = seconds(LOOT_RUNNER_ESCAPE_SECONDS);
+  }
+  if (!state.eliteSpawned && elapsed >= ELITE_SECOND) {
+    state.eliteSpawned = true;
+    const kind = currentWorld(state).slots[ELITE_SLOT] ?? "brute";
+    const elite = spawnEnemy(state, kind, state.rng.intBelow(ANGLE_STEPS), SPAWN_DISTANCE - px(60), true);
+    state.events.push({ kind: "eliteArrives", x: elite.x, y: elite.y });
   }
 }
 
@@ -466,24 +556,41 @@ function healthScale(state: ArenaState): number {
   return 100 + Math.trunc(seconds / 2) + state.bossesDown * 60;
 }
 
-function spawnEnemy(state: ArenaState, kind: EnemyKind, angle: number, distance: number): Enemy {
+function spawnEnemy(state: ArenaState, kind: EnemyKind, angle: number, distance: number, elite: boolean): Enemy {
+  return spawnEnemyAt(
+    state,
+    kind,
+    state.player.x + Math.trunc((cosStep(angle) * distance) / UNIT),
+    state.player.y + Math.trunc((sinStep(angle) * distance) / UNIT),
+    elite,
+  );
+}
+
+function spawnEnemyAt(state: ArenaState, kind: EnemyKind, x: number, y: number, elite: boolean): Enemy {
   const definition = ENEMIES[kind];
-  const health =
-    kind === "boss" ? (WORLDS[state.bossesDown]?.bossHealth ?? 9000) : percentOf(definition.health, healthScale(state));
+  const scaled = kind === "boss" ? (WORLDS[state.bossesDown]?.bossHealth ?? 9000) : percentOf(definition.health, healthScale(state));
+  const health = elite ? scaled * ELITE_HEALTH_TIMES : scaled;
+  const damage = definition.damage === 0 ? 0 : definition.damage + state.bossesDown * 3 + Math.trunc(state.tick / (TICKS_PER_SECOND * 60));
   const enemy: Enemy = {
     id: state.nextId,
     kind,
-    x: state.player.x + Math.trunc((cosStep(angle) * distance) / UNIT),
-    y: state.player.y + Math.trunc((sinStep(angle) * distance) / UNIT),
+    elite,
+    mass: elite ? Math.max(definition.mass, 80) : definition.mass,
+    mode: "move",
+    timer: kind === "shooter" ? SHOOTER_EVERY : 0,
+    dashX: 0,
+    dashY: 0,
+    x,
+    y,
     health,
     maxHealth: health,
     hitFlash: 0,
     knockX: 0,
     knockY: 0,
     speed: definition.speed,
-    damage: definition.damage + state.bossesDown * 3 + Math.trunc(state.tick / (TICKS_PER_SECOND * 60)),
-    radius: px(definition.radius),
-    xp: definition.xp,
+    damage: elite ? percentOf(damage, ELITE_DAMAGE_PERCENT) : damage,
+    radius: px(elite ? percentOf(definition.radius, ELITE_RADIUS_PERCENT) : definition.radius),
+    xp: elite ? definition.xp * 10 : definition.xp,
   };
   state.nextId += 1;
   state.enemies.push(enemy);
@@ -495,7 +602,7 @@ function spawnBoss(state: ArenaState): void {
     return;
   }
   const angle = SCREEN_TOP_ANGLE - BOSS_ENTRY_SPREAD / 2 + state.rng.intBelow(BOSS_ENTRY_SPREAD);
-  const boss = spawnEnemy(state, "boss", angle, BOSS_ENTRY_DISTANCE);
+  const boss = spawnEnemy(state, "boss", angle, BOSS_ENTRY_DISTANCE, false);
   state.bossId = boss.id;
   state.slamTimer = SLAM_EVERY;
   state.fight = {
@@ -514,7 +621,6 @@ function spawnBoss(state: ArenaState): void {
 
 function moveEnemies(state: ArenaState): void {
   state.grid.rebuild(state.enemies);
-  const player = state.player;
   for (const enemy of state.enemies) {
     if (enemy.hitFlash > 0) {
       enemy.hitFlash -= 1;
@@ -524,7 +630,7 @@ function moveEnemies(state: ArenaState): void {
       ? { x: charging.chargeX, y: charging.chargeY }
       : state.fight !== null && enemy.id === state.bossId && state.fight.windup > 0
         ? { x: 0, y: 0 }
-        : scaleToLength(player.x - enemy.x, player.y - enemy.y, enemy.speed);
+        : enemyStep(state, enemy);
     let pushX = 0;
     let pushY = 0;
     state.grid.forEachNear(enemy.x, enemy.y, enemy.radius + px(18), (other) => {
@@ -546,13 +652,100 @@ function moveEnemies(state: ArenaState): void {
       pushX += Math.trunc((dx * overlap) / (reach * 3));
       pushY += Math.trunc((dy * overlap) / (reach * 3));
     });
-    const limit = enemy.kind === "boss" ? 2 : 10;
+    const limit = Math.max(1, Math.trunc((10 * (100 - enemy.mass)) / 100));
     enemy.x += toward.x + Math.max(-limit, Math.min(limit, pushX)) + enemy.knockX;
     enemy.y += toward.y + Math.max(-limit, Math.min(limit, pushY)) + enemy.knockY;
     enemy.knockX = Math.trunc((enemy.knockX * KNOCKBACK_KEEP_PERCENT) / 100);
     enemy.knockY = Math.trunc((enemy.knockY * KNOCKBACK_KEEP_PERCENT) / 100);
   }
   state.grid.rebuild(state.enemies);
+}
+
+function enemyStep(state: ArenaState, enemy: Enemy): { readonly x: number; readonly y: number } {
+  const player = state.player;
+  const chase = () => scaleToLength(player.x - enemy.x, player.y - enemy.y, enemy.speed);
+  const near = (range: number) => distanceSquared(enemy.x, enemy.y, player.x, player.y) <= range * range;
+  if (enemy.kind === "boss") {
+    return chase();
+  }
+  if (enemy.timer > 0) {
+    enemy.timer -= 1;
+  }
+  switch (ENEMIES[enemy.kind].behavior) {
+    case "chase":
+      return chase();
+    case "flee":
+      if (enemy.timer <= 0) {
+        enemy.health = 0;
+        state.events.push({ kind: "lootEscaped" });
+        return { x: 0, y: 0 };
+      }
+      return scaleToLength(enemy.x - player.x, enemy.y - player.y, enemy.speed);
+    case "charge":
+      if (enemy.mode === "dash") {
+        if (enemy.timer <= 0) {
+          enemy.mode = "move";
+          enemy.timer = ENEMY_DASH_REST;
+        }
+        return { x: enemy.dashX, y: enemy.dashY };
+      }
+      if (enemy.mode === "telegraph") {
+        if (enemy.timer <= 0) {
+          const dash = scaleToLength(player.x - enemy.x, player.y - enemy.y, enemy.speed * ENEMY_DASH_TIMES);
+          enemy.dashX = dash.x;
+          enemy.dashY = dash.y;
+          enemy.mode = "dash";
+          enemy.timer = ENEMY_DASH_TICKS;
+        }
+        return { x: 0, y: 0 };
+      }
+      if (enemy.timer <= 0 && near(ENEMY_DASH_RANGE)) {
+        enemy.mode = "telegraph";
+        enemy.timer = TELEGRAPH_TICKS;
+        return { x: 0, y: 0 };
+      }
+      return chase();
+    case "shoot":
+      if (enemy.mode === "telegraph") {
+        if (enemy.timer <= 0) {
+          fireShot(state, enemy, scaleToLength(player.x - enemy.x, player.y - enemy.y, ENEMY_SHOT_SPEED), false);
+          enemy.mode = "move";
+          enemy.timer = SHOOTER_EVERY;
+        }
+        return { x: 0, y: 0 };
+      }
+      if (near(SHOOTER_RANGE)) {
+        if (enemy.timer <= 0) {
+          enemy.mode = "telegraph";
+          enemy.timer = TELEGRAPH_TICKS;
+        }
+        return { x: 0, y: 0 };
+      }
+      return chase();
+    case "explode":
+      if (enemy.mode === "telegraph") {
+        if (enemy.timer <= 0) {
+          explode(state, enemy);
+          return { x: 0, y: 0 };
+        }
+        return scaleToLength(player.x - enemy.x, player.y - enemy.y, Math.trunc(enemy.speed / 3));
+      }
+      if (near(FUSE_RANGE)) {
+        enemy.mode = "telegraph";
+        enemy.timer = FUSE_TICKS;
+      }
+      return chase();
+  }
+}
+
+function explode(state: ArenaState, enemy: Enemy): void {
+  enemy.health = 0;
+  state.events.push({ kind: "blast", x: enemy.x, y: enemy.y, radius: BLAST_RADIUS });
+  const player = state.player;
+  const reach = BLAST_RADIUS + PLAYER_RADIUS;
+  if (player.dashTicks === 0 && distanceSquared(enemy.x, enemy.y, player.x, player.y) <= reach * reach) {
+    hurtPlayer(state, BLAST_DAMAGE + state.bossesDown * 3, "exploder", true);
+  }
 }
 
 function nearestEnemy(state: ArenaState, x: number, y: number, maxDistance: number): Enemy | null {
@@ -737,17 +930,40 @@ function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: Weap
     }
   }
   enemy.hitFlash = 6;
-  const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, enemy.kind === "boss" ? BOSS_KNOCKBACK : crit ? KNOCKBACK * 2 : KNOCKBACK);
+  const push = enemy.kind === "boss" ? BOSS_KNOCKBACK : Math.trunc(((crit ? KNOCKBACK * 2 : KNOCKBACK) * (100 - enemy.mass)) / 100);
+  const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, push);
   enemy.knockX += away.x;
   enemy.knockY += away.y;
   state.damageByWeapon.set(weapon, (state.damageByWeapon.get(weapon) ?? 0) + amount);
   state.events.push({ kind: "damage", x: enemy.x, y: enemy.y, amount, crit, boss: enemy.kind === "boss" });
+  if (enemy.kind === "lootRunner") {
+    state.gems.push({ x: enemy.x, y: enemy.y, value: LOOT_GEM_EVERY_HIT, pulled: false, chest: false });
+  }
   if (enemy.health > 0) {
     return;
   }
+  defeatEnemy(state, enemy);
+}
+
+function defeatEnemy(state: ArenaState, enemy: Enemy): void {
   state.kills += 1;
   state.events.push({ kind: "kill", x: enemy.x, y: enemy.y, enemy: enemy.kind });
-  state.gems.push({ x: enemy.x, y: enemy.y, value: enemy.xp, pulled: false });
+  if (enemy.elite) {
+    state.gems.push({ x: enemy.x, y: enemy.y, value: 0, pulled: false, chest: true });
+  }
+  const value = enemy.kind === "lootRunner" ? LOOT_PAYOUT : enemy.xp;
+  if (value > 0) {
+    state.gems.push({ x: enemy.x, y: enemy.y, value, pulled: false, chest: false });
+  }
+  if (enemy.kind === "splitter") {
+    const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, KNOCKBACK);
+    for (let index = 0; index < SPLIT_COUNT; index += 1) {
+      const side = index * 2 - (SPLIT_COUNT - 1);
+      const child = spawnEnemyAt(state, SPLIT_INTO, enemy.x - away.y * side, enemy.y + away.x * side, false);
+      child.knockX = away.x;
+      child.knockY = away.y;
+    }
+  }
   if (enemy.id === state.bossId) {
     defeatBoss(state, enemy);
   }
@@ -762,6 +978,9 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   state.shots.length = 0;
   state.hazards.length = 0;
   state.pendingLevelUps += 1;
+  state.worldStartTick = state.tick;
+  state.eliteSpawned = false;
+  state.lootSpawned = false;
   if (state.bossesDown >= WORLDS.length) {
     move(state, "finalBossDown");
     return;
@@ -912,11 +1131,12 @@ function rotate(vector: { readonly x: number; readonly y: number }, steps: numbe
   return { x: Math.trunc((vector.x * cos - vector.y * sin) / UNIT), y: Math.trunc((vector.x * sin + vector.y * cos) / UNIT) };
 }
 
-function fireShot(state: ArenaState, boss: Enemy, velocity: { readonly x: number; readonly y: number }, fake: boolean): void {
+function fireShot(state: ArenaState, from: Enemy, velocity: { readonly x: number; readonly y: number }, fake: boolean): void {
   if (state.shots.length >= MAX_SHOTS) {
     return;
   }
-  state.shots.push({ x: boss.x, y: boss.y, vx: velocity.x, vy: velocity.y, life: seconds(4), damage: SHOT_DAMAGE + state.bossesDown * 3, fake });
+  const damage = from.kind === "boss" ? SHOT_DAMAGE + state.bossesDown * 3 : from.damage;
+  state.shots.push({ x: from.x, y: from.y, vx: velocity.x, vy: velocity.y, life: seconds(4), damage, fake, source: from.kind });
 }
 
 function moveShots(state: ArenaState): void {
@@ -931,7 +1151,7 @@ function moveShots(state: ArenaState): void {
     }
     if (distanceSquared(shot.x, shot.y, player.x, player.y) <= reach * reach) {
       shot.life = 0;
-      hurtPlayer(state, shot.damage, "boss", false);
+      hurtPlayer(state, shot.damage, shot.source, false);
     }
   }
   for (const hazard of state.hazards) {
@@ -972,6 +1192,10 @@ function collectGems(state: ArenaState): void {
     gem.y += pull.y;
     if (distanceSquared(gem.x, gem.y, player.x, player.y) <= px(6) * px(6)) {
       gem.pulled = false;
+      if (gem.chest) {
+        state.pendingLevelUps += 1;
+        state.events.push({ kind: "chest", x: gem.x, y: gem.y });
+      }
       gem.x = Number.NaN;
       gainXp(state, gem.value);
     }
@@ -995,7 +1219,7 @@ function touchPlayer(state: ArenaState): void {
   const found: { enemy: Enemy | null } = { enemy: null };
   state.grid.forEachNear(player.x, player.y, PLAYER_RADIUS + px(20), (enemy) => {
     const reach = enemy.radius + PLAYER_RADIUS;
-    if (enemy.health > 0 && distanceSquared(enemy.x, enemy.y, player.x, player.y) <= reach * reach) {
+    if (enemy.health > 0 && enemy.damage > 0 && distanceSquared(enemy.x, enemy.y, player.x, player.y) <= reach * reach) {
       found.enemy = enemy;
       return true;
     }
@@ -1015,7 +1239,7 @@ function hurtPlayer(state: ArenaState, base: number, source: EnemyKind, ignoreIn
   const amount = Math.max(1, base - statTotal(state, "armor"));
   player.health -= amount;
   player.invulnerable = HURT_INVULNERABLE;
-  state.events.push({ kind: "hurt", amount });
+  state.events.push({ kind: "hurt", amount, source });
   if (player.health <= 0) {
     player.health = 0;
     state.killedBy = { world: currentWorld(state).id, enemy: source };
