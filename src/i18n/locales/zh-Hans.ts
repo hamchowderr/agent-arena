@@ -21,6 +21,8 @@ export const zhHans = {
   "levelUp.skip": "[X] 跳过（{count}）",
   "card.recommended": "★ 推荐",
   "card.evolve": "进化",
+  "card.weapon": "武器",
+  "card.passive": "被动",
   "card.new": "新",
   "card.levelChange": "等级 {from} → {to}",
 

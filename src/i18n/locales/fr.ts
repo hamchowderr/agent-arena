@@ -21,6 +21,8 @@ export const fr = {
   "levelUp.skip": "[X] Passer ({count})",
   "card.recommended": "★ CONSEILLÉ",
   "card.evolve": "ÉVOLUTION",
+  "card.weapon": "ARME",
+  "card.passive": "PASSIF",
   "card.new": "NOUVEAU",
   "card.levelChange": "NIV {from} → {to}",
 

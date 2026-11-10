@@ -21,6 +21,8 @@ export const es = {
   "levelUp.skip": "[X] Saltar ({count})",
   "card.recommended": "★ RECOMENDADA",
   "card.evolve": "EVOLUCIÓN",
+  "card.weapon": "ARMA",
+  "card.passive": "PASIVA",
   "card.new": "NUEVA",
   "card.levelChange": "NV {from} → {to}",
 

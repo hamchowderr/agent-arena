@@ -1,6 +1,6 @@
 import { CanvasTexture, NearestFilter, RepeatWrapping, SRGBColorSpace } from "three";
-import { FACTION_KEY } from "../art/arena-sprites";
-import { PALETTE, TRANSPARENT, type PaletteKey } from "../art/palette";
+import { PALETTE } from "../art/palette";
+import { shade } from "../art/shade";
 import type { Sprite } from "../art/sprites";
 
 export interface SpriteImage {
@@ -19,18 +19,14 @@ export function spriteImage(layers: readonly Sprite[], faction: string = PALETTE
   if (!context) {
     return { canvas, width, height };
   }
-  for (const layer of layers) {
-    layer.forEach((row, y) => {
-      for (let x = 0; x < row.length; x += 1) {
-        const key = row[x];
-        if (key === undefined || key === TRANSPARENT) {
-          continue;
-        }
-        context.fillStyle = key === FACTION_KEY ? faction : PALETTE[key as PaletteKey];
+  shade(layers, faction).forEach((row, y) =>
+    row.forEach((color, x) => {
+      if (color) {
+        context.fillStyle = color;
         context.fillRect(x, y, 1, 1);
       }
-    });
-  }
+    }),
+  );
   return { canvas, width, height };
 }
 

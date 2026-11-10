@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as sprites from "./arena-sprites";
 import { PALETTE, TRANSPARENT } from "./palette";
+import { FACTION_DARK_KEY, FACTION_LIGHT_KEY } from "./shade";
 
 const grids = Object.entries(sprites).filter((entry): entry is [string, readonly string[]] => Array.isArray(entry[1]) && typeof entry[1][0] === "string");
 
@@ -11,7 +12,7 @@ describe("arena sprites", () => {
     for (const row of grid) {
       expect(row).toHaveLength(width);
       for (const key of row) {
-        expect(key === TRANSPARENT || key === sprites.FACTION_KEY || key in PALETTE).toBe(true);
+        expect(key === TRANSPARENT || key === sprites.FACTION_KEY || key === FACTION_LIGHT_KEY || key === FACTION_DARK_KEY || key in PALETTE).toBe(true);
       }
     }
   });
