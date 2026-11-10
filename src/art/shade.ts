@@ -1,3 +1,4 @@
+import { isMaterial, MATERIALS } from "./materials";
 import { PALETTE, TRANSPARENT, type PaletteKey } from "./palette";
 import type { Sprite } from "./sprites";
 
@@ -87,12 +88,43 @@ function merge(layers: readonly Sprite[]): string[][] {
 
 const BODY = new Set([FACTION_KEY, FACTION_LIGHT_KEY, FACTION_DARK_KEY]);
 
+const RAMPS = new Map<string, Ramp>();
+
+function materialRamp(key: string): Ramp | undefined {
+  if (!isMaterial(key)) {
+    return undefined;
+  }
+  const cached = RAMPS.get(key);
+  if (cached) {
+    return cached;
+  }
+  const ramp = rampOf(MATERIALS[key]);
+  RAMPS.set(key, ramp);
+  return ramp;
+}
+
+const NEIGHBORS = [
+  [0, -1],
+  [-1, 0],
+  [1, 0],
+  [0, 1],
+] as const;
+
 export function shade(layers: readonly Sprite[], faction: string): ColorGrid {
   const grid = merge(layers);
   const ramp = rampOf(faction);
   const at = (x: number, y: number) => grid[y]?.[x] ?? TRANSPARENT;
   const outside = (x: number, y: number) => at(x, y) === TRANSPARENT;
   const body = (x: number, y: number) => BODY.has(at(x, y));
+  const lit = (x: number, y: number, same: (x: number, y: number) => boolean, colors: Ramp) => {
+    if (!same(x, y - 1) || (!same(x - 1, y) && same(x, y + 1) && !same(x - 1, y - 1))) {
+      return colors.light;
+    }
+    if (!same(x, y + 1) || !same(x + 1, y) || !same(x, y + 2)) {
+      return colors.dark;
+    }
+    return colors.base;
+  };
   return grid.map((row, y) =>
     row.map((key, x) => {
       if (key === TRANSPARENT) {
@@ -105,18 +137,23 @@ export function shade(layers: readonly Sprite[], faction: string): ColorGrid {
         return ramp.dark;
       }
       if (key === FACTION_KEY) {
-        if (!body(x, y - 1) || (!body(x - 1, y) && body(x, y + 1) && !body(x - 1, y - 1))) {
-          return ramp.light;
-        }
-        if (!body(x, y + 1) || !body(x + 1, y) || !body(x, y + 2)) {
-          return ramp.dark;
-        }
-        return ramp.base;
+        return lit(x, y, body, ramp);
       }
-      const edge = outside(x - 1, y) || outside(x + 1, y) || outside(x, y - 1) || outside(x, y + 1);
-      const touchesBody = body(x - 1, y) || body(x + 1, y) || body(x, y - 1) || body(x, y + 1);
-      if (key === OUTLINE_KEY && edge && touchesBody) {
-        return ramp.line;
+      const material = materialRamp(key);
+      if (material) {
+        return lit(x, y, (nx, ny) => at(nx, ny) === key, material);
+      }
+      if (key === OUTLINE_KEY && (outside(x - 1, y) || outside(x + 1, y) || outside(x, y - 1) || outside(x, y + 1))) {
+        for (const [dx, dy] of NEIGHBORS) {
+          const next = at(x + dx, y + dy);
+          if (BODY.has(next)) {
+            return ramp.line;
+          }
+          const touching = materialRamp(next);
+          if (touching) {
+            return touching.line;
+          }
+        }
       }
       return PALETTE[key as PaletteKey] ?? null;
     }),

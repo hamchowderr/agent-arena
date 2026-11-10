@@ -21,19 +21,10 @@ import { WORLD_LOOKS, type WorldLook } from "./world-looks";
 type EnemyCheck = "span" | "colors" | "contrast";
 
 const REDRAW_PENDING: Readonly<Partial<Record<EnemyKind, readonly EnemyCheck[]>>> = {
-  grunt: ["colors"],
-  runner: ["colors"],
-  charger: ["span", "colors"],
-  shooter: ["span", "colors"],
-  exploder: ["span", "colors"],
-  splitter: ["span", "colors"],
-  lootRunner: ["span", "colors"],
-  brute: ["span", "colors"],
-  heavy: ["span", "contrast"],
   boss: ["span", "contrast"],
 };
 
-const HUES_PENDING: readonly WorldId[] = ["hustlr", "notionally", "meterly", "synergex", "trustMe"];
+const HUES_PENDING: readonly WorldId[] = [];
 
 const NATIVE_SCALE_PENDING: readonly (keyof typeof RENDER_SCALE)[] = ["elite", "boss"];
 
