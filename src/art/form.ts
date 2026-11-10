@@ -16,6 +16,10 @@ const RAMP_COLORS = {
   red: ["#ffb0a0", "#ff6a5a", "#d83a3a", "#902a3a", "#3a1018"],
   steel: ["#ffffff", "#d0d8e8", "#9aa6bc", "#5c6680", "#20263a"],
   wood: ["#f0c890", "#c8905a", "#9a6040", "#6a3a34", "#2a1418"],
+  olive: ["#f4f8b0", "#d8e070", "#b0c040", "#728030", "#262c10"],
+  magenta: ["#ffe0f8", "#ffa8ec", "#f070d8", "#b0409c", "#4a1444"],
+  fur: ["#f4ece4", "#ccc0b4", "#a0948a", "#6c605c", "#2a2224"],
+  coral: ["#ffe0d0", "#ffaa98", "#f57a68", "#b84a4a", "#4a1420"],
 } as const;
 
 export type RampName = keyof typeof RAMP_COLORS;
@@ -102,6 +106,16 @@ export function tinted(r: Raster): Sprite {
       return TRANSPARENT;
     }).join(""),
   );
+}
+
+export function stride(frame: number, side: number, size = 1): number {
+  return frame === 0 ? side * size : frame === 2 ? -side * size : 0;
+}
+
+export function leg(r: Raster, x: number, top: number, bottom: number, foot: number): void {
+  const { charcoal } = RAMPS;
+  r.rect(x, top, 1, bottom - top + 1, charcoal.base);
+  r.rect(x + foot, bottom, 2, 1, charcoal.shadow);
 }
 
 export type Mood = "eager" | "shocked" | "smug" | "angry" | "worried" | "fake" | "bright";

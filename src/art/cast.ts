@@ -1,20 +1,11 @@
 import type { RegularKind } from "../sim/arena/content";
-import { eye, light, lightAll, RAMPS, tinted } from "./form";
+import { eye, leg, light, lightAll, RAMPS, stride, tinted } from "./form";
 import { Raster } from "./raster";
 import type { Sprite } from "./sprites";
 
 export type Pose = (frame: number) => Sprite;
 
 const { paper, stamp, blue, yellow, green, purple, charcoal, teal, red, steel, wood } = RAMPS;
-
-function stride(frame: number, side: number, size = 1): number {
-  return frame === 0 ? side * size : frame === 2 ? -side * size : 0;
-}
-
-function leg(r: Raster, x: number, top: number, bottom: number, foot: number): void {
-  r.rect(x, top, 1, bottom - top + 1, charcoal.base);
-  r.rect(x + foot, bottom, 2, 1, charcoal.shadow);
-}
 
 function spamRoach(frame: number): Sprite {
   const r = new Raster(18, 13);
