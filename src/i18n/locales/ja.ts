@@ -25,6 +25,9 @@ export const ja = {
   "card.passive": "パッシブ",
   "card.new": "新規",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "回復",
+  "card.restore.name": "ホットリロード",
+  "card.restore.blurb": "すべて最大。HPを40%回復する。",
 
   "pause.title": "ポーズ",
   "pause.keys": "[P] 再開   [M] 音楽",
@@ -34,6 +37,7 @@ export const ja = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "最大HP",
+  "stat.health": "HP",
   "stat.damage": "ダメージ",
   "stat.damageBonus": "ダメージボーナス",
   "stat.crit": "会心率",

@@ -126,6 +126,21 @@ export const WEAPON_ICONS: Readonly<Record<WeaponId, Sprite>> = {
   ],
 };
 
+export const RESTORE_ICON: Sprite = [
+  "....kkkkkk....",
+  "....kwgggk....",
+  "....kggggk....",
+  "kkkkkggggkkkkk",
+  "kwgggggggggggk",
+  "kggggwwwwggggk",
+  "kggggwwwwggggk",
+  "kggggggggggggk",
+  "kkkkkggggkkkkk",
+  "....kggggk....",
+  "....kggggk....",
+  "....kkkkkk....",
+];
+
 export const PASSIVE_ICONS: Readonly<Record<PassiveId, Sprite>> = {
   longContext: [
     "................",

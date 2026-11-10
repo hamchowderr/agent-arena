@@ -1,4 +1,4 @@
-import { PASSIVE_ICONS, WEAPON_ICONS } from "../art/icons";
+import { PASSIVE_ICONS, RESTORE_ICON, WEAPON_ICONS } from "../art/icons";
 import type { Sprite } from "../art/sprites";
 import type { Card } from "../sim/arena/cards";
 import { BOSS_PHASE_FLOORS, isEvolvedWeapon, PASSIVES, WEAPONS, WORLDS, type PassiveId, type WeaponId } from "../sim/arena/content";
@@ -32,6 +32,7 @@ const TILE = "#3a4466";
 const TILE_LIGHT = "#56628a";
 const WEAPON_ACCENT = "#41a6f6";
 const PASSIVE_ACCENT = "#a7f070";
+const RESTORE_ACCENT = "#38b764";
 const CARD_FACE = "#20243a";
 const CARD_INSET = "#151827";
 
@@ -362,7 +363,7 @@ function reelCard(spin: ChestSpin, slot: number): Card {
 }
 
 function cardIcon(card: Card): HTMLCanvasElement {
-  return card.kind === "passive" ? passiveIcon(card.id) : weaponIcon(card.id);
+  return card.kind === "restore" ? cachedIcon("restore", RESTORE_ICON) : card.kind === "passive" ? passiveIcon(card.id) : weaponIcon(card.id);
 }
 
 export function drawChestSpin(context: CanvasRenderingContext2D, spin: ChestSpin, frame: number): void {
@@ -416,7 +417,7 @@ export function drawChestSpin(context: CanvasRenderingContext2D, spin: ChestSpin
     const card = spin.prize;
     const name = cardName(card);
     text(context, name, HUD_WIDTH / 2, 640, fitSize(context, name, 900, 40), INK, "center");
-    const badge = card.kind === "evolve" ? t("card.evolve") : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
+    const badge = card.kind === "evolve" ? t("card.evolve") : card.kind === "restore" ? t("card.restore.kind") : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
     text(context, badge, HUD_WIDTH / 2, 698, 24, cardAccent(card), "center");
   }
 }
@@ -430,11 +431,11 @@ function drawButton(context: CanvasRenderingContext2D, rect: Rect, label: string
 }
 
 function cardAccent(card: Card): string {
-  return card.kind === "evolve" ? GOLD : card.kind === "weapon" ? WEAPON_ACCENT : PASSIVE_ACCENT;
+  return card.kind === "evolve" ? GOLD : card.kind === "weapon" ? WEAPON_ACCENT : card.kind === "restore" ? RESTORE_ACCENT : PASSIVE_ACCENT;
 }
 
 function cardMaxLevel(card: Card): number {
-  return card.kind === "passive" ? PASSIVES[card.id].maxLevel : WEAPONS[card.id].levels.length;
+  return card.kind === "restore" ? 0 : card.kind === "passive" ? PASSIVES[card.id].maxLevel : WEAPONS[card.id].levels.length;
 }
 
 function drawPips(context: CanvasRenderingContext2D, card: Card, centerX: number, y: number): void {
@@ -464,9 +465,9 @@ function drawCard(context: CanvasRenderingContext2D, card: Card, rect: Rect, ind
   context.fillRect(box.x, box.y, box.w, box.h);
   context.fillStyle = accent;
   context.fillRect(box.x, box.y, box.w, 40);
-  const kindLabel = card.kind === "evolve" ? t("card.evolve") : card.kind === "weapon" ? t("card.weapon") : t("card.passive");
+  const kindLabel = card.kind === "evolve" ? t("card.evolve") : card.kind === "weapon" ? t("card.weapon") : card.kind === "restore" ? t("card.restore.kind") : t("card.passive");
   text(context, kindLabel, box.x + 18, box.y + 11, 18, SHADOW);
-  const badge = card.kind === "evolve" ? "★" : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
+  const badge = card.kind === "evolve" || card.kind === "restore" ? "★" : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
   text(context, badge, box.x + box.w - 18, box.y + 11, 18, SHADOW, "right");
   if (card.recommended) {
     const label = t("card.recommended");
@@ -479,10 +480,10 @@ function drawCard(context: CanvasRenderingContext2D, card: Card, rect: Rect, ind
   }
   const tile = { x: box.x + box.w / 2 - 56, y: box.y + 58, w: 112, h: 112 };
   iconTile(context, tile, accent);
-  drawIcon(context, card.kind === "passive" ? passiveIcon(card.id) : weaponIcon(card.id), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 96);
+  drawIcon(context, cardIcon(card), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 96);
   const name = cardName(card);
   text(context, name, box.x + box.w / 2, box.y + 186, fitSize(context, name, box.w - 32, 26), INK, "center");
-  if (card.kind !== "evolve") {
+  if (card.kind !== "evolve" && card.kind !== "restore") {
     drawPips(context, card, box.x + box.w / 2, box.y + 222);
   }
   wrap(context, cardBlurb(card), box.w - 40, 15).slice(0, 2).forEach((line, lineIndex) =>

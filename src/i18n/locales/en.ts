@@ -23,6 +23,9 @@ export const en = {
   "card.passive": "PASSIVE",
   "card.new": "NEW",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "HEAL",
+  "card.restore.name": "Hot reload",
+  "card.restore.blurb": "Everything is maxed. Heal 40% of your HP.",
 
   "pause.title": "Paused",
   "pause.keys": "[P] Resume   [M] Music",
@@ -32,6 +35,7 @@ export const en = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "Max HP",
+  "stat.health": "HP",
   "stat.damage": "Damage",
   "stat.damageBonus": "Damage bonus",
   "stat.crit": "Crit chance",

@@ -1,6 +1,6 @@
 import { createRng, mixSeed, type Rng } from "../rng";
 import type { Tier } from "../tiers";
-import { offerCards, type Card } from "./cards";
+import { offerCards, restoreAmount, type Card } from "./cards";
 import {
   ACQUISITION_SECONDS,
   BOSS_EVERY_SECONDS,
@@ -41,7 +41,7 @@ export const BASE_CRIT = 5;
 export const BASE_HALLUCINATION = 20;
 export const HALLUCINATION_VEER = 40;
 export const HALLUCINATION_PER_TIER = 5;
-export const BASE_PICKUP = px(32);
+export const BASE_PICKUP = px(36);
 export const DASH_TICKS = 8;
 export const DASH_SPEED = 64;
 export const DASH_RECHARGE = seconds(3);
@@ -144,6 +144,7 @@ export interface Gem {
   readonly chest: boolean;
   readonly prizes: number;
   settle: number;
+  life: number;
   pulled: boolean;
 }
 
@@ -194,6 +195,8 @@ export interface Slam {
 
 export const HIT_FLASH_TICKS = 12;
 export const GEM_SETTLE_TICKS = 30;
+export const GEM_LIFE_TICKS = seconds(20);
+export const GEM_FADE_TICKS = seconds(3);
 export const ELITE_CHEST_PRIZES = 1;
 export const BOSS_CHEST_PRIZES = 3;
 const GEM_SCATTER = px(10);
@@ -988,7 +991,6 @@ function defeatEnemy(state: ArenaState, enemy: Enemy): void {
 function dropGem(state: ArenaState, enemy: Enemy, value: number, prizes: number): void {
   const angle = (enemy.id * 37 + state.gems.length * 11 + state.tick) % ANGLE_STEPS;
   const reach = prizes > 0 ? 0 : GEM_SCATTER;
-  const magnet = pickupRadius(state);
   state.gems.push({
     x: enemy.x + Math.trunc((cosStep(angle) * reach) / UNIT),
     y: enemy.y + Math.trunc((sinStep(angle) * reach) / UNIT),
@@ -996,7 +998,8 @@ function dropGem(state: ArenaState, enemy: Enemy, value: number, prizes: number)
     chest: prizes > 0,
     prizes,
     settle: GEM_SETTLE_TICKS,
-    pulled: distanceSquared(enemy.x, enemy.y, state.player.x, state.player.y) <= magnet * magnet,
+    life: GEM_LIFE_TICKS,
+    pulled: false,
   });
 }
 
@@ -1226,6 +1229,13 @@ function collectGems(state: ArenaState): void {
       gem.settle -= 1;
       continue;
     }
+    if (!gem.pulled && !gem.chest) {
+      gem.life -= 1;
+      if (gem.life <= 0) {
+        gem.x = Number.NaN;
+        continue;
+      }
+    }
     const distance = distanceSquared(gem.x, gem.y, player.x, player.y);
     if (!gem.pulled && distance <= radius * radius) {
       gem.pulled = true;
@@ -1366,6 +1376,10 @@ function closeLevelUp(state: ArenaState): void {
 }
 
 function applyCard(state: ArenaState, card: Card): void {
+  if (card.kind === "restore") {
+    state.player.health = Math.min(maxHealth(state), state.player.health + restoreAmount(state));
+    return;
+  }
   if (card.kind === "weapon") {
     const owned = state.weapons.find((weapon) => weapon.id === card.id);
     if (owned) {

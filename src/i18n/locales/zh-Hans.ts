@@ -25,6 +25,9 @@ export const zhHans = {
   "card.passive": "被动",
   "card.new": "新",
   "card.levelChange": "等级 {from} → {to}",
+  "card.restore.kind": "治疗",
+  "card.restore.name": "热重载",
+  "card.restore.blurb": "全部已满级。恢复 40% 生命值。",
 
   "pause.title": "已暂停",
   "pause.keys": "[P] 继续   [M] 音乐",
@@ -34,6 +37,7 @@ export const zhHans = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "最大生命",
+  "stat.health": "生命",
   "stat.damage": "伤害",
   "stat.damageBonus": "伤害加成",
   "stat.crit": "暴击率",

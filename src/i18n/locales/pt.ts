@@ -25,6 +25,9 @@ export const pt = {
   "card.passive": "PASSIVA",
   "card.new": "NOVA",
   "card.levelChange": "NV {from} → {to}",
+  "card.restore.kind": "CURA",
+  "card.restore.name": "Recarga a quente",
+  "card.restore.blurb": "Tudo no máximo. Recupera 40% dos seus PV.",
 
   "pause.title": "Pausado",
   "pause.keys": "[P] Continuar   [M] Música",
@@ -34,6 +37,7 @@ export const pt = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "PV máx.",
+  "stat.health": "PV",
   "stat.damage": "Dano",
   "stat.damageBonus": "Bônus de dano",
   "stat.crit": "Chance de crítico",

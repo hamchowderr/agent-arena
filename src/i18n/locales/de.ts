@@ -25,6 +25,9 @@ export const de = {
   "card.passive": "PASSIV",
   "card.new": "NEU",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "HEILUNG",
+  "card.restore.name": "Hot Reload",
+  "card.restore.blurb": "Alles ist ausgebaut. Heilt 40 % deiner LP.",
 
   "pause.title": "Pause",
   "pause.keys": "[P] Weiter   [M] Musik",
@@ -34,6 +37,7 @@ export const de = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "Max. LP",
+  "stat.health": "LP",
   "stat.damage": "Schaden",
   "stat.damageBonus": "Schadensbonus",
   "stat.crit": "Kritische Chance",

@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { kitingBot, pickRecommended } from "./bot";
-import { ELITE_SECOND, ENEMIES, LOOT_RUNNER_ESCAPE_SECONDS, SPLIT_COUNT, SPLIT_INTO, WAVES, WORLDS, type EnemyKind } from "./content";
+import { restoreAmount } from "./cards";
+import { ELITE_SECOND, ENEMIES, LOOT_RUNNER_ESCAPE_SECONDS, PASSIVES, SPLIT_COUNT, SPLIT_INTO, WAVES, WEAPONS, WORLDS, type EnemyKind } from "./content";
 import { distanceSquared, px, seconds } from "./math";
 import {
   BOSS_CHEST_PRIZES,
   ELITE_CHEST_PRIZES,
   FUSE_TICKS,
+  GEM_LIFE_TICKS,
   GEM_SETTLE_TICKS,
   IDLE,
+  choose,
   KNOCKBACK,
   TELEGRAPH_TICKS,
   createArena,
@@ -255,6 +258,36 @@ describe("enemy behaviors", () => {
     step(state, IDLE);
     expect(state.enemies).toContain(elite);
     expect(distanceSquared(elite.x, elite.y, state.player.x, state.player.y)).toBeLessThan(px(300) * px(300));
+  });
+
+  it("leaves uncollected XP where it fell, then lets it expire", () => {
+    const state = quietArena(45);
+    const gem = { x: state.player.x + px(200), y: state.player.y, value: 3, chest: false, prizes: 0, settle: GEM_SETTLE_TICKS, life: GEM_LIFE_TICKS, pulled: false };
+    state.gems.push(gem);
+    for (let tick = 0; tick < GEM_SETTLE_TICKS + GEM_LIFE_TICKS - 1; tick += 1) {
+      state.enemies.length = 0;
+      step(state, IDLE);
+    }
+    expect(state.gems).toContain(gem);
+    expect(gem.x).toBe(state.player.x + px(200));
+    state.enemies.length = 0;
+    step(state, IDLE);
+    expect(state.gems).not.toContain(gem);
+    expect(state.xp).toBe(0);
+  });
+
+  it("still levels up and heals once every card is maxed or banished", () => {
+    const state = quietArena(46);
+    for (const id of [...Object.keys(WEAPONS), ...Object.keys(PASSIVES)]) {
+      state.banished.add(id as never);
+    }
+    state.player.health = 10;
+    state.pendingLevelUps = 1;
+    step(state, IDLE);
+    expect(state.status).toBe("levelUp");
+    expect(state.cards.map((card) => card.kind)).toEqual(["restore"]);
+    choose(state, 0);
+    expect(state.player.health).toBe(10 + restoreAmount(state));
   });
 
   it("leaves drops on the floor long enough to see them before they fly to the agent", () => {

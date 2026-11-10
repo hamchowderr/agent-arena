@@ -25,6 +25,9 @@ export const ko = {
   "card.passive": "패시브",
   "card.new": "신규",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "회복",
+  "card.restore.name": "핫 리로드",
+  "card.restore.blurb": "모두 최대치. HP를 40% 회복한다.",
 
   "pause.title": "일시정지",
   "pause.keys": "[P] 계속   [M] 음악",
@@ -34,6 +37,7 @@ export const ko = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "최대 HP",
+  "stat.health": "HP",
   "stat.damage": "피해",
   "stat.damageBonus": "피해 보너스",
   "stat.crit": "치명타 확률",
