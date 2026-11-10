@@ -4,6 +4,7 @@ import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
 import { WORLDS } from "../sim/arena/content";
 import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
 import { choose, createArena, currentWorld, reroll, skip, step, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
+import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
 import {
   cardRects,
@@ -71,6 +72,9 @@ export class ArenaGame {
   }
 
   start(seed = this.hooks.newSeed()): void {
+    if (!this.allows("start")) {
+      return;
+    }
     this.state = createArena(seed);
     this.renderer.setWorld(1, seed);
     this.renderedTier = 1;
@@ -88,6 +92,20 @@ export class ArenaGame {
     if (this.musicOn) {
       void playMusic(1);
     }
+  }
+
+  phase(): RunPhase {
+    if (this.screen === "title") {
+      return "title";
+    }
+    if (this.screen === "paused") {
+      return this.state.status === "levelUp" ? "pausedLevelUp" : "pausedPlaying";
+    }
+    return this.state.status;
+  }
+
+  private allows(event: RunEvent): boolean {
+    return nextPhase(this.phase(), event) !== null;
   }
 
   private setScreen(screen: Screen): void {
@@ -111,13 +129,16 @@ export class ArenaGame {
     if (this.screen === "results") {
       if (lower === "enter") {
         this.start();
-      } else if (lower === "t") {
+      } else if (lower === "t" && this.allows("toTitle")) {
         this.setScreen("title");
       }
       return;
     }
     if (lower === "p" || lower === "escape") {
-      this.setScreen(this.screen === "paused" ? "run" : "paused");
+      const event = this.screen === "paused" ? "resume" : "pause";
+      if (this.allows(event)) {
+        this.setScreen(event === "pause" ? "paused" : "run");
+      }
       return;
     }
     if (this.screen !== "run") {

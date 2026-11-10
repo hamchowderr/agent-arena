@@ -16,6 +16,7 @@ import {
   type World,
 } from "./content";
 import { Grid } from "./grid";
+import { isSimPhase, nextPhase, type RunEvent, type SimPhase } from "./run-loop";
 import { ANGLE_STEPS, cosStep, distanceSquared, isqrt, percentOf, px, scaleToLength, seconds, sinStep, SUB, TICKS_PER_SECOND, UNIT } from "./math";
 
 export const PLAYER_SPEED = 16;
@@ -105,7 +106,7 @@ export type ArenaEvent =
   | { readonly kind: "dash" }
   | { readonly kind: "slam"; readonly x: number; readonly y: number };
 
-export type Status = "playing" | "levelUp" | "dead" | "won";
+export type Status = SimPhase;
 
 export interface Input {
   readonly moveX: -1 | 0 | 1;
@@ -265,6 +266,18 @@ export function currentWorld(state: ArenaState): World {
     throw new RangeError("No worlds defined");
   }
   return world;
+}
+
+function canMove(state: ArenaState, event: RunEvent): boolean {
+  return nextPhase(state.status, event) !== null;
+}
+
+function move(state: ArenaState, event: RunEvent): void {
+  const next = nextPhase(state.status, event);
+  if (next === null || !isSimPhase(next)) {
+    throw new Error(`Run loop has no ${event} from ${state.status}`);
+  }
+  state.status = next;
 }
 
 export function step(state: ArenaState, input: Input): void {
@@ -620,7 +633,7 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   state.slam = null;
   state.pendingLevelUps += 1;
   if (state.bossesDown >= WORLDS.length) {
-    state.status = "won";
+    move(state, "finalBossDown");
     return;
   }
   state.tier = Math.min(5, state.tier + 1) as Tier;
@@ -708,7 +721,7 @@ function touchPlayer(state: ArenaState): void {
 
 function hurtPlayer(state: ArenaState, base: number, source: string, ignoreInvulnerable: boolean): void {
   const player = state.player;
-  if (!ignoreInvulnerable && player.invulnerable > 0) {
+  if (!canMove(state, "died") || (!ignoreInvulnerable && player.invulnerable > 0)) {
     return;
   }
   const amount = Math.max(1, base - statTotal(state, "armor"));
@@ -718,7 +731,7 @@ function hurtPlayer(state: ArenaState, base: number, source: string, ignoreInvul
   if (player.health <= 0) {
     player.health = 0;
     state.killedBy = source;
-    state.status = "dead";
+    move(state, "died");
   }
 }
 
@@ -749,7 +762,7 @@ function openLevelUp(state: ArenaState): void {
     state.player.health = Math.min(maxHealth(state), state.player.health + 20);
     return;
   }
-  state.status = "levelUp";
+  move(state, "levelUpOpened");
   state.events.push({ kind: "levelUp", level: state.level });
 }
 
@@ -780,7 +793,7 @@ export function skip(state: ArenaState): void {
 
 function closeLevelUp(state: ArenaState): void {
   state.cards = [];
-  state.status = "playing";
+  move(state, "cardTaken");
   if (state.pendingLevelUps > 0) {
     openLevelUp(state);
   }
