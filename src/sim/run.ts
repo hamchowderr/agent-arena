@@ -1,4 +1,4 @@
-import { runBattle, type AgentBuild } from "./battle";
+import { runBattle, type AgentBuild, type BattleResult } from "./battle";
 import { pick, skip, startDraft, type DraftState } from "./draft";
 import { buildAgent, type AnyLoadout } from "./loadout";
 import { mixSeed } from "./rng";
@@ -100,25 +100,88 @@ export interface RunResult {
   readonly finalLoadout: AnyLoadout;
 }
 
-export function playRun(seed: number, policy: DraftPolicy, stages: readonly Stage[] = STAGES): RunResult {
-  let loadout: AnyLoadout = { name: "Your agent", tier: 1, parts: [] };
-  const fights: FightRecord[] = [];
-  let step = 0;
+export type RunStatus = "drafting" | "lost" | "cleared";
 
-  for (const stage of stages) {
-    loadout = { ...loadout, tier: stage.tier } as AnyLoadout;
-    for (const fight of stage.fights) {
-      step += 1;
-      loadout = policy(startDraft(mixSeed(seed, step * 2), loadout), mixSeed(seed, step * 2 + 1)).loadout;
-      const result = runBattle(mixSeed(seed, step * 2 + 1), buildAgent(loadout), buildAgent(fight.enemy));
-      const won = result.winner === 0;
-      fights.push({ tier: stage.tier, boss: fight.boss, won });
-      if (!won) {
-        return { fights, cleared: false, finalLoadout: loadout };
-      }
-    }
+export interface RunState {
+  readonly seed: number;
+  readonly stages: readonly Stage[];
+  readonly loadout: AnyLoadout;
+  readonly fights: readonly FightRecord[];
+  readonly status: RunStatus;
+}
+
+export interface UpcomingFight {
+  readonly stage: Stage;
+  readonly fight: StageFight;
+  readonly number: number;
+}
+
+export interface FightOutcome {
+  readonly run: RunState;
+  readonly player: AgentBuild;
+  readonly enemy: AgentBuild;
+  readonly battle: BattleResult;
+}
+
+export function newRun(seed: number, stages: readonly Stage[] = STAGES): RunState {
+  const first = stages[0];
+  if (!first) {
+    throw new RangeError("A run needs at least one stage");
   }
-  return { fights, cleared: true, finalLoadout: loadout };
+  return { seed, stages, loadout: { name: "Your agent", tier: first.tier, parts: [] }, fights: [], status: "drafting" };
+}
+
+export function upcomingFight(run: RunState): UpcomingFight | undefined {
+  let index = run.fights.length;
+  for (const stage of run.stages) {
+    const fight = stage.fights[index];
+    if (fight) {
+      return { stage, fight, number: run.fights.length + 1 };
+    }
+    index -= stage.fights.length;
+  }
+  return undefined;
+}
+
+export function openDraft(run: RunState): DraftState {
+  assertDrafting(run);
+  return startDraft(mixSeed(run.seed, (run.fights.length + 1) * 2), run.loadout);
+}
+
+export function policySeed(run: RunState): number {
+  return mixSeed(run.seed, (run.fights.length + 1) * 2 + 1);
+}
+
+export function fightAfterDraft(run: RunState, draft: DraftState): FightOutcome {
+  assertDrafting(run);
+  const upcoming = upcomingFight(run);
+  if (!upcoming) {
+    throw new RangeError("No fight left in this run");
+  }
+  const player = buildAgent(draft.loadout);
+  const enemy = buildAgent(upcoming.fight.enemy);
+  const battle = runBattle(policySeed(run), player, enemy);
+  const won = battle.winner === 0;
+  const fights = [...run.fights, { tier: upcoming.stage.tier, boss: upcoming.fight.boss, won }];
+  const afterFight: RunState = { ...run, loadout: draft.loadout, fights };
+  const next = upcomingFight(afterFight);
+  const status: RunStatus = !won ? "lost" : next ? "drafting" : "cleared";
+  const loadout = won && next ? ({ ...draft.loadout, tier: next.stage.tier } as AnyLoadout) : draft.loadout;
+  return { run: { ...afterFight, loadout, status }, player, enemy, battle };
+}
+
+export function playRun(seed: number, policy: DraftPolicy, stages: readonly Stage[] = STAGES): RunResult {
+  let run = newRun(seed, stages);
+  while (run.status === "drafting") {
+    run = fightAfterDraft(run, policy(openDraft(run), policySeed(run))).run;
+  }
+  return { fights: run.fights, cleared: run.status === "cleared", finalLoadout: run.loadout };
+}
+
+function assertDrafting(run: RunState): void {
+  if (run.status !== "drafting") {
+    throw new RangeError(`This run is over: ${run.status}`);
+  }
 }
 
 export function buildScore(build: AgentBuild): number {

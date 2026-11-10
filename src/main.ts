@@ -1,29 +1,44 @@
-import { runBattle } from "./sim/battle";
-import { buildAgent } from "./sim/loadout";
 import { playMusic, stopMusic } from "./audio/music";
+import { Game, HEIGHT, WIDTH } from "./game/app";
+import type { Tier } from "./sim/tiers";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const context = canvas?.getContext("2d");
-
-if (canvas && context) {
-  const player = buildAgent({ name: "Your Agent", tier: 2, parts: ["midBrain", "strictPrompt", "fewShotExamples"] });
-  const rival = buildAgent({ name: "Hustlr Bot", tier: 2, parts: ["tinyBrain", "hotTemperature", "conversationBuffer"] });
-  const result = runBattle(Date.now() >>> 0, player, rival);
-  const winnerName = result.winner === "draw" ? "Nobody" : [player, rival][result.winner]?.name ?? "Nobody";
-
-  context.fillStyle = "#e8e8ea";
-  context.font = "16px ui-monospace, monospace";
-  context.textAlign = "center";
-  context.fillText("AGENT ARENA", canvas.width / 2, canvas.height / 2 - 20);
-  context.fillText(`${winnerName} wins in ${result.ticks} ticks`, canvas.width / 2, canvas.height / 2 + 10);
-}
-
 const musicButton = document.querySelector<HTMLButtonElement>("#music");
 let musicOn = false;
+let currentTier: Tier = 1;
+
+if (canvas && context) {
+  canvas.width = WIDTH * 2;
+  canvas.height = HEIGHT * 2;
+  context.scale(2, 2);
+  const game = new Game(context, {
+    newSeed: () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0,
+    onTierChange: (tier) => {
+      currentTier = tier;
+      if (musicOn) {
+        void playMusic(tier);
+      }
+    },
+  });
+
+  canvas.addEventListener("click", (event) => {
+    const box = canvas.getBoundingClientRect();
+    game.click(((event.clientX - box.left) * WIDTH) / box.width, ((event.clientY - box.top) * HEIGHT) / box.height);
+  });
+  window.addEventListener("keydown", (event) => game.key(event.key));
+
+  const loop = () => {
+    game.frame();
+    canvas.dataset["screen"] = game.state;
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
 
 musicButton?.addEventListener("click", () => {
   musicOn = !musicOn;
   musicButton.textContent = musicOn ? "Stop music" : "Play music";
   musicButton.setAttribute("aria-pressed", String(musicOn));
-  void (musicOn ? playMusic(2) : stopMusic());
+  void (musicOn ? playMusic(currentTier) : stopMusic());
 });
