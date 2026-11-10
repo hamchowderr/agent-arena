@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { WORLDS, type RegularKind } from "../sim/arena/content";
 import { walkFrames, WALK_FRAMES } from "./animate";
 import { ENEMY_SPRITES } from "./arena-sprites";
-import { enemySprite } from "./world-enemies";
+import { MAX_SILHOUETTE_OVERLAP, MAX_SPRITE_COLORS, MIN_ENEMY_COLORS, MIN_GROUND_CONTRAST, TIER_SPAN } from "./art-rules";
+import { colorCount, groundContrast, silhouetteOverlap, span } from "./audit";
+import { shade } from "./shade";
+import { enemySprite, wallSprite } from "./world-enemies";
+import { WORLD_LOOKS } from "./world-looks";
 
 const CASES = WORLDS.flatMap((world) =>
   [...new Set<RegularKind>([...world.slots, "lootRunner"])].map((kind) => [world.id, kind] as const),
@@ -24,5 +28,23 @@ describe("world enemies", () => {
   it("gives every world a different set of faces", () => {
     const sets = WORLDS.map((world) => world.slots.map((kind) => enemySprite(world.id, kind).join("/")).join("|"));
     expect(new Set(sets).size).toBe(WORLDS.length);
+  });
+});
+
+describe("wall sprites", () => {
+  it.each(WORLDS.map((world) => [world.id, world] as const))("%s has a wall that stands out and doesn't look like its heavy", (id, world) => {
+    const look = WORLD_LOOKS[world.tier];
+    const wall = shade([wallSprite(id)], look.faction);
+    const range = TIER_SPAN.heavy;
+    expect(span(wall)).toBeGreaterThanOrEqual(range.min);
+    expect(span(wall)).toBeLessThanOrEqual(range.max);
+    expect(colorCount(wall)).toBeGreaterThanOrEqual(MIN_ENEMY_COLORS);
+    expect(colorCount(wall)).toBeLessThanOrEqual(MAX_SPRITE_COLORS);
+    expect(groundContrast(wall, look.ground[0])).toBeGreaterThanOrEqual(MIN_GROUND_CONTRAST);
+    expect(silhouetteOverlap(wall, shade([enemySprite(id, "heavy")], look.faction))).toBeLessThan(MAX_SILHOUETTE_OVERLAP);
+  });
+
+  it("draws a different wall for every world", () => {
+    expect(new Set(WORLDS.map((world) => wallSprite(world.id).join("/"))).size).toBe(WORLDS.length);
   });
 });
