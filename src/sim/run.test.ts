@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAgent } from "./loadout";
-import { BALANCE_TARGETS, greedyPolicy, playRun, randomPolicy, STAGES, stageReport } from "./run";
+import { skip } from "./draft";
+import { BALANCE_TARGETS, fightAfterDraft, greedyPolicy, newRun, openDraft, playRun, randomPolicy, STAGES, stageReport, upcomingFight } from "./run";
 import { TIERS } from "./tiers";
 
 const percent = (part: number, whole: number): number => Math.floor((part * 100) / whole);
@@ -32,6 +33,39 @@ describe("playRun", () => {
         expect(run.fights.at(-1)?.won).toBe(false);
       }
     }
+  });
+});
+
+describe("step-by-step run", () => {
+  it("numbers fights across stages and tiers up after each boss", () => {
+    let run = newRun(3);
+    const seen: number[] = [];
+    while (run.status === "drafting") {
+      const upcoming = upcomingFight(run);
+      seen.push(upcoming?.number ?? 0);
+      expect(run.loadout.tier).toBe(upcoming?.stage.tier);
+      run = fightAfterDraft(run, greedyPolicy(openDraft(run), 0)).run;
+    }
+    expect(seen).toEqual(Array.from({ length: seen.length }, (_, index) => index + 1));
+  });
+
+  it("matches playRun, so the game and the balance bot play the same fights", () => {
+    for (let seed = 0; seed < 30; seed += 1) {
+      let run = newRun(seed);
+      while (run.status === "drafting") {
+        const draft = openDraft(run);
+        run = fightAfterDraft(run, skip(draft)).run;
+      }
+      expect(run.fights).toEqual(playRun(seed, (state) => skip(state)).fights);
+    }
+  });
+
+  it("refuses to keep fighting after the run ends", () => {
+    let run = newRun(1);
+    while (run.status === "drafting") {
+      run = fightAfterDraft(run, skip(openDraft(run))).run;
+    }
+    expect(() => openDraft(run)).toThrow(/over/);
   });
 });
 
