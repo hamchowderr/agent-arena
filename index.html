@@ -2,15 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Agent Arena</title>
+    <meta name="description" content="A free, open-source pixel survivors-like that plays in your browser. Grow your own agent and fight the rivals who want you to rent theirs." />
+    <meta name="theme-color" content="#0d0f14" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="canonical" href="https://hamchowderr.github.io/agent-arena/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Agent Arena" />
+    <meta property="og:title" content="Agent Arena" />
+    <meta property="og:description" content="A free, open-source pixel survivors-like that plays in your browser. Grow your own agent and fight the rivals who want you to rent theirs." />
+    <meta property="og:url" content="https://hamchowderr.github.io/agent-arena/" />
+    <meta property="og:image" content="https://hamchowderr.github.io/agent-arena/og.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:video" content="https://hamchowderr.github.io/agent-arena/og-video.mp4" />
+    <meta property="og:video:secure_url" content="https://hamchowderr.github.io/agent-arena/og-video.mp4" />
+    <meta property="og:video:type" content="video/mp4" />
+    <meta property="og:video:width" content="1200" />
+    <meta property="og:video:height" content="630" />
+    <meta name="twitter:card" content="player" />
+    <meta name="twitter:title" content="Agent Arena" />
+    <meta name="twitter:description" content="A free, open-source pixel survivors-like that plays in your browser. Grow your own agent and fight the rivals who want you to rent theirs." />
+    <meta name="twitter:image" content="https://hamchowderr.github.io/agent-arena/card.jpg" />
+    <meta name="twitter:player" content="https://hamchowderr.github.io/agent-arena/" />
+    <meta name="twitter:player:width" content="480" />
+    <meta name="twitter:player:height" content="480" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet" />
     <style>
       html, body { margin: 0; height: 100%; background: #0d0f14; color: #e8e8ea; font-family: "Silkscreen", ui-monospace, monospace; overflow: hidden; }
       #stage { position: fixed; inset: 0; display: grid; place-items: center; }
       #frame { position: relative; width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; }
-      #frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+      #frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; -webkit-user-select: none; user-select: none; }
       #world { image-rendering: pixelated; }
       #status { position: absolute; inset: 0; display: grid; place-items: center; font-size: 24px; }
     </style>
