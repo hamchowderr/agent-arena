@@ -4,18 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agent Arena</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet" />
     <style>
-      html, body { margin: 0; min-height: 100%; background: #0d0f14; color: #e8e8ea; font-family: ui-monospace, monospace; }
-      body { display: grid; place-items: center; }
-      body { gap: 12px; align-content: center; }
-      canvas { image-rendering: pixelated; width: min(960px, 100vw); height: auto; cursor: pointer; }
-      button { font: inherit; color: inherit; background: #1b1f2a; border: 1px solid #3a4152; padding: 8px 16px; cursor: pointer; }
-      button:hover { background: #262c3b; }
+      html, body { margin: 0; height: 100%; background: #0d0f14; color: #e8e8ea; font-family: "Silkscreen", ui-monospace, monospace; overflow: hidden; }
+      #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+      #frame { position: relative; width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; }
+      #frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+      #world { image-rendering: pixelated; }
+      #status { position: absolute; inset: 0; display: grid; place-items: center; font-size: 24px; }
     </style>
   </head>
   <body>
-    <canvas id="game" width="480" height="270"></canvas>
-    <button id="music" type="button" aria-pressed="false">Play music</button>
+    <div id="stage">
+      <div id="frame">
+        <canvas id="world" width="480" height="270"></canvas>
+        <canvas id="hud" width="1440" height="810"></canvas>
+        <div id="status">Loading Agent Arena...</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
