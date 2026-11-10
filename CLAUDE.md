@@ -25,6 +25,7 @@ PRs show proof: a failing test that now passes, a replay seed, or a screenshot. 
 
 ## Tracking work
 - **beads (`bd`)** is the issue tracker and tracks agent work across Claude Code sessions. Check `bd ready` at the start of a session and claim an issue before starting. File new issues instead of leaving TODOs.
+- **Beads sync** lives on DoltHub at `chowderr/agent_arena`. `scripts/beads-sync.sh` runs at session start: it installs the DoltHub key from `DOLT_CREDS_JWK` and `DOLT_CREDS_KEY_ID` when they are set, then bootstraps or pulls. Run `bd dolt push` after changing issues. Without the key everything still works locally from `.beads/issues.jsonl`.
 - **pstack** (open-pstack for Claude Code) provides the engineering-rigor skills.
 
 ## Content rules

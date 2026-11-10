@@ -9,6 +9,9 @@ export default {
     return {
       Program() {
         for (const comment of context.sourceCode.getAllComments()) {
+          if (/^\s*@ts-expect-error\s/.test(comment.value)) {
+            continue;
+          }
           context.report({ loc: comment.loc, messageId: "noComment" });
         }
       },

@@ -6,6 +6,7 @@ export interface AgentBuild {
   readonly attack: number;
   readonly ticksPerAction: number;
   readonly critPercent: number;
+  readonly hallucinationPercent: number;
 }
 
 export interface BattleEvent {
@@ -13,6 +14,7 @@ export interface BattleEvent {
   readonly actor: 0 | 1;
   readonly damage: number;
   readonly crit: boolean;
+  readonly hallucinated: boolean;
   readonly targetHealthAfter: number;
 }
 
@@ -45,13 +47,16 @@ export function runBattle(seed: number, left: AgentBuild, right: AgentBuild): Ba
       cooldown[actor] = builds[actor].ticksPerAction;
 
       const target = actor === 0 ? 1 : 0;
-      const crit = rng.chancePercent(builds[actor].critPercent);
-      const damage = crit
-        ? Math.floor((builds[actor].attack * CRIT_MULTIPLIER_PERCENT) / 100)
-        : builds[actor].attack;
+      const hallucinated = rng.chancePercent(builds[actor].hallucinationPercent);
+      const crit = !hallucinated && rng.chancePercent(builds[actor].critPercent);
+      const damage = hallucinated
+        ? 0
+        : crit
+          ? Math.floor((builds[actor].attack * CRIT_MULTIPLIER_PERCENT) / 100)
+          : builds[actor].attack;
       const targetHealthAfter = Math.max(0, (health[target] ?? 0) - damage);
       health[target] = targetHealthAfter;
-      events.push({ tick, actor, damage, crit, targetHealthAfter });
+      events.push({ tick, actor, damage, crit, hallucinated, targetHealthAfter });
 
       if (targetHealthAfter === 0) {
         return { winner: actor, ticks: tick, events };
@@ -70,7 +75,10 @@ function assertValidBuild(build: AgentBuild): void {
       throw new RangeError(`${build.name}.${key} must be a positive integer, got ${String(value)}`);
     }
   }
-  if (!Number.isInteger(build.critPercent) || build.critPercent < 0 || build.critPercent > 100) {
-    throw new RangeError(`${build.name}.critPercent must be an integer from 0 to 100, got ${build.critPercent}`);
+  for (const key of ["critPercent", "hallucinationPercent"] as const) {
+    const value = build[key];
+    if (!Number.isInteger(value) || value < 0 || value > 100) {
+      throw new RangeError(`${build.name}.${key} must be an integer from 0 to 100, got ${String(value)}`);
+    }
   }
 }

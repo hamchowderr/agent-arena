@@ -4,6 +4,10 @@
       {
         "hooks": [
           {
+            "command": "bash scripts/beads-sync.sh",
+            "type": "command"
+          },
+          {
             "command": "bd prime --hook-json",
             "type": "command"
           }
