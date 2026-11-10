@@ -156,7 +156,7 @@ export const zhHans = {
   "weapon.shell.name": "终端",
   "weapon.shell.blurb": "以你为中心的脉冲，伤害范围内所有对手。",
   "weapon.subagents.name": "子智能体",
-  "weapon.subagents.blurb": "小智能体会自己追踪对手。",
+  "weapon.subagents.blurb": "小助手智能体伴你飞行，发射追踪弹。",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "有据可查的光束，贯穿路径上的一切。",
   "weapon.codeInterpreter.name": "代码解释器",

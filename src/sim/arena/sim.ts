@@ -808,15 +808,17 @@ function fireWeapons(state: ArenaState): void {
     }
     for (let shot = 0; shot < stats.count; shot += 1) {
       const hallucinated = state.rng.chancePercent(hallucinationPercent(state));
-      const spread = (shot - Math.trunc(stats.count / 2)) * 10;
+      const drone = definition.kind === "seeker";
+      const from = drone ? dronePosition(state, shot, stats.count) : { x: state.player.x, y: state.player.y - px(4) };
+      const spread = drone ? 0 : (shot - Math.trunc(stats.count / 2)) * 10;
       const speed = px(definition.speed);
-      const aim = scaleToLength(target.x - state.player.x, target.y - state.player.y, speed);
+      const aim = scaleToLength(target.x - from.x, target.y - from.y, speed);
       const turn = hallucinated ? spread + state.rng.intBelow(HALLUCINATION_VEER * 2 + 1) - HALLUCINATION_VEER : spread;
       state.projectiles.push({
         weapon: owned.id,
         kind: definition.kind,
-        x: state.player.x,
-        y: state.player.y - px(4),
+        x: from.x,
+        y: from.y,
         vx: Math.trunc((aim.x * cosStep(turn) - aim.y * sinStep(turn)) / UNIT),
         vy: Math.trunc((aim.x * sinStep(turn) + aim.y * cosStep(turn)) / UNIT),
         damage: effectiveDamage(state, stats.damage),
@@ -831,6 +833,17 @@ function fireWeapons(state: ArenaState): void {
       }
     }
   }
+}
+
+export const DRONE_RADIUS = px(30);
+
+export function dronePosition(state: ArenaState, index: number, count: number): { readonly x: number; readonly y: number } {
+  const angle = Math.trunc(state.tick / 3) + Math.trunc((index * ANGLE_STEPS) / Math.max(1, count)) + ANGLE_STEPS / 4;
+  const radius = DRONE_RADIUS + Math.trunc((sinStep(state.tick * 2 + index * 40) * px(4)) / UNIT);
+  return {
+    x: state.player.x + Math.trunc((cosStep(angle) * radius) / UNIT),
+    y: state.player.y + Math.trunc((sinStep(angle) * radius) / UNIT) - px(6),
+  };
 }
 
 export function orbitPosition(state: ArenaState, owned: OwnedWeapon, index: number): { readonly x: number; readonly y: number } {

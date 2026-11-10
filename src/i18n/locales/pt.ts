@@ -156,7 +156,7 @@ export const pt = {
   "weapon.shell.name": "Shell",
   "weapon.shell.blurb": "Um pulso ao seu redor causa dano a todos os rivais próximos.",
   "weapon.subagents.name": "Subagentes",
-  "weapon.subagents.blurb": "Pequenos agentes caçam rivais por conta própria.",
+  "weapon.subagents.blurb": "Pequenos agentes ajudantes voam com você e disparam tiros teleguiados.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "Feixes com fontes que atravessam tudo no caminho.",
   "weapon.codeInterpreter.name": "Interpretador de código",

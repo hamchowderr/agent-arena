@@ -35,6 +35,7 @@ import {
   HAZARD,
   PROPS,
   SEEKER,
+  DRONE,
 } from "../art/arena-sprites";
 import { DEATH_FPS, DEATH_FRAMES, WALK_FRAMES } from "../art/animate";
 import { RENDER_SCALE } from "../art/art-rules";
@@ -43,7 +44,7 @@ import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import { agentSprite, type Sprite } from "../art/sprites";
 import { REGULAR_KINDS, WEAPONS, type EnemyKind, type RegularKind } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
+import { GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
 import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, pixelTexture, spriteImage, type AtlasImage } from "./textures";
@@ -299,6 +300,7 @@ export class ArenaRenderer {
   private readonly bolts: SpriteBatch;
   private readonly beams: SpriteBatch;
   private readonly seekers: SpriteBatch;
+  private readonly drones: SpriteBatch;
   private readonly blocks: SpriteBatch;
   private readonly hallucinations: SpriteBatch;
   private readonly shots: SpriteBatch;
@@ -401,6 +403,7 @@ export class ArenaRenderer {
     this.bolts = this.batch([BOLT], 1, 200, true);
     this.beams = this.batch([BEAM], 1, 100, true);
     this.seekers = this.batch([SEEKER], 1, 100, true);
+    this.drones = this.batch([DRONE], 1, 12, false);
     this.blocks = this.batch([CODE_BLOCK], 1, 16, false);
     this.hallucinations = this.batch([HALLUCINATION], 1, 100, true);
     this.shots = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
@@ -715,6 +718,21 @@ export class ArenaRenderer {
     }
     this.hazards.commit();
     this.bigHazards.commit();
+
+    this.drones.begin();
+    for (const owned of state.weapons) {
+      if (WEAPONS[owned.id].kind !== "seeker") {
+        continue;
+      }
+      const count = weaponStats(owned.id, owned.level).count;
+      for (let index = 0; index < count; index += 1) {
+        const drone = dronePosition(state, index, count);
+        const lift = 8 + Math.sin(state.tick / 7 + index) * 1.5;
+        this.drones.add(drone.x / SUB, lift, drone.y / SUB);
+        this.shadows.add(drone.x / SUB, drone.y / SUB, 6);
+      }
+    }
+    this.drones.commit();
 
     this.blocks.begin();
     for (const owned of state.weapons) {

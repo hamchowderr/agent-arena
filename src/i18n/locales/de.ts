@@ -156,7 +156,7 @@ export const de = {
   "weapon.shell.name": "Shell",
   "weapon.shell.blurb": "Ein Impuls um dich herum trifft jeden Rivalen in Reichweite.",
   "weapon.subagents.name": "Subagenten",
-  "weapon.subagents.blurb": "Kleine Agenten jagen Rivalen auf eigene Faust.",
+  "weapon.subagents.blurb": "Kleine Helfer-Agenten fliegen mit dir und feuern zielsuchende Schüsse.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "Fundierte Strahlen, die alles auf ihrem Weg durchbohren.",
   "weapon.codeInterpreter.name": "Code-Interpreter",

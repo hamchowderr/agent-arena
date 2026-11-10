@@ -154,7 +154,7 @@ export const en = {
   "weapon.shell.name": "Shell",
   "weapon.shell.blurb": "A pulse around you damages every rival in range.",
   "weapon.subagents.name": "Subagents",
-  "weapon.subagents.blurb": "Small agents seek out rivals on their own.",
+  "weapon.subagents.blurb": "Little helper agents fly with you and fire homing shots.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "Grounded beams that pierce everything in their path.",
   "weapon.codeInterpreter.name": "Code interpreter",

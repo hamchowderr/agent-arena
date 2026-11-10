@@ -258,6 +258,18 @@ export const BOLT: Sprite = ["..yy..", ".yooy.", "yowwoy", "yowwoy", ".yooy.", "
 
 export const BEAM: Sprite = ["....mmmmmmmm", "..mmccccccww", "mmcccwwwwwww", "..mmccccccww", "....mmmmmmmm"];
 
+export const DRONE: Sprite = [
+  "..kkkkk..",
+  "....k....",
+  ".kkkkkkk.",
+  "kmmmmmmmk",
+  "kmkmmmkmk",
+  "kmmmmmmmk",
+  "kccccccck",
+  ".kkkkkkk.",
+  "...kSk...",
+];
+
 export const SEEKER: Sprite = [".lll.", "lgwgl", "lgggl", ".lgl.", "..l.."];
 
 export const CODE_BLOCK: Sprite = [

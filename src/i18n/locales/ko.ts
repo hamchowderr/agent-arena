@@ -156,7 +156,7 @@ export const ko = {
   "weapon.shell.name": "셸",
   "weapon.shell.blurb": "주변에 파동을 일으켜 범위 안의 모든 라이벌에게 피해를 줍니다.",
   "weapon.subagents.name": "서브에이전트",
-  "weapon.subagents.blurb": "작은 에이전트들이 알아서 라이벌을 쫓습니다.",
+  "weapon.subagents.blurb": "작은 도우미 에이전트가 곁을 날며 유도탄을 쏩니다.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "근거 있는 광선이 경로의 모든 것을 꿰뚫습니다.",
   "weapon.codeInterpreter.name": "코드 인터프리터",

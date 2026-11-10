@@ -156,7 +156,7 @@ export const ja = {
   "weapon.shell.name": "シェル",
   "weapon.shell.blurb": "周囲に波動を放ち、範囲内のライバル全員にダメージ。",
   "weapon.subagents.name": "サブエージェント",
-  "weapon.subagents.blurb": "小さなエージェントが自分でライバルを追いかける。",
+  "weapon.subagents.blurb": "小さな助手エージェントがそばを飛び、追尾弾を撃つ。",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "根拠つきのビームが進路上のすべてを貫く。",
   "weapon.codeInterpreter.name": "コードインタープリター",
