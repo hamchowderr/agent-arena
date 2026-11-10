@@ -2,8 +2,9 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import globals from "globals";
 import noComments from "./eslint/no-comments.js";
+import noRawUiText from "./eslint/no-raw-ui-text.js";
 
-const local = { rules: { "no-comments": noComments } };
+const local = { rules: { "no-comments": noComments, "no-raw-ui-text": noRawUiText } };
 
 export default tseslint.config(
   { ignores: ["dist/", "node_modules/", "coverage/", "vendor/"] },
@@ -14,6 +15,13 @@ export default tseslint.config(
     plugins: { local },
     rules: {
       "local/no-comments": "error",
+    },
+  },
+  {
+    files: ["src/game/**/*.ts", "src/main.ts"],
+    ignores: ["**/*.test.ts"],
+    rules: {
+      "local/no-raw-ui-text": "error",
     },
   },
   {

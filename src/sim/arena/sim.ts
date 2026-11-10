@@ -9,6 +9,7 @@ import {
   WEAPONS,
   WORLDS,
   type EnemyKind,
+  type WorldId,
   type PassiveId,
   type PassiveStat,
   type WeaponId,
@@ -134,6 +135,11 @@ export interface Player {
   regenCarry: number;
 }
 
+export interface Killer {
+  readonly world: WorldId;
+  readonly enemy: EnemyKind;
+}
+
 export interface ArenaState {
   readonly seed: number;
   readonly rng: Rng;
@@ -161,7 +167,7 @@ export interface ArenaState {
   slamTimer: number;
   spawnCarry: number;
   nextId: number;
-  killedBy: string | null;
+  killedBy: Killer | null;
   readonly damageByWeapon: Map<WeaponId, number>;
   readonly grid: Grid<Enemy>;
   events: ArenaEvent[];
@@ -668,7 +674,7 @@ function updateSlam(state: ArenaState): void {
     state.events.push({ kind: "slam", x: slam.x, y: slam.y });
     const reach = SLAM_RADIUS + PLAYER_RADIUS;
     if (distanceSquared(slam.x, slam.y, state.player.x, state.player.y) <= reach * reach) {
-      hurtPlayer(state, SLAM_DAMAGE + state.bossesDown * 4, currentWorld(state).boss, true);
+      hurtPlayer(state, SLAM_DAMAGE + state.bossesDown * 4, "boss", true);
     }
     return;
   }
@@ -726,12 +732,11 @@ function touchPlayer(state: ArenaState): void {
   });
   const hit = found.enemy;
   if (hit !== null) {
-    const name = hit.kind === "boss" ? currentWorld(state).boss : `${currentWorld(state).rival} ${hit.kind}`;
-    hurtPlayer(state, hit.damage, name, false);
+    hurtPlayer(state, hit.damage, hit.kind, false);
   }
 }
 
-function hurtPlayer(state: ArenaState, base: number, source: string, ignoreInvulnerable: boolean): void {
+function hurtPlayer(state: ArenaState, base: number, source: EnemyKind, ignoreInvulnerable: boolean): void {
   const player = state.player;
   if (!canMove(state, "died") || (!ignoreInvulnerable && player.invulnerable > 0)) {
     return;
@@ -742,7 +747,7 @@ function hurtPlayer(state: ArenaState, base: number, source: string, ignoreInvul
   state.events.push({ kind: "hurt", amount });
   if (player.health <= 0) {
     player.health = 0;
-    state.killedBy = source;
+    state.killedBy = { world: currentWorld(state).id, enemy: source };
     move(state, "died");
   }
 }

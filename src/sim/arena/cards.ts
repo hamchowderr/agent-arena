@@ -1,12 +1,17 @@
-import { EVOLUTIONS, MAX_PASSIVES, MAX_WEAPONS, PASSIVES, WEAPONS, type PassiveId, type WeaponDefinition, type WeaponId } from "./content";
+import { EVOLUTIONS, MAX_PASSIVES, MAX_WEAPONS, PASSIVES, WEAPONS, type PassiveId, type PassiveStat, type WeaponDefinition, type WeaponId } from "./content";
 import { BASE_CRIT, hallucinationPercent, maxHealth, statTotal, type ArenaState } from "./sim";
 
 export const CARDS_PER_DRAFT = 3;
 
+export type ChangeStat = PassiveStat | "every" | "shots" | "blocks" | "pierce" | "radius";
+
+export type ChangeUnit = "plain" | "ticks" | "percent" | "bonusPercent" | "regen";
+
 export interface CardChange {
-  readonly label: string;
-  readonly before: string;
-  readonly after: string;
+  readonly stat: ChangeStat;
+  readonly unit: ChangeUnit;
+  readonly before: number | null;
+  readonly after: number;
 }
 
 export type Card =
@@ -28,22 +33,22 @@ function weaponChanges(id: WeaponId, fromLevel: number, toLevel: number): CardCh
   }
   const before = fromLevel > 0 ? levels[fromLevel - 1] : undefined;
   const changes: CardChange[] = [];
-  const add = (label: string, from: number | undefined, to: number, unit = "") => {
+  const add = (stat: ChangeStat, from: number | undefined, to: number, unit: ChangeUnit = "plain") => {
     if (from === to) {
       return;
     }
-    changes.push({ label, before: from === undefined ? "-" : `${from}${unit}`, after: `${to}${unit}` });
+    changes.push({ stat, unit, before: from ?? null, after: to });
   };
-  add("Damage", before?.damage, after.damage);
+  add("damage", before?.damage, after.damage);
   if (WEAPONS[id].kind !== "orbit") {
-    add("Every", before ? Number((before.cooldown / 60).toFixed(2)) : undefined, Number((after.cooldown / 60).toFixed(2)), "s");
+    add("every", before?.cooldown, after.cooldown, "ticks");
   }
-  add(WEAPONS[id].kind === "orbit" ? "Blocks" : "Shots", before?.count, after.count);
+  add(WEAPONS[id].kind === "orbit" ? "blocks" : "shots", before?.count, after.count);
   if (WEAPONS[id].kind === "beam" || WEAPONS[id].kind === "seeker") {
-    add("Pierce", before?.pierce, after.pierce);
+    add("pierce", before?.pierce, after.pierce);
   }
   if (WEAPONS[id].kind === "pulse" || WEAPONS[id].kind === "orbit") {
-    add("Radius", before?.radius, after.radius);
+    add("radius", before?.radius, after.radius);
   }
   return changes;
 }
@@ -61,28 +66,10 @@ function passiveChanges(state: ArenaState, id: PassiveId, fromLevel: number): Ca
     regen: 0,
     armor: 0,
   };
-  const unit = passive.stat === "maxHealth" || passive.stat === "armor" ? "" : passive.stat === "regen" ? " HP/2s" : "%";
-  const label: Record<typeof passive.stat, string> = {
-    maxHealth: "Max HP",
-    damage: "Damage",
-    crit: "Crit chance",
-    hallucination: "Hallucination",
-    cooldown: "Cooldowns",
-    pickup: "Pickup range",
-    speed: "Move speed",
-    regen: "Regen",
-    armor: "Armor",
-  };
-  const relative = base[passive.stat] === 0 && unit === "%";
-  const show = (value: number) => (relative && value > 0 ? `+${value}${unit}` : `${Math.max(0, value)}${unit}`);
   const start = base[passive.stat];
-  return [
-    {
-      label: label[passive.stat],
-      before: show(start + passive.perLevel * fromLevel),
-      after: show(start + passive.perLevel * (fromLevel + 1)),
-    },
-  ];
+  const unit: ChangeUnit =
+    passive.stat === "maxHealth" || passive.stat === "armor" ? "plain" : passive.stat === "regen" ? "regen" : start === 0 ? "bonusPercent" : "percent";
+  return [{ stat: passive.stat, unit, before: start + passive.perLevel * fromLevel, after: start + passive.perLevel * (fromLevel + 1) }];
 }
 
 function evolvedFrom(state: ArenaState, id: WeaponId): boolean {
@@ -157,12 +144,4 @@ export function offerCards(state: ArenaState): Card[] {
     }
     return { kind: "weapon", id: candidate.id, toLevel: candidate.toLevel, recommended, changes: weaponChanges(candidate.id, candidate.toLevel - 1, candidate.toLevel) };
   });
-}
-
-export function cardName(card: Card): string {
-  return card.kind === "passive" ? PASSIVES[card.id].name : WEAPONS[card.id].name;
-}
-
-export function cardBlurb(card: Card): string {
-  return card.kind === "passive" ? PASSIVES[card.id].blurb : WEAPONS[card.id].blurb;
 }
