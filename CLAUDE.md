@@ -4,13 +4,15 @@ A free, open-source (AGPL-3.0-or-later) browser autobattler. Players grow an age
 
 ## Commands
 - `npm run dev`: local dev server
-- `npm run balance`: the balance bots play 1000 seeded runs and print clear rates per stage. The targets in `src/sim/run.ts` (`BALANCE_TARGETS`) are tested in CI, so a balance change that drifts outside them fails the check.
+- `npm run balance`: the balance bots play 1000 seeded runs of the old turn-based stage loop and print clear rates per stage. The targets in `src/sim/run.ts` (`BALANCE_TARGETS`) are tested in CI.
+- `npm run arena-balance`: the kiting bot plays seeded real-time arena runs (`src/sim/arena/`) and prints survival time, level, kills and bosses per run. Set `RUNS` to change the count.
 - `npm run check`: lint, typecheck, tests, build, and size budget. It must pass before every push.
 
 ## Rules that are enforced
 - **Deterministic sim.** Code in `src/sim/` takes a seed and inputs, and returns the same result every time. Lint bans `Math.random`, `Date`, `performance`, timers and the DOM there. Use `createRng(seed)` and integer math. Every sim change keeps the "same seed, same result" test green.
 - **No comments.** The `local/no-comments` lint rule bans them. If something needs explaining, rename it or write a test.
-- **Size budget.** The initial bundle stays under 124 KB gzipped (`scripts/check-size.mjs`). Strudel loads as a lazy chunk whose file name starts with `strudel`, so it doesn't count toward the budget.
+- **Size budget.** The initial download (the entry chunk and everything it imports statically) stays under 124 KB gzipped, and each lazy chunk stays under 200 KB (`scripts/check-size.mjs`). The game, with three.js and pixelfx, loads as a lazy chunk after the page shell. Strudel loads as its own lazy chunk whose file name starts with `strudel` and has no budget.
+- **Vendored code.** `vendor/pixelfx` is a copy of pixelfx (MIT). Don't edit it; re-copy from upstream at the commit in `vendor/pixelfx/VERSION`. Lint skips `vendor/`.
 
 ## How to fix things (in order of value)
 When a bug or a correction comes up, remove the cause as high on this list as you can:

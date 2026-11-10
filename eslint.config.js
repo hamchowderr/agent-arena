@@ -6,7 +6,7 @@ import noComments from "./eslint/no-comments.js";
 const local = { rules: { "no-comments": noComments } };
 
 export default tseslint.config(
-  { ignores: ["dist/", "node_modules/", "coverage/"] },
+  { ignores: ["dist/", "node_modules/", "coverage/", "vendor/"] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {

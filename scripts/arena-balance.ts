@@ -2,7 +2,8 @@ import { playBotRun } from "../src/sim/arena/bot";
 import { seconds } from "../src/sim/arena/math";
 import { elapsedSeconds } from "../src/sim/arena/sim";
 
-const RUNS = 20;
+const environment = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+const RUNS = Number(environment["RUNS"] ?? 20);
 const rows: string[] = [];
 let bossTotal = 0;
 let secondsTotal = 0;

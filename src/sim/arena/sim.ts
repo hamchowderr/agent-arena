@@ -30,7 +30,7 @@ export const DASH_TICKS = 8;
 export const DASH_SPEED = 64;
 export const DASH_RECHARGE = seconds(3);
 export const HURT_INVULNERABLE = 30;
-export const SPAWN_DISTANCE = px(300);
+export const SPAWN_DISTANCE = px(250);
 export const DESPAWN_DISTANCE = px(460);
 export const MAX_ENEMIES = 420;
 export const RUN_REROLLS = 2;
@@ -340,7 +340,7 @@ function minutesElapsed(state: ArenaState): number {
 
 function spawnsPerSecondTimes100(state: ArenaState): number {
   const seconds = Math.trunc(state.tick / TICKS_PER_SECOND);
-  return 140 + seconds * 6;
+  return 220 + seconds * 6;
 }
 
 function spawnEnemies(state: ArenaState): void {

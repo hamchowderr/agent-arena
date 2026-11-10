@@ -1,5 +1,5 @@
 import { EVOLUTIONS, MAX_PASSIVES, MAX_WEAPONS, PASSIVES, WEAPONS, type PassiveId, type WeaponDefinition, type WeaponId } from "./content";
-import type { ArenaState } from "./sim";
+import { BASE_CRIT, hallucinationPercent, maxHealth, statTotal, type ArenaState } from "./sim";
 
 export const CARDS_PER_DRAFT = 3;
 
@@ -48,8 +48,19 @@ function weaponChanges(id: WeaponId, fromLevel: number, toLevel: number): CardCh
   return changes;
 }
 
-function passiveChanges(id: PassiveId, fromLevel: number): CardChange[] {
+function passiveChanges(state: ArenaState, id: PassiveId, fromLevel: number): CardChange[] {
   const passive = PASSIVES[id];
+  const base: Record<typeof passive.stat, number> = {
+    maxHealth: maxHealth(state) - statTotal(state, "maxHealth"),
+    damage: 0,
+    crit: BASE_CRIT,
+    hallucination: hallucinationPercent(state) - statTotal(state, "hallucination"),
+    cooldown: 0,
+    pickup: 0,
+    speed: 0,
+    regen: 0,
+    armor: 0,
+  };
   const unit = passive.stat === "maxHealth" || passive.stat === "armor" ? "" : passive.stat === "regen" ? " HP/2s" : "%";
   const label: Record<typeof passive.stat, string> = {
     maxHealth: "Max HP",
@@ -62,8 +73,16 @@ function passiveChanges(id: PassiveId, fromLevel: number): CardChange[] {
     regen: "Regen",
     armor: "Armor",
   };
-  const show = (value: number) => (value > 0 && unit === "%" ? `+${value}${unit}` : `${value}${unit}`);
-  return [{ label: label[passive.stat], before: show(passive.perLevel * fromLevel), after: show(passive.perLevel * (fromLevel + 1)) }];
+  const relative = base[passive.stat] === 0 && unit === "%";
+  const show = (value: number) => (relative && value > 0 ? `+${value}${unit}` : `${Math.max(0, value)}${unit}`);
+  const start = base[passive.stat];
+  return [
+    {
+      label: label[passive.stat],
+      before: show(start + passive.perLevel * fromLevel),
+      after: show(start + passive.perLevel * (fromLevel + 1)),
+    },
+  ];
 }
 
 function evolvedFrom(state: ArenaState, id: WeaponId): boolean {
@@ -131,7 +150,7 @@ export function offerCards(state: ArenaState): Card[] {
   return picked.map((candidate, index): Card => {
     const recommended = index === best;
     if (candidate.kind === "passive") {
-      return { kind: "passive", id: candidate.id, toLevel: candidate.toLevel, recommended, changes: passiveChanges(candidate.id, candidate.toLevel - 1) };
+      return { kind: "passive", id: candidate.id, toLevel: candidate.toLevel, recommended, changes: passiveChanges(state, candidate.id, candidate.toLevel - 1) };
     }
     if (candidate.kind === "evolve") {
       return { kind: "evolve", id: candidate.id, toLevel: 1, recommended, changes: weaponChanges(candidate.id, 0, 1) };

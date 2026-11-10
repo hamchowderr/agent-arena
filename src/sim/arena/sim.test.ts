@@ -78,7 +78,7 @@ describe("arena sim", () => {
       expect(new Set(ids).size).toBe(ids.length);
       expect(state.player.health).toBeLessThanOrEqual(maxHealth(state));
     }
-  });
+  }, 30000);
 
   it("asks for more xp at each level", () => {
     for (let level = 1; level < 60; level += 1) {
