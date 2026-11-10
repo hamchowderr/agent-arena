@@ -469,7 +469,17 @@ export function drawPause(context: CanvasRenderingContext2D, state: ArenaState):
   });
 }
 
-export function drawResults(context: CanvasRenderingContext2D, state: ArenaState): void {
+export const SHARE_RECT: Rect = { x: HUD_WIDTH / 2 - 486, y: 678, w: 300, h: 56 };
+export const POST_RECT: Rect = { x: HUD_WIDTH / 2 - 150, y: 678, w: 300, h: 56 };
+export const WATCH_RECT: Rect = { x: HUD_WIDTH / 2 + 186, y: 678, w: 300, h: 56 };
+
+export interface ResultsView {
+  readonly replay: boolean;
+  readonly mismatch: boolean;
+  readonly shareReady: boolean;
+}
+
+export function drawResults(context: CanvasRenderingContext2D, state: ArenaState, view: ResultsView): void {
   context.fillStyle = "rgba(8, 10, 18, 0.84)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
   const won = state.status === "won";
@@ -509,8 +519,43 @@ export function drawResults(context: CanvasRenderingContext2D, state: ArenaState
     text(context, compact(damage), right.x + right.w - 28, y, 16, "#a7f070", "right");
     bar(context, { x: right.x + 28, y: y + 26, w: right.w - 56, h: 10 }, damage / total, "#41a6f6");
   });
-  text(context, t("results.keys"), HUD_WIDTH / 2, 700, 22, GOLD, "center");
-  text(context, t("mastra.link"), HUD_WIDTH / 2, 746, 16, "#9fb0d0", "center");
+  drawButton(context, SHARE_RECT, t("share.button"), view.shareReady);
+  drawButton(context, POST_RECT, t("share.x"), view.shareReady);
+  drawButton(context, WATCH_RECT, view.replay ? t("replay.again") : t("replay.watch"), true);
+  text(context, view.replay ? t("replay.keys") : t("results.keys"), HUD_WIDTH / 2, 748, 18, GOLD, "center");
+  text(context, t("mastra.link"), HUD_WIDTH / 2, 780, 14, "#9fb0d0", "center");
+  if (view.replay) {
+    drawReplayTag(context, t("replay.tag"));
+  }
+  if (view.mismatch) {
+    text(context, t("replay.mismatch"), HUD_WIDTH / 2, 158, 16, "#ff9b9b", "center");
+  }
+}
+
+export function drawReplayTag(context: CanvasRenderingContext2D, label: string): void {
+  const size = 18;
+  const width = measure(context, label, size) + 32;
+  const rect = { x: HUD_WIDTH - 24 - width, y: 96, w: width, h: 36 };
+  context.fillStyle = SHADOW;
+  context.fillRect(rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6);
+  context.fillStyle = "#e43b44";
+  context.fillRect(rect.x, rect.y, rect.w, rect.h);
+  text(context, label, rect.x + rect.w / 2, rect.y + 9, size, INK, "center");
+}
+
+export function drawReplayHud(context: CanvasRenderingContext2D, speed: number): void {
+  drawReplayTag(context, t("replay.speed", { speed }));
+  text(context, t("replay.hint"), HUD_WIDTH - 24, 142, 15, "#9fb0d0", "right");
+}
+
+export function drawNotice(context: CanvasRenderingContext2D, notice: string, alpha: number): void {
+  const size = 20;
+  const width = measure(context, notice, size) + 48;
+  const rect = { x: HUD_WIDTH / 2 - width / 2, y: 18, w: width, h: 48 };
+  context.globalAlpha = Math.max(0, Math.min(1, alpha));
+  panel(context, rect, GOLD);
+  text(context, notice, HUD_WIDTH / 2, rect.y + 14, size, INK, "center");
+  context.globalAlpha = 1;
 }
 
 export function drawTitle(context: CanvasRenderingContext2D, pulse: number): void {

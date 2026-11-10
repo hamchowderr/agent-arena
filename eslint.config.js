@@ -25,6 +25,23 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/game/**/*.ts", "src/render/**/*.ts", "src/main.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "../sim/arena/sim",
+              importNames: ["step", "choose", "reroll", "skip"],
+              message: "Change the run through act() in src/sim/arena/replay.ts so replay links record it.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/sim/**/*.ts"],
     rules: {
       "no-restricted-globals": [
