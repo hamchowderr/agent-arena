@@ -1,6 +1,10 @@
 import { REGULAR_KINDS, WORLDS, type EnemyKind } from "../sim/arena/content";
 import { deathFrames, hurtFrames, walkFrames } from "./animate";
-import { BOSS_OUTLINED, ENEMY_SPRITES, eliteSprite } from "./arena-sprites";
+import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, ENEMY_SHOT, ENEMY_SPRITES, eliteSprite, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
+import { bossSprite } from "./bosses";
+import { agentClips } from "./clips";
+import { WEAPON_STAGES, weaponSprite } from "./weapon-art";
+import { bossClips } from "./clips";
 import { ENEMY_ART_TIER, RENDER_SCALE, type ArtTier } from "./art-rules";
 import { rgbOf } from "./audit";
 import { shade, type ColorGrid } from "./shade";
@@ -42,27 +46,39 @@ function u32(value: number): number[] {
   return [(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255];
 }
 
-function chunk(type: string, data: Uint8Array): number[] {
-  const body = new Uint8Array([...[...type].map((letter) => letter.charCodeAt(0)), ...data]);
-  return [...u32(data.length), ...body, ...u32(crc32(body))];
+function concat(parts: readonly (Uint8Array | readonly number[])[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
+}
+
+function chunk(type: string, data: Uint8Array): Uint8Array {
+  const body = concat([[...type].map((letter) => letter.charCodeAt(0)), data]);
+  return concat([u32(data.length), body, u32(crc32(body))]);
 }
 
 function storedZlib(raw: Uint8Array): Uint8Array {
-  const out: number[] = [0x78, 0x01];
   const block = 65535;
-  for (let start = 0; start < raw.length || start === 0; start += block) {
+  const blocks = Math.max(1, Math.ceil(raw.length / block));
+  const out = new Uint8Array(2 + blocks * 5 + raw.length + 4);
+  out[0] = 0x78;
+  out[1] = 0x01;
+  let at = 2;
+  for (let index = 0; index < blocks; index += 1) {
+    const start = index * block;
     const end = Math.min(raw.length, start + block);
     const length = end - start;
-    out.push(end >= raw.length ? 1 : 0, length & 255, length >>> 8, ~length & 255, (~length >>> 8) & 255);
-    for (let index = start; index < end; index += 1) {
-      out.push(raw[index] ?? 0);
-    }
-    if (raw.length === 0) {
-      break;
-    }
+    out.set([index === blocks - 1 ? 1 : 0, length & 255, length >>> 8, ~length & 255, (~length >>> 8) & 255], at);
+    at += 5;
+    out.set(raw.subarray(start, end), at);
+    at += length;
   }
-  out.push(...u32(adler32(raw)));
-  return new Uint8Array(out);
+  out.set(u32(adler32(raw)), at);
+  return out;
 }
 
 export function encodePng(picture: Picture): Uint8Array {
@@ -72,8 +88,8 @@ export function encodePng(picture: Picture): Uint8Array {
     raw[y * (stride + 1)] = 0;
     raw.set(picture.rgba.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
   }
-  const header = new Uint8Array([...u32(picture.width), ...u32(picture.height), 8, 6, 0, 0, 0]);
-  return new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, ...chunk("IHDR", header), ...chunk("IDAT", storedZlib(raw)), ...chunk("IEND", new Uint8Array())]);
+  const header = concat([u32(picture.width), u32(picture.height), [8, 6, 0, 0, 0]]);
+  return concat([[137, 80, 78, 71, 13, 10, 26, 10], chunk("IHDR", header), chunk("IDAT", storedZlib(raw)), chunk("IEND", new Uint8Array())]);
 }
 
 class Canvas {
@@ -129,7 +145,7 @@ function worldEntries(tier: number): Entry[] {
   const regular = kinds.flatMap((kind) => (kind === "boss" ? [] : [{ grid: shade([ENEMY_SPRITES[kind]], look.faction), scale: RENDER_SCALE.regular }]));
   const eliteKind = world.slots[3];
   const elite = eliteKind ? [{ grid: shade([eliteSprite(ENEMY_SPRITES[eliteKind])], look.faction), scale: RENDER_SCALE.elite }] : [];
-  return [...regular, ...elite, { grid: shade([BOSS_OUTLINED], look.boss), scale: RENDER_SCALE.boss }];
+  return [...regular, ...elite, { grid: shade([bossSprite(world.id)], look.faction), scale: RENDER_SCALE.boss }];
 }
 
 export function enemySheet(): Picture {
@@ -159,14 +175,56 @@ const ANIMATION_ZOOM = 4;
 
 export function animationSheet(): Picture {
   const look = WORLD_LOOKS[1];
-  const rows = REGULAR_KINDS.map((kind) => {
+  return framesSheet(
+    REGULAR_KINDS.map((kind) => {
     const walk = walkFrames(ENEMY_SPRITES[kind]).map((frame) => shade([frame], look.faction));
     const hurt = hurtFrames(walk[0] ?? []);
     const death = deathFrames(shade([ENEMY_SPRITES[kind]], look.faction)).frames;
     return [...walk, ...hurt, ...death];
-  });
-  const widthOf = (grid: ColorGrid) => (grid[0]?.length ?? 0) * ANIMATION_ZOOM;
-  const heightOf = (grid: ColorGrid) => grid.length * ANIMATION_ZOOM;
+    }),
+    [look.ground[0], look.ground[2]],
+    ANIMATION_ZOOM,
+  );
+}
+
+export function bossSheet(): Picture {
+  return framesSheet(
+    WORLDS.map((world) => {
+      const clips = bossClips(world.id, WORLD_LOOKS[world.tier].faction);
+      return [...clips.moving, ...clips.death.frames];
+    }),
+    WORLDS.map((world) => WORLD_LOOKS[world.tier].ground[0]),
+    2,
+  );
+}
+
+export function pickupSheet(): Picture {
+  const sprites = [BOLT, BEAM, RAG_BEAM, SEEKER, CODE_BLOCK, GEM, BIG_GEM, ENEMY_SHOT];
+  return framesSheet(
+    WORLDS.map(() => sprites.map((sprite) => shade([sprite], WORLD_LOOKS[1].faction))),
+    WORLDS.map((world) => WORLD_LOOKS[world.tier].ground[0]),
+    6,
+  );
+}
+
+export function evolutionSheet(): Picture {
+  const faction = WORLD_LOOKS[1].faction;
+  const paint = (sprite: readonly string[]) => shade([sprite], faction);
+  const agents = ([1, 2, 3, 4, 5] as const).map((tier) => agentClips(tier)[0] ?? []);
+  const rows = [
+    agents,
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("prompt", stage)))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("webSearch", stage))), paint(weaponSprite("ragSearch", 0))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("codeExec", stage))), paint(weaponSprite("codeInterpreter", 0))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("subagents", stage)))],
+  ];
+  return framesSheet(rows, [WORLD_LOOKS[1].ground[0], WORLD_LOOKS[1].ground[2]], 6);
+}
+
+function framesSheet(rows: readonly (readonly ColorGrid[])[], grounds: readonly string[], zoom: number): Picture {
+
+  const widthOf = (grid: ColorGrid) => (grid[0]?.length ?? 0) * zoom;
+  const heightOf = (grid: ColorGrid) => grid.length * zoom;
   const rowHeights = rows.map((row) => Math.max(...row.map(heightOf)) + GAP * 2);
   const width = Math.max(...rows.map((row) => row.reduce((sum, grid) => sum + widthOf(grid) + GAP, GAP)));
   const height = rowHeights.reduce((sum, value) => sum + value, 0);
@@ -174,10 +232,10 @@ export function animationSheet(): Picture {
   let top = 0;
   rows.forEach((row, index) => {
     const rowHeight = rowHeights[index] ?? 0;
-    canvas.fill(0, top, width, rowHeight, index % 2 === 0 ? look.ground[0] : look.ground[2]);
+    canvas.fill(0, top, width, rowHeight, grounds[index % grounds.length] ?? "#000000");
     let left = GAP;
     for (const grid of row) {
-      canvas.draw(grid, left, top + rowHeight - GAP - heightOf(grid), ANIMATION_ZOOM);
+      canvas.draw(grid, left, top + rowHeight - GAP - heightOf(grid), zoom);
       left += widthOf(grid) + GAP;
     }
     top += rowHeight;

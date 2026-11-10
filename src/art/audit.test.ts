@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { WORLDS, type EnemyKind, type WorldId } from "../sim/arena/content";
+import { WORLDS, type EnemyKind, type World, type WorldId } from "../sim/arena/content";
 import { seconds } from "../sim/arena/math";
-import { FUSE_TICKS, TELEGRAPH_TICKS } from "../sim/arena/sim";
-import { BOSS_OUTLINED, ENEMY_SPRITES } from "./arena-sprites";
+import { CHARGE_WINDUP, FUSE_TICKS, TELEGRAPH_TICKS } from "../sim/arena/sim";
+import { ENEMY_SPRITES } from "./arena-sprites";
+import { bossSprite } from "./bosses";
 import {
   ENEMY_ART_TIER,
   MAX_SILHOUETTE_OVERLAP,
@@ -20,13 +21,11 @@ import { WORLD_LOOKS, type WorldLook } from "./world-looks";
 
 type EnemyCheck = "span" | "colors" | "contrast";
 
-const REDRAW_PENDING: Readonly<Partial<Record<EnemyKind, readonly EnemyCheck[]>>> = {
-  boss: ["span", "contrast"],
-};
+const REDRAW_PENDING: Readonly<Partial<Record<EnemyKind, readonly EnemyCheck[]>>> = {};
 
 const HUES_PENDING: readonly WorldId[] = [];
 
-const NATIVE_SCALE_PENDING: readonly (keyof typeof RENDER_SCALE)[] = ["elite", "boss"];
+const NATIVE_SCALE_PENDING: readonly (keyof typeof RENDER_SCALE)[] = ["elite"];
 
 function worldKinds(slots: readonly EnemyKind[]): EnemyKind[] {
   return [...new Set<EnemyKind>([...slots, "lootRunner"])];
@@ -40,8 +39,8 @@ function look(tier: number) {
   return found;
 }
 
-function art(kind: EnemyKind, scene: WorldLook): ColorGrid {
-  return kind === "boss" ? shade([BOSS_OUTLINED], scene.boss) : shade([ENEMY_SPRITES[kind]], scene.faction);
+function art(kind: EnemyKind, scene: WorldLook, world: World): ColorGrid {
+  return kind === "boss" ? shade([bossSprite(world.id)], scene.faction) : shade([ENEMY_SPRITES[kind]], scene.faction);
 }
 
 function shownSpan(kind: EnemyKind, grid: ColorGrid): number {
@@ -52,7 +51,7 @@ function passes(kind: EnemyKind, check: EnemyCheck): boolean {
   const worlds = WORLDS.filter((world) => kind === "boss" || worldKinds(world.slots).includes(kind));
   return worlds.every((world) => {
     const scene = look(world.tier);
-    const grid = art(kind, scene);
+    const grid = art(kind, scene, world);
     switch (check) {
       case "span": {
         const range = TIER_SPAN[ENEMY_ART_TIER[kind]];
@@ -81,14 +80,14 @@ describe("enemy art rules", () => {
 
   it.each(WORLDS.map((world) => [world.id, world] as const))("%s keeps every enemy's main hue apart, or is listed for a redraw", (id, world) => {
     const scene = look(world.tier);
-    const hues = worldKinds(world.slots).map((kind) => dominantHue(art(kind, scene)));
+    const hues = worldKinds(world.slots).map((kind) => dominantHue(art(kind, scene, world)));
     const apart = hues.every((hue, index) => hues.slice(index + 1).every((other) => hueGap(hue, other) >= MIN_HUE_GAP_IN_WORLD));
     expect(apart).toBe(!HUES_PENDING.includes(id));
   });
 
   it.each(WORLDS.map((world) => [world.id, world] as const))("%s gives every enemy its own silhouette", (_, world) => {
     const scene = look(world.tier);
-    const grids = worldKinds(world.slots).map((kind) => [kind, art(kind, scene)] as const);
+    const grids = worldKinds(world.slots).map((kind) => [kind, art(kind, scene, world)] as const);
     for (const [index, [kind, grid]] of grids.entries()) {
       for (const [other, otherGrid] of grids.slice(index + 1)) {
         expect(silhouetteOverlap(grid, otherGrid), `${kind} and ${other} look alike`).toBeLessThan(MAX_SILHOUETTE_OVERLAP);
@@ -107,6 +106,7 @@ describe("attack tells", () => {
   it("gives every charge, shot and fuse a tell of at least the minimum", () => {
     expect(TELEGRAPH_TICKS).toBeGreaterThanOrEqual(seconds(MIN_TELEGRAPH_SECONDS));
     expect(FUSE_TICKS).toBeGreaterThanOrEqual(seconds(MIN_TELEGRAPH_SECONDS));
+    expect(CHARGE_WINDUP).toBeGreaterThanOrEqual(seconds(MIN_TELEGRAPH_SECONDS));
   });
 });
 

@@ -8,6 +8,11 @@ export const HURT_FRAMES = 2;
 export const DEATH_FRAMES = 5;
 export const HURT_FPS = 10;
 export const DEATH_FPS = 10;
+export const BOSS_IDLE_FRAMES = 4;
+export const BOSS_IDLE_FPS = 4;
+export const BOSS_WINDUP_FRAMES = 3;
+export const BOSS_IMPACT_FRAMES = 3;
+export const BOSS_IMPACT_FPS = 10;
 
 const LEG_ROW_SHARE = 0.4;
 export const HURT_TINT = "#d8f0ff";
@@ -298,4 +303,23 @@ export function deathFrames(grid: ColorGrid): DeathSheet {
     frames.push(frame);
   }
   return { frames, margin, below };
+}
+
+export function squash(sprite: Sprite, rows: number): Sprite {
+  const height = sprite.length;
+  const width = sprite[0]?.length ?? 0;
+  const outHeight = height + Math.max(0, -rows);
+  const outWidth = width + Math.max(0, rows);
+  const newHeight = height - rows;
+  const newWidth = width + rows;
+  const top = outHeight - newHeight;
+  const left = Math.floor((outWidth - newWidth) / 2);
+  return Array.from({ length: outHeight }, (_, y) =>
+    Array.from({ length: outWidth }, (_, x) => {
+      if (y < top || x < left || x >= left + newWidth) {
+        return TRANSPARENT;
+      }
+      return sprite[Math.floor(((y - top) * height) / newHeight)]?.[Math.floor(((x - left) * width) / newWidth)] ?? TRANSPARENT;
+    }).join(""),
+  );
 }

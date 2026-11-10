@@ -193,32 +193,6 @@ export const CHEST: Sprite = [
   ".kkkkkkkkkkkk.",
 ];
 
-export const BOSS: Sprite = [
-  ".......y...y...y.......",
-  ".......yy.yyy.yy.......",
-  ".......yyyyyyyyy.......",
-  ".......kkkkkkkkk.......",
-  ".....kkXXXXXXXXXkk.....",
-  "....kXXXXXXXXXXXXXk....",
-  "...kXXXXXXXXXXXXXXXk...",
-  "...kXdddddddddddddXk...",
-  "...kXdmmmdddddmmmdXk...",
-  "...kXdmwmdddddmwmdXk...",
-  "...kXdddddddddddddXk...",
-  "...kXXXXXkkkkkXXXXXk...",
-  "....kXXXXXXXXXXXXXk....",
-  "..kkkSSSSkwwwkSSSSkkk..",
-  ".kXXkSSSSSkrkSSSSSkXXk.",
-  "kXXXkSSSSSkrkSSSSSkXXXk",
-  "kXXkkSSSSkrrrkSSSSkkXXk",
-  "kXXk.kSSSkrrrkSSSk.kXXk",
-  ".kk..kSSSSkrkSSSSk..kk.",
-  ".....kSSSSSkSSSSSk.....",
-  ".....kSSSSkkkSSSSk.....",
-  ".....kXXXk...kXXXk.....",
-  ".....kkkkk...kkkkk.....",
-];
-
 export const ENEMY_SHOT: Sprite = [".kkk.", "kroyk", "kowok", "kroyk", ".kkk."];
 
 export const HAZARD: Sprite = [
@@ -250,13 +224,45 @@ export const HAZARD: Sprite = [
   "..........................",
 ];
 
-export const GEM: Sprite = ["..m..", ".mcm.", "mcwcm", ".mcm.", "..m.."];
+export const GEM: Sprite = [
+  "...bbb...",
+  "..bcccb..",
+  ".bcmmmcb.",
+  "bcmBBBmcb",
+  "bcmwBmmcb",
+  "bcmmBmmcb",
+  ".bcmmmcb.",
+  "..bcccb..",
+  "...bbb...",
+]
 
-export const BIG_GEM: Sprite = ["...y...", "..yoy..", ".yowoy.", "yowwwoy", ".yowoy.", "..yoy..", "...y..."];
+export const BIG_GEM: Sprite = [
+  "....ppp....",
+  "..ppoooop..",
+  ".poyyyyyop.",
+  ".poyrrryop.",
+  "poywyryyyop",
+  "poyyyryyyop",
+  "poyyyryyyop",
+  ".poyyyyyop.",
+  ".pooyyyoop.",
+  "..ppoooop..",
+  "....ppp....",
+]
 
-export const BOLT: Sprite = ["..yy..", ".yooy.", "yowwoy", "yowwoy", ".yooy.", "..yy.."];
+export const BOLT: Sprite = [
+  ".kkkkkk.",
+  "kwwwwwwk",
+  "kwcwwwwk",
+  "kwwcwwwk",
+  "kwcwccwk",
+  "kwwwwwwk",
+  ".kkkkkk.",
+  "..kk....",
+  "..k.....",
+]
 
-export const BEAM: Sprite = ["....mmmmmmmm", "..mmccccccww", "mmcccwwwwwww", "..mmccccccww", "....mmmmmmmm"];
+export const BEAM: Sprite = beamSprite(40, 5, ["c", "m", "w"])
 
 export const DRONE: Sprite = [
   "..kkkkk..",
@@ -270,17 +276,29 @@ export const DRONE: Sprite = [
   "...kSk...",
 ];
 
-export const SEEKER: Sprite = [".lll.", "lgwgl", "lgggl", ".lgl.", "..l.."];
+export const SEEKER: Sprite = [
+  "....y....",
+  "....s....",
+  "..kkkkk..",
+  ".kwwwwwk.",
+  ".kwcwcwk.",
+  ".kwwwwwk.",
+  "..kkkkk..",
+  "...m.m...",
+  "...c.c...",
+]
 
 export const CODE_BLOCK: Sprite = [
-  "kkkkkkkk",
-  "kSSSSSSk",
-  "kSllSSSk",
-  "kSSlllSk",
-  "kSllSSSk",
-  "kSSSSSSk",
-  "kkkkkkkk",
-];
+  "kkkkkkkkkk",
+  "kwwwwwwwwk",
+  "kwwbwwbwwk",
+  "kwwbggbwwk",
+  "kwbwwwwbwk",
+  "kwwbggbwwk",
+  "kwwbwwbwwk",
+  "kwwwwwwwwk",
+  "kkkkkkkkkk",
+]
 
 export const HALLUCINATION: Sprite = [".pp.", "prrp", "prrp", ".pp."];
 
@@ -342,6 +360,29 @@ export const TUFT: Sprite = ["l.l.l.", ".lglg.", "gGgGgg"];
 
 export const CABLE: Sprite = ["..dddd..", ".dSSSSd.", "dS.dd.Sd", "dS.dd.Sd", ".dSSSSd.", "..dddd.."];
 
+export function beamSprite(length: number, height: number, [outer, inner, core]: readonly [string, string, string]): Sprite {
+  const middle = Math.floor(height / 2);
+  return Array.from({ length: height }, (_, y) =>
+    Array.from({ length: length }, (_, x) => {
+      const reach = x / (length - 1);
+      const edge = Math.abs(y - middle) / Math.max(1, middle);
+      const dither = (x + y) % 2 === 0;
+      if (reach > 0.93) {
+        return edge < 1 ? core : inner;
+      }
+      if (edge === 0) {
+        return reach > 0.55 ? core : reach > 0.25 ? inner : reach > 0.06 && dither ? outer : ".";
+      }
+      if (edge < 1) {
+        return reach > 0.7 ? inner : reach > 0.3 ? outer : reach > 0.15 && dither ? outer : ".";
+      }
+      return reach > 0.8 && dither ? outer : ".";
+    }).join(""),
+  );
+}
+
+export const RAG_BEAM: Sprite = beamSprite(64, 9, ["y", "l", "w"]);
+
 export const PROPS: readonly Sprite[] = [BUSH, ROCK, SERVER, CRATE, FLOWER, TUFT, TUFT, FLOWER, CABLE];
 
 export function outlined(sprite: Sprite, key: string): Sprite {
@@ -360,8 +401,6 @@ export function outlined(sprite: Sprite, key: string): Sprite {
     }).join(""),
   );
 }
-
-export const BOSS_OUTLINED: Sprite = outlined(BOSS, "w");
 
 const CROWN: Sprite = ["y..y..y", "yy.y.yy", "yyyyyyy", "ooooooo"];
 

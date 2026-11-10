@@ -614,6 +614,9 @@ export class ArenaGame {
           break;
         case "pulse":
           this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "ciPipeline" ? "#ffcd75" : "#9ff6ff");
+          if (event.weapon === "ciPipeline") {
+            this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.6), "#ffffff");
+          }
           break;
         case "levelUp":
           this.effects.spawn("burst", this.state.player.x, this.state.player.y);
