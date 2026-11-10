@@ -31,6 +31,7 @@ import {
   ENEMY_SHOT,
   GEM,
   HALLUCINATION,
+  RAG_BEAM,
   HAZARD,
   PROPS,
   SEEKER,
@@ -97,6 +98,8 @@ function animate(material: MeshBasicMaterial, frames: number): void {
 interface BatchShape {
   readonly frames: number;
   readonly sink: number;
+  readonly lead?: number | undefined;
+  readonly glow?: boolean;
 }
 
 const STILL: BatchShape = { frames: 1, sink: 0 };
@@ -111,12 +114,15 @@ class SpriteBatch {
   constructor(scene: Scene, texture: Texture, width: number, height: number, capacity: number, flat: boolean, shape: BatchShape = STILL) {
     const geometry = new PlaneGeometry(width, height);
     if (flat) {
+      geometry.translate(shape.lead === undefined ? 0 : shape.lead - width / 2, 0, 0);
       geometry.rotateX(-Math.PI / 2);
     } else {
       geometry.translate(0, height / 2 - shape.sink, 0);
       geometry.rotateX(-(Math.PI / 2 - PITCH) * 0.5);
     }
-    const material = new MeshBasicMaterial({ map: texture, alphaTest: 0.5, toneMapped: false });
+    const material = shape.glow
+      ? new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: AdditiveBlending, toneMapped: false })
+      : new MeshBasicMaterial({ map: texture, alphaTest: 0.5, toneMapped: false });
     if (shape.frames > 1) {
       this.frame = new InstancedBufferAttribute(new Float32Array(capacity), 1);
       this.flip = new InstancedBufferAttribute(new Float32Array(capacity), 1);
@@ -309,6 +315,9 @@ export class ArenaRenderer {
   private readonly bolts: SpriteBatch;
   private readonly beams: SpriteBatch;
   private readonly seekers: SpriteBatch;
+  private readonly ragBeams: SpriteBatch;
+  private readonly interpreterBlocks: SpriteBatch;
+  private readonly glows: Readonly<Record<"beam" | "rag" | "bolt" | "seeker" | "block" | "interpreter" | "token" | "bigToken", SpriteBatch>>;
   private readonly blocks: SpriteBatch;
   private readonly hallucinations: SpriteBatch;
   private readonly shots: SpriteBatch;
@@ -409,10 +418,23 @@ export class ArenaRenderer {
     });
     this.gems = this.batch([GEM], 1, 900, false);
     this.bigGems = this.batch([BIG_GEM], 1, 200, false);
-    this.bolts = this.batch([BOLT], 1, 200, true);
-    this.beams = this.batch([BEAM], 1, 100, true);
-    this.seekers = this.batch([SEEKER], 1, 100, true);
-    this.blocks = this.batch([CODE_BLOCK], 1, 16, false);
+    this.bolts = this.onTop(this.batch([BOLT], 1, 200, false));
+    this.beams = this.onTop(this.leadBatch([BEAM], 100));
+    this.ragBeams = this.onTop(this.leadBatch([RAG_BEAM], 100));
+    this.seekers = this.onTop(this.batch([SEEKER], 1, 100, false));
+    this.blocks = this.onTop(this.batch([CODE_BLOCK], 1, 16, false));
+    this.interpreterBlocks = this.onTop(this.batch([CODE_BLOCK], 1, 16, false));
+    (this.interpreterBlocks.mesh.material as MeshBasicMaterial).color.set("#ffe9a8");
+    this.glows = {
+      beam: this.glowBatch(56, 16, "#41a6f6", 0.55, 100, 8),
+      rag: this.glowBatch(72, 22, "#a7f070", 0.6, 100, 10),
+      bolt: this.glowBatch(18, 14, "#73eff7", 0.5, 200),
+      seeker: this.glowBatch(20, 16, "#73eff7", 0.6, 100),
+      block: this.glowBatch(22, 16, "#ffcd75", 0.45, 16),
+      interpreter: this.glowBatch(28, 20, "#ffcd75", 0.6, 16),
+      token: this.glowBatch(14, 10, "#73eff7", 0.4, 900),
+      bigToken: this.glowBatch(18, 12, "#ffcd75", 0.5, 200),
+    };
     this.hallucinations = this.batch([HALLUCINATION], 1, 100, true);
     this.shots = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
     this.shots.mesh.renderOrder = 12;
@@ -442,6 +464,23 @@ export class ArenaRenderer {
   private batch(layers: readonly Sprite[], scale: number, capacity: number, flat: boolean, faction: string = WORLD_LOOKS[this.tier].faction): SpriteBatch {
     const image = spriteImage(layers, faction);
     return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
+  }
+
+  private onTop(batch: SpriteBatch): SpriteBatch {
+    batch.mesh.renderOrder = 11;
+    (batch.mesh.material as MeshBasicMaterial).depthTest = false;
+    return batch;
+  }
+
+  private leadBatch(layers: readonly Sprite[], capacity: number): SpriteBatch {
+    const image = spriteImage(layers);
+    return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width, image.height, capacity, true, { frames: 1, sink: 0, lead: 2 });
+  }
+
+  private glowBatch(width: number, height: number, color: string, alpha: number, capacity: number, lead?: number): SpriteBatch {
+    const batch = new SpriteBatch(this.scene, glowTexture(64, color, alpha), width, height, capacity, true, { frames: 1, sink: 0, lead, glow: true });
+    batch.mesh.renderOrder = 2;
+    return batch;
   }
 
   private atlasBatch(image: AtlasImage, scale: number, capacity: number, sink: number): SpriteBatch {
@@ -709,12 +748,18 @@ export class ArenaRenderer {
       batch.commit();
     }
 
+    for (const glow of Object.values(this.glows)) {
+      glow.begin();
+    }
     this.gems.begin();
     this.bigGems.begin();
     this.chests.begin();
     for (const gem of state.gems) {
       const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5;
       (gem.chest ? this.chests : gem.value > 1 ? this.bigGems : this.gems).add(gem.x / SUB, bob, gem.y / SUB);
+      if (!gem.chest) {
+        (gem.value > 1 ? this.glows.bigToken : this.glows.token).add(gem.x / SUB, 0.6, gem.y / SUB);
+      }
     }
     this.gems.commit();
     this.bigGems.commit();
@@ -722,24 +767,31 @@ export class ArenaRenderer {
 
     this.bolts.begin();
     this.beams.begin();
+    this.ragBeams.begin();
     this.seekers.begin();
     this.hallucinations.begin();
     for (const projectile of state.projectiles) {
       const x = projectile.x / SUB;
       const z = projectile.y / SUB;
       this.heading.setFromAxisAngle(this.up, -Math.atan2(projectile.vy, projectile.vx));
-      const batch = projectile.hallucinated
-        ? this.hallucinations
-        : projectile.kind === "beam"
-          ? this.beams
-          : projectile.kind === "seeker"
-            ? this.seekers
-            : this.bolts;
-      batch.add(x, 6, z, false, this.heading);
+      if (projectile.hallucinated) {
+        this.hallucinations.add(x, 6, z, false, this.heading);
+      } else if (projectile.kind === "beam") {
+        const rag = projectile.weapon === "ragSearch";
+        (rag ? this.ragBeams : this.beams).add(x, 6, z, false, this.heading);
+        (rag ? this.glows.rag : this.glows.beam).add(x, 0.7, z, false, this.heading);
+      } else if (projectile.kind === "seeker") {
+        this.seekers.add(x, 4, z);
+        this.glows.seeker.add(x, 0.7, z);
+      } else {
+        this.bolts.add(x, 4, z);
+        this.glows.bolt.add(x, 0.7, z);
+      }
       this.shadows.add(x, z, 5);
     }
     this.bolts.commit();
     this.beams.commit();
+    this.ragBeams.commit();
     this.seekers.commit();
     this.hallucinations.commit();
 
@@ -768,18 +820,25 @@ export class ArenaRenderer {
     this.bigHazards.commit();
 
     this.blocks.begin();
+    this.interpreterBlocks.begin();
     for (const owned of state.weapons) {
       if (WEAPONS[owned.id].kind !== "orbit") {
         continue;
       }
+      const evolved = owned.id === "codeInterpreter";
       const count = weaponStats(owned.id, owned.level).count;
       for (let index = 0; index < count; index += 1) {
         const blade = orbitPosition(state, owned, index);
-        this.blocks.add(blade.x / SUB, 4, blade.y / SUB);
+        (evolved ? this.interpreterBlocks : this.blocks).add(blade.x / SUB, 4, blade.y / SUB);
+        (evolved ? this.glows.interpreter : this.glows.block).add(blade.x / SUB, 0.7, blade.y / SUB);
         this.shadows.add(blade.x / SUB, blade.y / SUB, 7);
       }
     }
     this.blocks.commit();
+    this.interpreterBlocks.commit();
+    for (const glow of Object.values(this.glows)) {
+      glow.commit();
+    }
     this.shadows.commit();
 
     const boss = state.enemies.find((enemy) => enemy.id === state.bossId);
