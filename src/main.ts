@@ -1,3 +1,4 @@
+import { PAD, readPad } from "./game/controls";
 const worldCanvas = document.querySelector<HTMLCanvasElement>("#world");
 const hudCanvas = document.querySelector<HTMLCanvasElement>("#hud");
 const loadingNote = document.querySelector<HTMLElement>("#status");
@@ -70,12 +71,20 @@ async function boot(): Promise<void> {
   };
   hudCanvas.addEventListener("pointermove", (event) => {
     const point = toHud(event);
+    game.touchMove(event.pointerId, point.x, point.y);
     game.pointer(point.x, point.y, false);
   });
   hudCanvas.addEventListener("pointerdown", (event) => {
     const point = toHud(event);
+    if (event.pointerType !== "mouse" && game.touchStart(event.pointerId, point.x, point.y)) {
+      hudCanvas.setPointerCapture(event.pointerId);
+      return;
+    }
     game.pointer(point.x, point.y, true);
   });
+  const endTouch = (event: PointerEvent) => game.touchEnd(event.pointerId);
+  hudCanvas.addEventListener("pointerup", endTouch);
+  hudCanvas.addEventListener("pointercancel", endTouch);
   window.addEventListener("keydown", (event) => {
     if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
@@ -86,7 +95,35 @@ async function boot(): Promise<void> {
   });
   window.addEventListener("keyup", (event) => game.keyUp(event.key));
   window.addEventListener("blur", () => game.keyUp("*"));
+  const tap = (key: string) => {
+    game.keyDown(key);
+    game.keyUp(key);
+  };
+  let padHeld: boolean[] = [];
+  const pollPad = () => {
+    const pad = [...(navigator.getGamepads?.() ?? [])].find((candidate) => candidate?.connected);
+    if (!pad) {
+      return;
+    }
+    const frame = readPad(pad, padHeld);
+    padHeld = [...frame.held];
+    game.padMove(frame.direction);
+    for (const button of frame.pressed) {
+      if (button === PAD.confirm) {
+        game.confirm();
+      } else if (button === PAD.start || button === PAD.back) {
+        tap(game.screen === "title" ? "enter" : "escape");
+      } else if (button === PAD.reroll) {
+        tap("r");
+      } else if (button === PAD.skip) {
+        tap("x");
+      } else if (button === PAD.left || button === PAD.right) {
+        game.nudgeCard(button === PAD.left ? -1 : 1);
+      }
+    }
+  };
   const loop = () => {
+    pollPad();
     game.frame();
     requestAnimationFrame(loop);
   };

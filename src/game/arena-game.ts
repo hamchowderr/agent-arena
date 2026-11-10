@@ -8,6 +8,7 @@ import { choose, createArena, currentWorld, reroll, skip, step, type ArenaEvent,
 import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
 import { currentLocale, nextLocale, setLocale, t, type LocaleCode } from "../i18n";
+import { STICK_RADIUS, STILL, stickDirection, stickKnob, type Direction, type Stick } from "./controls";
 import { bossName, bossPitch, passiveName, rivalName, tierStage } from "./format";
 import {
   cardRects,
@@ -55,6 +56,8 @@ export class ArenaGame {
   private readonly effects = new Effects();
   private readonly held = new Set<string>();
   private dashQueued = false;
+  private padDirection: Direction = STILL;
+  private touch: Stick | null = null;
   private hitStop = 0;
   private accumulator = 0;
   private last = 0;
@@ -213,6 +216,67 @@ export class ArenaGame {
     setMusic(this.musicOn ? cueFor({ onTitle: this.screen === "title" || this.screen === "results", tier, bossesDown, bossId }) : null);
   }
 
+  wantsStick(): boolean {
+    return this.screen === "run" && this.state.status === "playing";
+  }
+
+  touchStart(id: number, x: number, y: number): boolean {
+    if (!this.wantsStick()) {
+      return false;
+    }
+    if (this.touch) {
+      this.dash();
+      return true;
+    }
+    this.touch = { id, originX: x, originY: y, x, y };
+    return true;
+  }
+
+  touchMove(id: number, x: number, y: number): void {
+    if (this.touch?.id === id) {
+      this.touch.x = x;
+      this.touch.y = y;
+    }
+  }
+
+  touchEnd(id: number): void {
+    if (this.touch?.id === id) {
+      this.touch = null;
+    }
+  }
+
+  padMove(direction: Direction): void {
+    this.padDirection = direction;
+  }
+
+  dash(): void {
+    if (this.wantsStick()) {
+      this.dashQueued = true;
+    }
+  }
+
+  nudgeCard(delta: number): void {
+    if (this.screen !== "run" || this.state.status !== "levelUp") {
+      return;
+    }
+    const count = this.state.cards.length;
+    this.hover = this.hover < 0 ? 0 : (this.hover + delta + count) % count;
+  }
+
+  confirm(): void {
+    if (this.screen === "run" && this.state.status === "levelUp") {
+      choose(this.state, Math.max(0, this.hover));
+      this.hover = -1;
+      return;
+    }
+    if (this.screen === "run") {
+      this.dash();
+      return;
+    }
+    this.keyDown("enter");
+    this.keyUp("enter");
+  }
+
   private input(): Input {
     const left = this.held.has("a") || this.held.has("arrowleft");
     const right = this.held.has("d") || this.held.has("arrowright");
@@ -220,7 +284,32 @@ export class ArenaGame {
     const down = this.held.has("s") || this.held.has("arrowdown");
     const dash = this.dashQueued;
     this.dashQueued = false;
-    return { moveX: left === right ? 0 : left ? -1 : 1, moveY: up === down ? 0 : up ? -1 : 1, dash };
+    const keys: Direction = { moveX: left === right ? 0 : left ? -1 : 1, moveY: up === down ? 0 : up ? -1 : 1 };
+    const touch = this.touch ? stickDirection(this.touch) : STILL;
+    const chosen = keys.moveX !== 0 || keys.moveY !== 0 ? keys : touch.moveX !== 0 || touch.moveY !== 0 ? touch : this.padDirection;
+    return { ...chosen, dash };
+  }
+
+  private drawStick(context: CanvasRenderingContext2D): void {
+    if (!this.touch || !this.wantsStick()) {
+      return;
+    }
+    const knob = stickKnob(this.touch);
+    context.save();
+    context.globalAlpha = 0.35;
+    context.fillStyle = "#0d0f14";
+    context.beginPath();
+    context.arc(this.touch.originX, this.touch.originY, STICK_RADIUS, 0, Math.PI * 2);
+    context.fill();
+    context.globalAlpha = 0.6;
+    context.strokeStyle = "#f4f1e8";
+    context.lineWidth = 4;
+    context.stroke();
+    context.fillStyle = "#f4f1e8";
+    context.beginPath();
+    context.arc(knob.x, knob.y, STICK_RADIUS * 0.4, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
   }
 
   frame(): void {
@@ -259,6 +348,7 @@ export class ArenaGame {
     this.renderer.sync(this.state);
     this.renderer.render();
     this.drawHud(elapsed / 1000);
+    this.drawStick(this.hud);
   }
 
   private handle(events: readonly ArenaEvent[]): void {
