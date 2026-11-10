@@ -12,6 +12,7 @@ export interface PartDefinition {
   readonly name: string;
   readonly slot: SlotId;
   readonly effect: PartEffect;
+  readonly evolved?: true;
 }
 
 export const PARTS = {
@@ -35,6 +36,7 @@ export const PARTS = {
   selfCheck: { name: "Self-check", slot: "reflection", effect: { hallucination: -10 } },
   vectorMemory: { name: "Vector memory (RAG)", slot: "longTermMemory", effect: { health: 20, hallucination: -5 } },
   refactorSkill: { name: "Refactor skill", slot: "skill", effect: { attack: 3, crit: 5 } },
+  writeTheTest: { name: "Write the test", slot: "skill", effect: { crit: 5, hallucination: -4 } },
   loopRunner: { name: "Loop runner", slot: "loopRunner", effect: { speed: -4 } },
   guardrails: { name: "Guardrails", slot: "guardrails", effect: { hallucination: -15 } },
   sandbox: { name: "Sandbox", slot: "sandbox", effect: { health: 40 } },
@@ -43,6 +45,8 @@ export const PARTS = {
   subagents: { name: "Subagents", slot: "subagents", effect: { attack: 6 } },
   verifier: { name: "Verifier", slot: "verifier", effect: { hallucination: -10, crit: 5 } },
   traces: { name: "Logs and traces", slot: "traces", effect: { health: 10 } },
+  ragSearch: { name: "RAG", slot: "tool", effect: { attack: 7, hallucination: -12 }, evolved: true },
+  ciPipeline: { name: "CI Pipeline", slot: "tool", effect: { attack: 10, crit: 10 }, evolved: true },
 } as const satisfies Readonly<Record<string, PartDefinition>>;
 
 export type PartId = keyof typeof PARTS;
@@ -50,3 +54,18 @@ export type PartId = keyof typeof PARTS;
 export type PartsForSlot<S extends SlotId> = {
   [Id in PartId]: (typeof PARTS)[Id]["slot"] extends S ? Id : never;
 }[PartId];
+
+export interface Evolution {
+  readonly ingredients: readonly [PartId, PartId];
+  readonly result: PartId;
+}
+
+export const EVOLUTIONS: readonly Evolution[] = [
+  { ingredients: ["webSearch", "conversationBuffer"], result: "ragSearch" },
+  { ingredients: ["codeExec", "writeTheTest"], result: "ciPipeline" },
+];
+
+export function isEvolvedPart(id: PartId): boolean {
+  const part: PartDefinition = PARTS[id];
+  return part.evolved === true;
+}
