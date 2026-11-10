@@ -30,6 +30,7 @@ PRs show proof: a failing test that now passes, a replay seed, or a screenshot. 
 - **pstack** (open-pstack for Claude Code) provides the engineering-rigor skills.
 
 ## Content rules
+- **Story: own your agent.** The player builds and owns their agent. Every rival company wants you to rent theirs, an agent you don't own or control. Rival names and plot get filled in over time, so use placeholders until then.
 - All companies, mascots and characters are fictional parodies. No real brands, products or people as targets.
 - Music is written in Strudel and played live in the browser (`@strudel/web`, AGPL). That's why this repo is AGPL.
 
