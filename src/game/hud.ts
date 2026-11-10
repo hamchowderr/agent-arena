@@ -1,7 +1,7 @@
-import { BEAM, BOLT, CODE_BLOCK, SEEKER } from "../art/arena-sprites";
+import { PASSIVE_ICONS, WEAPON_ICONS } from "../art/icons";
 import type { Sprite } from "../art/sprites";
 import type { Card } from "../sim/arena/cards";
-import { BOSS_PHASE_FLOORS, isEvolvedWeapon, WEAPONS, WORLDS, type WeaponId, type WeaponKind } from "../sim/arena/content";
+import { BOSS_PHASE_FLOORS, isEvolvedWeapon, PASSIVES, WEAPONS, WORLDS, type PassiveId, type WeaponId } from "../sim/arena/content";
 import { TICKS_PER_SECOND } from "../sim/arena/math";
 import {
   critPercent,
@@ -18,7 +18,7 @@ import {
 } from "../sim/arena/sim";
 import { spriteImage } from "../render/textures";
 import { currentLocale, localeName, t, usesSpaces } from "../i18n";
-import { abbreviation, cardBlurb, cardName, changeLabel, changeValue, clock, compact, killerName, passiveName, rivalName, tierLabel, weaponName } from "./format";
+import { cardBlurb, cardName, changeLabel, changeValue, clock, compact, killerName, passiveName, rivalName, tierLabel, weaponName } from "./format";
 
 export const HUD_WIDTH = 1440;
 export const HUD_HEIGHT = 810;
@@ -28,6 +28,12 @@ const SHADOW = "#10121a";
 const GOLD = "#ffcd75";
 const PANEL = "rgba(16, 18, 30, 0.86)";
 const PANEL_EDGE = "#5d6a8a";
+const TILE = "#3a4466";
+const TILE_LIGHT = "#56628a";
+const WEAPON_ACCENT = "#41a6f6";
+const PASSIVE_ACCENT = "#a7f070";
+const CARD_FACE = "#20243a";
+const CARD_INSET = "#151827";
 
 export interface Point {
   readonly x: number;
@@ -65,24 +71,40 @@ export interface Banner {
   readonly life: number;
 }
 
-const KIND_ICON: Readonly<Record<WeaponKind, Sprite>> = {
-  bolt: BOLT,
-  beam: BEAM,
-  orbit: CODE_BLOCK,
-  pulse: [".mmmm.", "m....m", "m.ww.m", "m.ww.m", "m....m", ".mmmm."],
-  seeker: SEEKER,
-};
+const iconCache = new Map<string, HTMLCanvasElement>();
 
-const iconCache = new Map<WeaponKind, HTMLCanvasElement>();
-
-function weaponIcon(id: WeaponId): HTMLCanvasElement {
-  const kind = WEAPONS[id].kind;
-  let icon = iconCache.get(kind);
+function cachedIcon(key: string, sprite: Sprite): HTMLCanvasElement {
+  let icon = iconCache.get(key);
   if (!icon) {
-    icon = spriteImage([KIND_ICON[kind]]).canvas;
-    iconCache.set(kind, icon);
+    icon = spriteImage([sprite]).canvas;
+    iconCache.set(key, icon);
   }
   return icon;
+}
+
+function weaponIcon(id: WeaponId): HTMLCanvasElement {
+  return cachedIcon(`weapon.${id}`, WEAPON_ICONS[id]);
+}
+
+function passiveIcon(id: PassiveId): HTMLCanvasElement {
+  return cachedIcon(`passive.${id}`, PASSIVE_ICONS[id]);
+}
+
+function drawIcon(context: CanvasRenderingContext2D, icon: HTMLCanvasElement, centerX: number, centerY: number, size: number): void {
+  const scale = Math.max(1, Math.floor(size / Math.max(icon.width, icon.height)));
+  context.imageSmoothingEnabled = false;
+  context.drawImage(icon, Math.round(centerX - (icon.width * scale) / 2), Math.round(centerY - (icon.height * scale) / 2), icon.width * scale, icon.height * scale);
+}
+
+function iconTile(context: CanvasRenderingContext2D, rect: Rect, accent: string): void {
+  context.fillStyle = SHADOW;
+  context.fillRect(rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6);
+  context.fillStyle = TILE;
+  context.fillRect(rect.x, rect.y, rect.w, rect.h);
+  context.fillStyle = TILE_LIGHT;
+  context.fillRect(rect.x, rect.y, rect.w, 4);
+  context.fillStyle = accent;
+  context.fillRect(rect.x, rect.y + rect.h - 4, rect.w, 4);
 }
 
 export function text(
@@ -211,19 +233,16 @@ export function drawRunHud(
   const y = HUD_HEIGHT - 86;
   for (const owned of state.weapons) {
     const rect = { x, y, w: 62, h: 62 };
-    panel(context, rect, isEvolvedWeapon(owned.id) ? GOLD : PANEL_EDGE);
-    context.imageSmoothingEnabled = false;
-    const icon = weaponIcon(owned.id);
-    const scale = Math.floor(40 / Math.max(icon.width, icon.height));
-    context.drawImage(icon, x + 31 - (icon.width * scale) / 2, y + 28 - (icon.height * scale) / 2, icon.width * scale, icon.height * scale);
+    iconTile(context, rect, isEvolvedWeapon(owned.id) ? GOLD : WEAPON_ACCENT);
+    drawIcon(context, weaponIcon(owned.id), x + 31, y + 29, 48);
     text(context, isEvolvedWeapon(owned.id) ? "★" : String(owned.level), x + 54, y + 40, 16, GOLD, "right");
     x += 70;
   }
   x += 12;
   for (const [id, owned] of state.passives) {
     const rect = { x, y: y + 14, w: 48, h: 48 };
-    panel(context, rect);
-    text(context, abbreviation(passiveName(id)), x + 24, y + 26, 16, "#a7f070", "center");
+    iconTile(context, rect, PASSIVE_ACCENT);
+    drawIcon(context, passiveIcon(id), x + 24, y + 22, 32);
     text(context, String(owned), x + 44, y + 44, 13, GOLD, "right");
     x += 54;
   }
@@ -305,7 +324,7 @@ export function cardRects(count: number): Rect[] {
   const width = 360;
   const gap = 36;
   const total = count * width + (count - 1) * gap;
-  return Array.from({ length: count }, (_, index) => ({ x: (HUD_WIDTH - total) / 2 + index * (width + gap), y: 250, w: width, h: 380 }));
+  return Array.from({ length: count }, (_, index) => ({ x: (HUD_WIDTH - total) / 2 + index * (width + gap), y: 236, w: width, h: 392 }));
 }
 
 export const REROLL_RECT: Rect = { x: HUD_WIDTH / 2 - 330, y: 670, w: 300, h: 60 };
@@ -314,8 +333,8 @@ export const SKIP_RECT: Rect = { x: HUD_WIDTH / 2 + 30, y: 670, w: 300, h: 60 };
 export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState, hover: number): void {
   context.fillStyle = "rgba(8, 10, 18, 0.62)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  text(context, t("levelUp.title", { level: state.level }), HUD_WIDTH / 2, 120, 60, GOLD, "center");
-  text(context, t("levelUp.hint"), HUD_WIDTH / 2, 196, 20, "#9fb0d0", "center");
+  text(context, t("levelUp.title", { level: state.level }), HUD_WIDTH / 2, 92, 60, GOLD, "center");
+  text(context, t("levelUp.hint"), HUD_WIDTH / 2, 166, 20, "#9fb0d0", "center");
   const rects = cardRects(state.cards.length);
   state.cards.forEach((card, index) => {
     const rect = rects[index];
@@ -335,38 +354,79 @@ function drawButton(context: CanvasRenderingContext2D, rect: Rect, label: string
   context.globalAlpha = 1;
 }
 
+function cardAccent(card: Card): string {
+  return card.kind === "evolve" ? GOLD : card.kind === "weapon" ? WEAPON_ACCENT : PASSIVE_ACCENT;
+}
+
+function cardMaxLevel(card: Card): number {
+  return card.kind === "passive" ? PASSIVES[card.id].maxLevel : WEAPONS[card.id].levels.length;
+}
+
+function drawPips(context: CanvasRenderingContext2D, card: Card, centerX: number, y: number): void {
+  const count = cardMaxLevel(card);
+  const size = 14;
+  const gap = 6;
+  const left = centerX - (count * size + (count - 1) * gap) / 2;
+  for (let index = 0; index < count; index += 1) {
+    const x = left + index * (size + gap);
+    context.fillStyle = SHADOW;
+    context.fillRect(x - 2, y - 2, size + 4, size + 4);
+    const level = index + 1;
+    context.fillStyle = level < card.toLevel ? cardAccent(card) : level === card.toLevel ? INK : TILE;
+    context.fillRect(x, y, size, size);
+  }
+}
+
 function drawCard(context: CanvasRenderingContext2D, card: Card, rect: Rect, index: number, hovered: boolean): void {
-  const lift = hovered ? -10 : 0;
+  const lift = hovered ? -12 : 0;
   const box = { ...rect, y: rect.y + lift };
-  const edge = card.kind === "evolve" ? GOLD : card.recommended ? "#a7f070" : hovered ? INK : PANEL_EDGE;
-  panel(context, box, edge);
+  const accent = cardAccent(card);
+  context.fillStyle = SHADOW;
+  context.fillRect(box.x - 4, box.y - 4, box.w + 8, box.h + 8);
+  context.fillStyle = hovered ? accent : card.recommended ? "#a7f070" : PANEL_EDGE;
+  context.fillRect(box.x - 2, box.y - 2, box.w + 4, box.h + 4);
+  context.fillStyle = CARD_FACE;
+  context.fillRect(box.x, box.y, box.w, box.h);
+  context.fillStyle = accent;
+  context.fillRect(box.x, box.y, box.w, 40);
+  const kindLabel = card.kind === "evolve" ? t("card.evolve") : card.kind === "weapon" ? t("card.weapon") : t("card.passive");
+  text(context, kindLabel, box.x + 18, box.y + 11, 18, SHADOW);
+  const badge = card.kind === "evolve" ? "★" : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
+  text(context, badge, box.x + box.w - 18, box.y + 11, 18, SHADOW, "right");
   if (card.recommended) {
+    const label = t("card.recommended");
+    const width = Math.min(box.w - 20, measure(context, label, 15) + 24);
+    context.fillStyle = SHADOW;
+    context.fillRect(box.x + box.w / 2 - width / 2 - 3, box.y - 31, width + 6, 32);
     context.fillStyle = "#a7f070";
-    const ribbon = Math.min(box.w - 20, measure(context, t("card.recommended"), 15) + 24);
-    context.fillRect(box.x + box.w - 10 - ribbon, box.y - 16, ribbon, 30);
-    text(context, t("card.recommended"), box.x + box.w - 10 - ribbon / 2, box.y - 10, 15, SHADOW, "center");
+    context.fillRect(box.x + box.w / 2 - width / 2, box.y - 28, width, 26);
+    text(context, label, box.x + box.w / 2, box.y - 23, 15, SHADOW, "center");
   }
-  const badge = card.kind === "evolve" ? t("card.evolve") : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
-  text(context, `[${index + 1}]`, box.x + 20, box.y + 22, 18, "#9fb0d0");
-  text(context, badge, box.x + box.w - 20, box.y + 22, 18, card.kind === "evolve" ? GOLD : "#73eff7", "right");
-  if (card.kind !== "passive") {
-    const icon = weaponIcon(card.id);
-    const scale = Math.floor(64 / Math.max(icon.width, icon.height));
-    context.imageSmoothingEnabled = false;
-    context.drawImage(icon, box.x + box.w / 2 - (icon.width * scale) / 2, box.y + 60, icon.width * scale, icon.height * scale);
-  } else {
-    panel(context, { x: box.x + box.w / 2 - 34, y: box.y + 58, w: 68, h: 68 });
-    text(context, abbreviation(passiveName(card.id)), box.x + box.w / 2, box.y + 80, 24, "#a7f070", "center");
+  const tile = { x: box.x + box.w / 2 - 56, y: box.y + 58, w: 112, h: 112 };
+  iconTile(context, tile, accent);
+  drawIcon(context, card.kind === "passive" ? passiveIcon(card.id) : weaponIcon(card.id), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 96);
+  const name = cardName(card);
+  text(context, name, box.x + box.w / 2, box.y + 186, fitSize(context, name, box.w - 32, 26), INK, "center");
+  if (card.kind !== "evolve") {
+    drawPips(context, card, box.x + box.w / 2, box.y + 222);
   }
-  text(context, cardName(card), box.x + box.w / 2, box.y + 144, fitSize(context, cardName(card), box.w - 32, 26), INK, "center");
-  wrap(context, cardBlurb(card), box.w - 44, 16).slice(0, 3).forEach((line, lineIndex) =>
-    text(context, line, box.x + box.w / 2, box.y + 184 + lineIndex * 24, 16, "#c8cfe0", "center"),
+  wrap(context, cardBlurb(card), box.w - 40, 15).slice(0, 2).forEach((line, lineIndex) =>
+    text(context, line, box.x + box.w / 2, box.y + 248 + lineIndex * 21, 15, "#c8cfe0", "center"),
   );
-  card.changes.slice(0, 4).forEach((change, lineIndex) => {
-    const y = box.y + 256 + lineIndex * 28;
-    text(context, changeLabel(change), box.x + 24, y, 16, "#9fb0d0");
-    text(context, `${changeValue(change, change.before)} → ${changeValue(change, change.after)}`, box.x + box.w - 24, y, 16, "#a7f070", "right");
+  const inset = { x: box.x + 14, y: box.y + 298, w: box.w - 28, h: box.h - 312 };
+  context.fillStyle = CARD_INSET;
+  context.fillRect(inset.x, inset.y, inset.w, inset.h);
+  card.changes.slice(0, 3).forEach((change, lineIndex) => {
+    const y = inset.y + 10 + lineIndex * 24;
+    text(context, changeLabel(change), inset.x + 12, y, 15, "#9fb0d0");
+    text(context, `${changeValue(change, change.before)} ▸ ${changeValue(change, change.after)}`, inset.x + inset.w - 12, y, 15, accent, "right");
   });
+  const key = { x: box.x + box.w / 2 - 18, y: box.y + box.h - 14, w: 36, h: 30 };
+  context.fillStyle = SHADOW;
+  context.fillRect(key.x - 3, key.y - 3, key.w + 6, key.h + 6);
+  context.fillStyle = hovered ? accent : TILE_LIGHT;
+  context.fillRect(key.x, key.y, key.w, key.h);
+  text(context, String(index + 1), key.x + key.w / 2, key.y + 6, 18, hovered ? SHADOW : INK, "center");
 }
 
 export function drawPause(context: CanvasRenderingContext2D, state: ArenaState): void {

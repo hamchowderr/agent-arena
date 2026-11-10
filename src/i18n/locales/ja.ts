@@ -21,6 +21,8 @@ export const ja = {
   "levelUp.skip": "[X] スキップ（{count}）",
   "card.recommended": "★ おすすめ",
   "card.evolve": "進化",
+  "card.weapon": "武器",
+  "card.passive": "パッシブ",
   "card.new": "新規",
   "card.levelChange": "LV {from} → {to}",
 

@@ -21,6 +21,8 @@ export const pt = {
   "levelUp.skip": "[X] Pular ({count})",
   "card.recommended": "★ RECOMENDADA",
   "card.evolve": "EVOLUIR",
+  "card.weapon": "ARMA",
+  "card.passive": "PASSIVA",
   "card.new": "NOVA",
   "card.levelChange": "NV {from} → {to}",
 

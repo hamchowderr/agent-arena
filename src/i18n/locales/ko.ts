@@ -21,6 +21,8 @@ export const ko = {
   "levelUp.skip": "[X] 건너뛰기 ({count})",
   "card.recommended": "★ 추천",
   "card.evolve": "진화",
+  "card.weapon": "무기",
+  "card.passive": "패시브",
   "card.new": "신규",
   "card.levelChange": "LV {from} → {to}",
 
