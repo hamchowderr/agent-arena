@@ -1,6 +1,6 @@
 import { WORLDS, type EnemyKind, type RegularKind } from "../sim/arena/content";
 import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, ENEMY_SHOT, eliteSprite, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
-import { enemySprite } from "./world-enemies";
+import { enemySprite, wallSprite } from "./world-enemies";
 import { bossSprite } from "./bosses";
 import { agentClips, enemyClips } from "./clips";
 import { WEAPON_STAGES, weaponSprite } from "./weapon-art";
@@ -145,7 +145,8 @@ function worldEntries(tier: number): Entry[] {
   const regular = kinds.flatMap((kind) => (kind === "boss" ? [] : [{ grid: shade([enemySprite(world.id, kind)], look.faction), scale: RENDER_SCALE.regular }]));
   const eliteKind = world.slots[3];
   const elite = eliteKind ? [{ grid: shade([eliteSprite(enemySprite(world.id, eliteKind))], look.faction), scale: RENDER_SCALE.elite }] : [];
-  return [...regular, ...elite, { grid: shade([bossSprite(world.id)], look.faction), scale: RENDER_SCALE.boss }];
+  const wall = { grid: shade([wallSprite(world.id)], look.faction), scale: RENDER_SCALE.regular };
+  return [...regular, wall, ...elite, { grid: shade([bossSprite(world.id)], look.faction), scale: RENDER_SCALE.boss }];
 }
 
 export function enemySheet(): Picture {

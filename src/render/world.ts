@@ -35,7 +35,7 @@ import {
 import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FPS, DEATH_FRAMES, WALK_FRAMES } from "../art/animate";
 import { RENDER_SCALE } from "../art/art-rules";
 import { WEAPON_STAGES, weaponSprite, weaponStage, type WeaponStage } from "../art/weapon-art";
-import { BOSS_CLIP_START, bossClips, enemyClips, WALK_FPS } from "../art/clips";
+import { BOSS_CLIP_START, bossClips, enemyClips, WALK_FPS, wallClips } from "../art/clips";
 import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import type { Sprite } from "../art/sprites";
 import { agentClips } from "../art/clips";
@@ -73,6 +73,7 @@ const ENEMY_CAPACITY: Readonly<Record<RegularKind, number>> = {
   lootRunner: 2,
 };
 const ELITE_CAPACITY = 2;
+const WALL_CAPACITY = 48;
 const DEATH_CAPACITY = 48;
 const AGENT_WALK_FPS = 10;
 const MAX_DYING = 160;
@@ -311,6 +312,7 @@ export class ArenaRenderer {
   private readonly shadows: ShadowBatch;
   private enemies: Record<EnemyKind, SpriteBatch>;
   private elites: Record<RegularKind, SpriteBatch>;
+  private walls: SpriteBatch;
   private deaths: Record<RegularKind, SpriteBatch>;
   private eliteDeaths: Record<RegularKind, SpriteBatch>;
   private bossDeath: SpriteBatch;
@@ -429,6 +431,7 @@ export class ArenaRenderer {
     this.shadows = new ShadowBatch(this.scene, 1400);
     this.enemies = this.enemyBatches(WORLD_LOOKS[1], 1);
     this.elites = this.eliteBatches(WORLD_LOOKS[1], 1);
+    this.walls = this.wallBatch(WORLD_LOOKS[1], 1);
     this.deaths = this.deathBatches(WORLD_LOOKS[1], 1, false);
     this.eliteDeaths = this.deathBatches(WORLD_LOOKS[1], 1, true);
     this.bossDeath = this.bossDeathBatch(1);
@@ -549,6 +552,10 @@ export class ArenaRenderer {
     return batches;
   }
 
+  private wallBatch(look: WorldLook, tier: Tier): SpriteBatch {
+    return this.atlasBatch(atlasImage(wallClips(worldOf(tier), look.faction)), RENDER_SCALE.regular, WALL_CAPACITY, 0);
+  }
+
   private eliteBatches(look: WorldLook, tier: Tier): Record<RegularKind, SpriteBatch> {
     const batches = {} as Record<RegularKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
@@ -611,9 +618,10 @@ export class ArenaRenderer {
     map.repeat.set(40, 40);
     material.map = map;
     material.needsUpdate = true;
-    for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths)]) {
+    for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths), this.walls]) {
       batch.dispose(this.scene);
     }
+    this.walls = this.wallBatch(look, tier);
     this.enemies = this.enemyBatches(look, tier);
     this.elites = this.eliteBatches(look, tier);
     this.deaths = this.deathBatches(look, tier, false);
@@ -662,7 +670,7 @@ export class ArenaRenderer {
   }
 
   private syncEnemies(state: ArenaState): void {
-    const batches = [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths), this.bossDeath];
+    const batches = [this.walls, ...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths), this.bossDeath];
     for (const batch of batches) {
       batch.begin();
     }
@@ -692,7 +700,7 @@ export class ArenaRenderer {
       }
       const hurt = enemy.hitFlash > 0;
       const frame = hurt ? WALK_FRAMES + (enemy.hitFlash > HIT_FLASH_TICKS / 2 ? 0 : 1) : telegraph ? 0 : this.walkFrame(enemy.kind, enemy.id, state.tick);
-      const batch = enemy.elite ? this.elites[enemy.kind] : this.enemies[enemy.kind];
+      const batch = enemy.wall ? this.walls : enemy.elite ? this.elites[enemy.kind] : this.enemies[enemy.kind];
       batch.add(x, 0, z, telegraph && Math.floor(state.tick / 3) % 2 === 0, null, frame, flip, enemy.fake && seesFakes);
     }
     for (let index = this.dying.length - 1; index >= 0; index -= 1) {

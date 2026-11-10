@@ -2,7 +2,7 @@ import type { RegularKind, WorldId } from "../sim/arena/content";
 import type { Tier } from "../sim/tiers";
 import { deathFrames, hurtFrames, squash, walkFrames, type DeathSheet } from "./animate";
 import { eliteSprite } from "./arena-sprites";
-import { enemySprite } from "./world-enemies";
+import { enemySprite, wallSprite } from "./world-enemies";
 import { agentBody } from "./agent";
 import { bossSprite } from "./bosses";
 import { shade, type ColorGrid } from "./shade";
@@ -30,6 +30,11 @@ export function enemyClips(world: WorldId, kind: RegularKind, faction: string, e
   const walk = frames.map((frame) => shade([frame], faction));
   const rest = elite ? eliteSprite(sprite) : sprite;
   return { moving: [...walk, ...hurtFrames(walk[0] ?? [])], death: deathFrames(shade([rest], faction)) };
+}
+
+export function wallClips(world: WorldId, faction: string): ColorGrid[] {
+  const wall = shade([wallSprite(world)], faction);
+  return [wall, wall, wall, wall, ...hurtFrames(wall)];
 }
 
 export const BOSS_CLIP_START = { idle: 0, windup: 4, impact: 7, hurt: 10 } as const;
