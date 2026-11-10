@@ -3,12 +3,15 @@ import { kitingBot, pickRecommended } from "./bot";
 import { restoreAmount } from "./cards";
 import { ELITE_SECOND, ENEMIES, LOOT_RUNNER_ESCAPE_SECONDS, PASSIVES, SPLIT_COUNT, SPLIT_INTO, WAVES, WEAPONS, WORLDS, type EnemyKind } from "./content";
 import { STAGED_EVENTS } from "./formations";
-import { distanceSquared, px, seconds } from "./math";
+import { distanceSquared, percentOf, px, seconds } from "./math";
 import {
   BOSS_CHEST_PRIZES,
   ELITE_CHEST_PRIZES,
   FUSE_TICKS,
   GEM_LIFE_TICKS,
+  LEVEL_UP_HEAL_PERCENT,
+  maxHealth,
+  xpToNext,
   GEM_SETTLE_TICKS,
   IDLE,
   choose,
@@ -280,6 +283,15 @@ describe("enemy behaviors", () => {
     step(state, IDLE);
     expect(state.gems).not.toContain(gem);
     expect(state.xp).toBe(0);
+  });
+
+  it("heals the agent a little on every level-up", () => {
+    const state = quietArena(47);
+    state.player.health = 10;
+    state.gems.push({ x: state.player.x, y: state.player.y, value: xpToNext(state.level), chest: false, prizes: 0, settle: 0, life: GEM_LIFE_TICKS, pulled: true });
+    step(state, IDLE);
+    expect(state.level).toBe(2);
+    expect(state.player.health).toBe(10 + percentOf(maxHealth(state), LEVEL_UP_HEAL_PERCENT));
   });
 
   it("still levels up and heals once every card is maxed or banished", () => {
