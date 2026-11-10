@@ -113,7 +113,7 @@ export const ja = {
   "world.synergex.boss": "ザ・プロセスオーナー",
   "world.synergex.pitch": "うちのプランナーが君の代わりに計画する。永遠に。",
   "world.trustMe.rival": "TrustMe.ai",
-  "world.trustMe.boss": "ザ・自信過剰エキスパート",
+  "world.trustMe.boss": "自信満々のエキスパート",
   "world.trustMe.pitch": "出典なんていらない。ただ信じて。",
 
   "weapon.prompt.name": "プロンプト",

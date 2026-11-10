@@ -73,7 +73,7 @@ export const fr = {
   "story.bossArrives": "{rival} veut te louer son agent",
   "boss.phase2": "Phase 2 · Le test",
   "boss.phase3": "Phase 3 · Acquisition",
-  "boss.checkPassed": "Ton {part} tient bon",
+  "boss.checkPassed": "Test réussi : {part}",
   "boss.checkFailed": "Pas de {part}. Ça va faire mal.",
   "boss.phase3Line": "Bats-le avant qu'il n'acquière ton agent",
   "boss.acquire": "Acquis dans {time}",
