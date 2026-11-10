@@ -1,27 +1,58 @@
 import type { Tier } from "../sim/tiers";
+import { BED, BOSS_TEMPO_BONUS, bossLayers, TITLE_TRACK, WORLD_TRACKS, type Track, type TrackLayer } from "./tracks";
 
-export interface ScoreLayer {
+export type MusicCue =
+  | { readonly kind: "title" }
+  | { readonly kind: "world"; readonly world: number; readonly tier: Tier; readonly boss: boolean };
+
+export interface MusicSituation {
+  readonly onTitle: boolean;
   readonly tier: Tier;
-  readonly name: string;
-  readonly code: string;
+  readonly bossesDown: number;
+  readonly bossId: number | null;
 }
 
-export const SCORE_LAYERS: readonly ScoreLayer[] = [
-  { tier: 1, name: "Drone", code: 'note("<c3 g2 ab2 bb2>").s("triangle").attack(.4).release(1.5).gain(.25)' },
-  { tier: 2, name: "Bass", code: 'note("<c2 [~ c2] eb2 [~ g1]>*2").s("sawtooth").lpf(700).decay(.2).sustain(.3).gain(.35)' },
-  { tier: 3, name: "Kick", code: 'note("c1*4").s("sine").decay(.18).sustain(0).gain(.8)' },
-  { tier: 4, name: "Arp", code: 'note("c4 eb4 g4 bb4 g4 eb4").fast(2).s("square").lpf(1800).decay(.1).sustain(0).gain(.12)' },
-  { tier: 5, name: "Hats and lead", code: 'stack(s("white*8").decay(.03).sustain(0).gain(.08), note("<g4 bb4 c5 [eb5 d5]>").s("sawtooth").lpf(2400).gain(.12))' },
-];
-
-export const SCORE_CPM = 30;
-
-export function layersFor(tier: Tier): readonly ScoreLayer[] {
-  return SCORE_LAYERS.filter((layer) => layer.tier <= tier);
+export function cueFor(situation: MusicSituation): MusicCue {
+  if (situation.onTitle) {
+    return { kind: "title" };
+  }
+  const world = Math.min(situation.bossesDown, WORLD_TRACKS.length - 1);
+  return { kind: "world", world, tier: situation.tier, boss: situation.bossId !== null };
 }
 
-export function scoreFor(tier: Tier): string {
-  const layers = layersFor(tier).map((layer) => `  ${layer.code}`);
-  return `stack(\n${layers.join(",\n")}\n).cpm(${SCORE_CPM})`;
+export function cueKey(cue: MusicCue): string {
+  return cue.kind === "title" ? "title" : `world-${cue.world}-tier-${cue.tier}${cue.boss ? "-boss" : ""}`;
 }
 
+export function trackFor(cue: MusicCue): Track {
+  if (cue.kind === "title") {
+    return TITLE_TRACK;
+  }
+  const track = WORLD_TRACKS[cue.world];
+  if (!track) {
+    throw new RangeError(`No track for world ${cue.world}`);
+  }
+  return track;
+}
+
+export function layersFor(cue: MusicCue): readonly TrackLayer[] {
+  const track = trackFor(cue);
+  if (cue.kind === "title") {
+    return [...BED, ...track.layers];
+  }
+  const grown = track.layers.filter((layer) => layer.tier <= cue.tier);
+  if (!cue.boss) {
+    return [...BED, ...grown];
+  }
+  return [...BED, ...grown.filter((layer) => layer.name !== "Drums"), ...bossLayers(track)];
+}
+
+export function tempoFor(cue: MusicCue): number {
+  const { cpm } = trackFor(cue);
+  return cue.kind === "world" && cue.boss ? cpm + BOSS_TEMPO_BONUS : cpm;
+}
+
+export function scoreFor(cue: MusicCue): string {
+  const layers = layersFor(cue).map((layer) => `  ${layer.code}`);
+  return `stack(\n${layers.join(",\n")}\n).cpm(${tempoFor(cue)})`;
+}
