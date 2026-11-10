@@ -38,7 +38,7 @@ async function boot(): Promise<void> {
   if (!worldCanvas || !hudCanvas || !hud) {
     return;
   }
-  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale } = await import("./game/arena-game");
+  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale, postToXUrl, readReplayCode, replayCodeFrom, replayUrl } = await import("./game/arena-game");
   hudCanvas.width = HUD_WIDTH;
   hudCanvas.height = HUD_HEIGHT;
   const query = new URLSearchParams(window.location.search);
@@ -54,16 +54,49 @@ async function boot(): Promise<void> {
       }
       saveLocale(code);
     },
-    onScreen: (screen, state) => {
+    onScreen: (screen) => {
       hudCanvas.dataset["screen"] = screen;
-      if (screen === "results") {
-        const url = new URL(window.location.href);
-        url.searchParams.set("seed", String(state.seed));
-        window.history.replaceState(null, "", url);
+    },
+    onReplayCode: (seed, code) => {
+      window.history.replaceState(null, "", replayUrl(window.location.href, seed, code));
+    },
+    share: async ({ target, seed, code, title, text }) => {
+      const link = replayUrl(window.location.href, seed, code);
+      if (target === "x") {
+        const tab = window.open(postToXUrl(text, link), "_blank");
+        if (tab) {
+          tab.opener = null;
+        }
+        return tab ? "opened" : "failed";
+      }
+      if (typeof navigator.share === "function") {
+        try {
+          await navigator.share({ title, text, url: link });
+          return "shared";
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return "cancelled";
+          }
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(link);
+        return "copied";
+      } catch {
+        return "failed";
       }
     },
   });
   await game.changeLocale(detectLocale([wanted, readSavedLocale(), ...navigator.languages]));
+  const sharedCode = replayCodeFrom(window.location.hash);
+  if (sharedCode !== null) {
+    const replay = await readReplayCode(sharedCode);
+    if (replay) {
+      game.watch(replay, sharedCode);
+    } else {
+      game.notifyBrokenReplay();
+    }
+  }
   loadingNote?.remove();
   const toHud = (event: PointerEvent) => {
     const box = hudCanvas.getBoundingClientRect();

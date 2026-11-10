@@ -4,12 +4,14 @@ import { Effects } from "../render/effects";
 import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
 import { WORLDS } from "../sim/arena/content";
 import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { choose, createArena, currentWorld, reroll, skip, step, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
+import { createArena, currentWorld, elapsedSeconds, score, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
+import { act, decodeReplay, encodeReplay, replayMatches, startRecording, type Action, type Recording, type Replay } from "../sim/arena/replay";
 import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
 import { currentLocale, nextLocale, setLocale, t, type LocaleCode } from "../i18n";
 import { STICK_RADIUS, STILL, stickDirection, stickKnob, type Direction, type Stick } from "./controls";
-import { bossName, bossPitch, passiveName, rivalName, tierStage } from "./format";
+import { bossName, bossPitch, clock, passiveName, rivalName, tierStage } from "./format";
+import { replayCode } from "./replay-link";
 import {
   cardRects,
   drawBanner,
@@ -17,15 +19,20 @@ import {
   drawDialogue,
   drawFloats,
   drawLevelUp,
+  drawNotice,
   drawPause,
+  drawReplayHud,
   drawResults,
   drawRunHud,
   drawTitle,
   HUD_HEIGHT,
   HUD_WIDTH,
   inside,
+  POST_RECT,
   REROLL_RECT,
+  SHARE_RECT,
   SKIP_RECT,
+  WATCH_RECT,
   type Banner,
   type Dialogue,
   type FloatText,
@@ -37,12 +44,36 @@ const STEP_MS = 1000 / TICKS_PER_SECOND;
 const MAX_STEPS_PER_FRAME = 4;
 const MAX_FLOATS = 90;
 const HUD_PER_RENDER = HUD_WIDTH / RENDER_WIDTH;
+const REPLAY_SPEEDS = [1, 2, 4] as const;
+const REPLAY_CARD_HOLD = 50;
+const NOTICE_FRAMES = 150;
+
+export type ShareTarget = "sheet" | "x";
+export type ShareOutcome = "shared" | "copied" | "opened" | "cancelled" | "failed";
+
+export interface ShareRequest {
+  readonly target: ShareTarget;
+  readonly seed: number;
+  readonly code: string;
+  readonly title: string;
+  readonly text: string;
+}
+
+interface Playback {
+  readonly replay: Replay;
+  index: number;
+  speed: number;
+  hold: number;
+  desynced: boolean;
+}
 
 export interface GameHooks {
   readonly newSeed: () => number;
   readonly now: () => number;
   readonly onScreen: (screen: Screen, state: ArenaState) => void;
   readonly onLocale?: (code: LocaleCode) => void;
+  readonly onReplayCode?: (seed: number, code: string) => void;
+  readonly share?: (request: ShareRequest) => Promise<ShareOutcome>;
 }
 
 function runOver(state: ArenaState): boolean {
@@ -68,6 +99,13 @@ export class ArenaGame {
   private hover = -1;
   private musicOn = false;
   private renderedTier: Tier = 1;
+  private recording: Recording | null = null;
+  private playback: Playback | null = null;
+  private watched: { readonly mismatch: boolean } | null = null;
+  private shareCode: string | null = null;
+  private lastRecording: Recording | null = null;
+  private lastWatched: Replay | null = null;
+  private notice: { readonly text: string; age: number } | null = null;
 
   constructor(
     worldCanvas: HTMLCanvasElement,
@@ -83,6 +121,46 @@ export class ArenaGame {
     if (!this.allows("start")) {
       return;
     }
+    this.begin(seed);
+    this.recording = startRecording(seed);
+    this.lastRecording = this.recording;
+    this.lastWatched = null;
+    this.shareCode = null;
+    this.setScreen("run");
+  }
+
+  watch(replay: Replay, code: string | null = null): void {
+    if (!this.allows("start")) {
+      return;
+    }
+    const speed = this.playback?.speed ?? 1;
+    this.begin(replay.seed);
+    this.recording = null;
+    this.lastWatched = replay;
+    this.playback = { replay, index: 0, speed, hold: 0, desynced: false };
+    if (code !== null) {
+      this.shareCode = code;
+    }
+    this.setScreen("run");
+  }
+
+  get watching(): boolean {
+    return this.playback !== null;
+  }
+
+  notify(text: string): void {
+    this.notice = { text, age: 0 };
+  }
+
+  notifyBrokenReplay(): void {
+    this.notify(t("replay.broken"));
+  }
+
+  private begin(seed: number): void {
+    this.playback = null;
+    this.watched = null;
+    this.hover = -1;
+    this.accumulator = 0;
     this.state = createArena(seed);
     this.renderer.setWorld(1, seed);
     this.renderedTier = 1;
@@ -97,7 +175,60 @@ export class ArenaGame {
       age: 0,
       life: 260,
     };
-    this.setScreen("run");
+  }
+
+  private act(action: Action): boolean {
+    return act(this.state, this.recording, action);
+  }
+
+  private ownReplay(): Replay | null {
+    return this.recording ? decodeReplay(encodeReplay(this.recording, this.state)) : null;
+  }
+
+  private watchAgain(): void {
+    const replay = this.lastWatched ?? this.ownReplay();
+    if (replay) {
+      this.watch(replay);
+    }
+  }
+
+  private finishRun(): void {
+    const playback = this.playback;
+    if (playback) {
+      this.watched = { mismatch: playback.desynced || !replayMatches(playback.replay, this.state) };
+      this.playback = null;
+    } else if (this.recording) {
+      const recording = this.recording;
+      const final = this.state;
+      void replayCode(recording, final).then((code) => {
+        if (this.lastRecording === recording) {
+          this.shareCode = code;
+          this.hooks.onReplayCode?.(final.seed, code);
+        }
+      });
+    }
+    this.setScreen("results");
+  }
+
+  private share(target: ShareTarget): void {
+    const code = this.shareCode;
+    const share = this.hooks.share;
+    if (code === null || !share) {
+      return;
+    }
+    const state = this.state;
+    const text = t("share.post", { time: clock(elapsedSeconds(state)), kills: state.kills, score: score(state) });
+    void share({ target, seed: state.seed, code, title: t("share.title"), text }).then((outcome) => {
+      if (outcome === "copied") {
+        this.notify(t("share.copied"));
+      } else if (outcome === "failed") {
+        this.notify(t("share.failed"));
+      }
+    });
+  }
+
+  private playAgain(): void {
+    this.start(this.watched ? this.state.seed : this.hooks.newSeed());
   }
 
   phase(): RunPhase {
@@ -142,7 +273,13 @@ export class ArenaGame {
     }
     if (this.screen === "results") {
       if (lower === "enter") {
-        this.start();
+        this.playAgain();
+      } else if (lower === "s") {
+        this.share("sheet");
+      } else if (lower === "x") {
+        this.share("x");
+      } else if (lower === "w") {
+        this.watchAgain();
       } else if (lower === "t" && this.allows("toTitle")) {
         this.setScreen("title");
       }
@@ -158,14 +295,20 @@ export class ArenaGame {
     if (this.screen !== "run") {
       return;
     }
+    if (this.playback) {
+      if (lower === "f") {
+        this.cycleSpeed(this.playback);
+      }
+      return;
+    }
     if (this.state.status === "levelUp") {
       const index = ["1", "2", "3"].indexOf(lower);
       if (index >= 0) {
-        choose(this.state, index);
+        this.act({ kind: "choose", index });
       } else if (lower === "r") {
-        reroll(this.state);
+        this.act({ kind: "reroll" });
       } else if (lower === "x") {
-        skip(this.state);
+        this.act({ kind: "skip" });
       }
       return;
     }
@@ -184,7 +327,21 @@ export class ArenaGame {
       return;
     }
     if (this.screen === "results" && pressed) {
-      this.start();
+      if (inside(SHARE_RECT, x, y)) {
+        this.share("sheet");
+      } else if (inside(POST_RECT, x, y)) {
+        this.share("x");
+      } else if (inside(WATCH_RECT, x, y)) {
+        this.watchAgain();
+      } else {
+        this.playAgain();
+      }
+      return;
+    }
+    if (this.screen === "run" && this.playback) {
+      if (pressed) {
+        this.cycleSpeed(this.playback);
+      }
       return;
     }
     if (this.screen !== "run" || this.state.status !== "levelUp") {
@@ -196,12 +353,12 @@ export class ArenaGame {
       return;
     }
     if (this.hover >= 0) {
-      choose(this.state, this.hover);
+      this.act({ kind: "choose", index: this.hover });
       this.hover = -1;
     } else if (inside(REROLL_RECT, x, y)) {
-      reroll(this.state);
+      this.act({ kind: "reroll" });
     } else if (inside(SKIP_RECT, x, y)) {
-      skip(this.state);
+      this.act({ kind: "skip" });
     }
   }
 
@@ -217,7 +374,7 @@ export class ArenaGame {
   }
 
   wantsStick(): boolean {
-    return this.screen === "run" && this.state.status === "playing";
+    return this.screen === "run" && this.state.status === "playing" && !this.playback;
   }
 
   touchStart(id: number, x: number, y: number): boolean {
@@ -256,7 +413,7 @@ export class ArenaGame {
   }
 
   nudgeCard(delta: number): void {
-    if (this.screen !== "run" || this.state.status !== "levelUp") {
+    if (this.screen !== "run" || this.state.status !== "levelUp" || this.playback) {
       return;
     }
     const count = this.state.cards.length;
@@ -264,8 +421,11 @@ export class ArenaGame {
   }
 
   confirm(): void {
+    if (this.screen === "run" && this.playback) {
+      return;
+    }
     if (this.screen === "run" && this.state.status === "levelUp") {
-      choose(this.state, Math.max(0, this.hover));
+      this.act({ kind: "choose", index: Math.max(0, this.hover) });
       this.hover = -1;
       return;
     }
@@ -318,12 +478,14 @@ export class ArenaGame {
     this.last = now;
     this.frameCount += 1;
     if (this.hitStop > 0 && this.screen === "run") {
-      this.hitStop -= 1;
+      this.hitStop -= this.playback ? this.playback.speed : 1;
+    } else if (this.screen === "run" && this.playback) {
+      this.advancePlayback(this.playback, elapsed);
     } else if (this.screen === "run" && this.state.status === "playing") {
       this.accumulator += elapsed;
       let steps = 0;
       while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && this.state.status === "playing") {
-        step(this.state, this.input());
+        this.act({ kind: "step", input: this.input() });
         this.handle(this.state.events);
         this.accumulator -= STEP_MS;
         steps += 1;
@@ -332,7 +494,7 @@ export class ArenaGame {
         this.accumulator = 0;
       }
       if (runOver(this.state)) {
-        this.setScreen("results");
+        this.finishRun();
       }
     } else {
       this.accumulator = 0;
@@ -349,6 +511,53 @@ export class ArenaGame {
     this.renderer.render();
     this.drawHud(elapsed / 1000);
     this.drawStick(this.hud);
+  }
+
+  private cycleSpeed(playback: Playback): void {
+    const at = REPLAY_SPEEDS.findIndex((speed) => speed === playback.speed);
+    playback.speed = REPLAY_SPEEDS[(at + 1) % REPLAY_SPEEDS.length] ?? 1;
+  }
+
+  private advancePlayback(playback: Playback, elapsed: number): void {
+    const actions = playback.replay.actions;
+    if (this.state.status === "levelUp") {
+      const next = actions[playback.index];
+      this.hover = next?.kind === "choose" ? next.index : -1;
+      playback.hold += playback.speed;
+      if (playback.hold < REPLAY_CARD_HOLD) {
+        return;
+      }
+      playback.hold = 0;
+      this.hover = -1;
+      if (!next) {
+        this.finishRun();
+        return;
+      }
+      playback.index += 1;
+      playback.desynced ||= !this.act(next);
+      return;
+    }
+    this.accumulator += elapsed * playback.speed;
+    const limit = MAX_STEPS_PER_FRAME * playback.speed;
+    let steps = 0;
+    while (this.accumulator >= STEP_MS && steps < limit && this.state.status === "playing") {
+      const next = actions[playback.index];
+      if (!next) {
+        this.finishRun();
+        return;
+      }
+      playback.index += 1;
+      playback.desynced ||= !this.act(next);
+      this.handle(this.state.events);
+      this.accumulator -= STEP_MS;
+      steps += 1;
+    }
+    if (steps === limit) {
+      this.accumulator = 0;
+    }
+    if (runOver(this.state)) {
+      this.finishRun();
+    }
   }
 
   private handle(events: readonly ArenaEvent[]): void {
@@ -484,6 +693,7 @@ export class ArenaGame {
     const project = (x: number, y: number) => this.projectToHud(x, y);
     if (this.screen === "title") {
       drawTitle(context, this.frameCount);
+      this.drawNotice();
       return;
     }
     const paused = this.screen !== "run" || this.state.status !== "playing";
@@ -516,14 +726,30 @@ export class ArenaGame {
     if (this.screen === "run" && this.state.status === "levelUp") {
       drawLevelUp(context, this.state, this.hover);
     }
+    if (this.playback && this.screen !== "results") {
+      drawReplayHud(context, this.playback.speed);
+    }
     if (this.screen === "paused") {
       drawPause(context, this.state);
     }
     if (this.screen === "results") {
-      drawResults(context, this.state);
+      drawResults(context, this.state, { replay: this.watched !== null, mismatch: this.watched?.mismatch ?? false, shareReady: this.shareCode !== null && this.hooks.share !== undefined });
+    }
+    this.drawNotice();
+  }
+
+  private drawNotice(): void {
+    if (!this.notice) {
+      return;
+    }
+    this.notice.age += 1;
+    drawNotice(this.hud, this.notice.text, Math.min(this.notice.age / 8, (NOTICE_FRAMES - this.notice.age) / 20));
+    if (this.notice.age > NOTICE_FRAMES) {
+      this.notice = null;
     }
   }
 }
 
 export { HUD_HEIGHT, HUD_WIDTH, RENDER_HEIGHT, RENDER_WIDTH };
+export { postToXUrl, readReplayCode, replayCodeFrom, replayUrl } from "./replay-link";
 export { detectLocale } from "../i18n";
