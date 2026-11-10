@@ -1,5 +1,6 @@
 import { runBattle } from "./sim/battle";
 import { buildAgent } from "./sim/loadout";
+import { playMusic, stopMusic } from "./audio/music";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const context = canvas?.getContext("2d");
@@ -16,3 +17,13 @@ if (canvas && context) {
   context.fillText("AGENT ARENA", canvas.width / 2, canvas.height / 2 - 20);
   context.fillText(`${winnerName} wins in ${result.ticks} ticks`, canvas.width / 2, canvas.height / 2 + 10);
 }
+
+const musicButton = document.querySelector<HTMLButtonElement>("#music");
+let musicOn = false;
+
+musicButton?.addEventListener("click", () => {
+  musicOn = !musicOn;
+  musicButton.textContent = musicOn ? "Stop music" : "Play music";
+  musicButton.setAttribute("aria-pressed", String(musicOn));
+  void (musicOn ? playMusic(2) : stopMusic());
+});
