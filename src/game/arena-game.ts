@@ -603,6 +603,7 @@ export class ArenaGame {
               age: 0,
             });
           }
+          this.renderer.spark(event.x, event.y, event.boss);
           if (event.crit) {
             this.effects.spawn("spark", event.x, event.y);
           }
@@ -683,6 +684,7 @@ export class ArenaGame {
         case "slam":
           this.renderer.shake = Math.max(this.renderer.shake, 1.1);
           this.effects.spawn("slam", event.x, event.y);
+          this.renderer.mark(event.x, event.y, "crater");
           break;
         case "dash":
           break;
@@ -690,6 +692,7 @@ export class ArenaGame {
           this.renderer.shake = Math.max(this.renderer.shake, 0.6);
           this.renderer.pulse(event.x, event.y, event.radius, "#ef7d57");
           this.effects.spawn("pow", event.x, event.y);
+          this.renderer.mark(event.x, event.y, "large");
           break;
         case "eliteArrives":
           this.renderer.shake = Math.max(this.renderer.shake, 0.5);

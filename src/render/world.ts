@@ -33,7 +33,8 @@ import {
   DRONE,
 } from "../art/arena-sprites";
 import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FPS, DEATH_FRAMES, WALK_FRAMES } from "../art/animate";
-import { RENDER_SCALE } from "../art/art-rules";
+import { ENEMY_ART_TIER, RENDER_SCALE } from "../art/art-rules";
+import { MARK_SIZES, MARK_WIDTH, markFrameIndex, markFrames, SPARK_FRAMES, sparkFrames, type MarkSize } from "../art/impacts";
 import { WEAPON_STAGES, weaponSprite, weaponStage, type WeaponStage } from "../art/weapon-art";
 import { BOSS_CLIP_START, bossClips, enemyClips, WALK_FPS, wallClips } from "../art/clips";
 import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
@@ -77,6 +78,14 @@ const WALL_CAPACITY = 48;
 const DEATH_CAPACITY = 48;
 const AGENT_WALK_FPS = 10;
 const MAX_DYING = 160;
+const SPARK_CAPACITY = 64;
+const SPARK_TICKS_PER_FRAME = 3;
+const SPARK_HEIGHT = 8;
+const BOSS_SPARK_HEIGHT = 26;
+const MARK_CAPACITY = 96;
+const MARK_LIFE_TICKS = 6 * TICKS_PER_SECOND;
+const MARK_FADE_TICKS = 2 * TICKS_PER_SECOND;
+const MARK_BY_TIER = { fodder: "small", mid: "medium", heavy: "large", boss: "crater" } as const;
 const FACING_DEADZONE = px(3);
 const DEATH_TICKS_PER_FRAME = TICKS_PER_SECOND / DEATH_FPS;
 const MAX_HAZARD_SPRITES = 40;
@@ -192,6 +201,20 @@ class SpriteBatch {
     (this.mesh.material as MeshBasicMaterial).map?.dispose();
     (this.mesh.material as MeshBasicMaterial).dispose();
   }
+}
+
+interface Spark {
+  readonly x: number;
+  readonly z: number;
+  readonly height: number;
+  readonly start: number;
+}
+
+interface Stain {
+  readonly x: number;
+  readonly z: number;
+  readonly size: MarkSize;
+  readonly start: number;
 }
 
 interface Dying {
@@ -319,6 +342,10 @@ export class ArenaRenderer {
   private bossVolley = -1;
   private bossImpactTick = -1000;
   private readonly dying: Dying[] = [];
+  private readonly sparkBatch: SpriteBatch;
+  private markBatch: SpriteBatch;
+  private readonly sparks: Spark[] = [];
+  private readonly stains: Stain[] = [];
   private readonly facing = new Map<number, boolean>();
   private tick = 0;
   private lastPlayerX = 0;
@@ -435,6 +462,8 @@ export class ArenaRenderer {
     this.deaths = this.deathBatches(WORLD_LOOKS[1], 1, false);
     this.eliteDeaths = this.deathBatches(WORLD_LOOKS[1], 1, true);
     this.bossDeath = this.bossDeathBatch(1);
+    this.sparkBatch = this.onTop(this.atlasBatch(atlasImage(sparkFrames()), 1, SPARK_CAPACITY, 0));
+    this.markBatch = this.markBatchFor(WORLD_LOOKS[1]);
     this.chests = this.batch([CHEST], 2, 4, false);
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
       const batch = this.atlasBatch(atlasImage(agentClips(tier)), 1, 1, 0);
@@ -574,7 +603,59 @@ export class ArenaRenderer {
     return batches;
   }
 
+  private markBatchFor(look: WorldLook): SpriteBatch {
+    const image = atlasImage(markFrames(look.ground[0]));
+    const batch = new SpriteBatch(this.scene, pixelTexture(image.canvas), MARK_WIDTH, MARK_WIDTH, MARK_CAPACITY, true, { frames: image.frames, sink: 0 });
+    const material = batch.mesh.material as MeshBasicMaterial;
+    material.transparent = true;
+    material.opacity = 0.85;
+    material.depthWrite = false;
+    batch.mesh.renderOrder = 1;
+    return batch;
+  }
+
+  spark(x: number, y: number, boss: boolean): void {
+    if (this.sparks.length >= SPARK_CAPACITY) {
+      this.sparks.shift();
+    }
+    this.sparks.push({ x: x / SUB, z: y / SUB, height: boss ? BOSS_SPARK_HEIGHT : SPARK_HEIGHT, start: this.tick });
+  }
+
+  mark(x: number, y: number, size: MarkSize): void {
+    if (this.stains.length >= MARK_CAPACITY) {
+      this.stains.shift();
+    }
+    this.stains.push({ x: x / SUB, z: y / SUB, size, start: this.tick });
+  }
+
+  private syncImpacts(): void {
+    this.sparkBatch.begin();
+    for (let index = this.sparks.length - 1; index >= 0; index -= 1) {
+      const spark = this.sparks[index];
+      const frame = spark ? Math.floor((this.tick - spark.start) / SPARK_TICKS_PER_FRAME) : SPARK_FRAMES;
+      if (!spark || frame >= SPARK_FRAMES || frame < 0) {
+        this.sparks.splice(index, 1);
+        continue;
+      }
+      this.sparkBatch.add(spark.x, spark.height - 7, spark.z + 1, false, null, frame);
+    }
+    this.sparkBatch.commit();
+    this.markBatch.begin();
+    for (let index = this.stains.length - 1; index >= 0; index -= 1) {
+      const stain = this.stains[index];
+      const age = stain ? this.tick - stain.start : MARK_LIFE_TICKS;
+      if (!stain || age >= MARK_LIFE_TICKS || age < 0) {
+        this.stains.splice(index, 1);
+        continue;
+      }
+      this.markBatch.add(stain.x, 0.1, stain.z, false, null, markFrameIndex(stain.size, age > MARK_LIFE_TICKS - MARK_FADE_TICKS));
+    }
+    this.markBatch.commit();
+  }
+
   die(x: number, y: number, kind: EnemyKind, elite: boolean, playerX: number): void {
+    const size = MARK_BY_TIER[ENEMY_ART_TIER[kind]];
+    this.mark(x, y, elite && size !== "crater" ? MARK_SIZES[MARK_SIZES.indexOf(size) + 1] ?? size : size);
     if (this.dying.length >= MAX_DYING) {
       return;
     }
@@ -629,6 +710,10 @@ export class ArenaRenderer {
     this.bossDeath.dispose(this.scene);
     this.bossDeath = this.bossDeathBatch(tier);
     this.dying.length = 0;
+    this.markBatch.dispose(this.scene);
+    this.markBatch = this.markBatchFor(look);
+    this.stains.length = 0;
+    this.sparks.length = 0;
     this.facing.clear();
     this.propChunkX = Number.NaN;
   }
@@ -785,6 +870,7 @@ export class ArenaRenderer {
     this.shadows.begin();
     this.tick = state.tick;
     this.syncEnemies(state);
+    this.syncImpacts();
     this.syncPatches(state);
 
     for (const batch of this.agent) {

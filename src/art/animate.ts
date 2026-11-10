@@ -123,7 +123,7 @@ function hex(r: number, g: number, b: number): string {
   return `#${channel(r)}${channel(g)}${channel(b)}`;
 }
 
-function mix(color: string, toward: string, amount: number): string {
+export function mix(color: string, toward: string, amount: number): string {
   const a = rgbOf(color);
   const b = rgbOf(toward);
   return hex(a.r + (b.r - a.r) * amount, a.g + (b.g - a.g) * amount, a.b + (b.b - a.b) * amount);
