@@ -5,7 +5,7 @@ import { ENEMIES, WORLDS } from "./content";
 import { px, seconds } from "./math";
 import { isTerminal, nextPhase, RUN_EVENTS, RUN_LOOP, RUN_PHASES, runLoopMermaid, type RunPhase } from "./run-loop";
 import { exploreModel, modelKey, statesThatCanReach } from "./run-loop-model";
-import { createArena, step, IDLE, type ArenaState } from "./sim";
+import { createArena, freeOrder, step, IDLE, type ArenaState } from "./sim";
 
 function finalBossDiesAsPlayerIsHit(): ArenaState {
   const state = createArena(3);
@@ -15,10 +15,10 @@ function finalBossDiesAsPlayerIsHit(): ArenaState {
   state.weapons.length = 0;
   state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
   const at = state.player;
-  state.enemies.push({ id: 9001, kind: "boss", x: at.x + px(4), y: at.y, health: 1, maxHealth: 1, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 999, radius: px(ENEMIES.boss.radius), xp: 1 });
+  state.enemies.push({ id: 9001, kind: "boss", x: at.x + px(4), y: at.y, health: 1, maxHealth: 1, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 999, radius: px(ENEMIES.boss.radius), xp: 1, ...freeOrder(0, 0) });
   state.bossId = 9001;
   state.nextBossTick = Number.MAX_SAFE_INTEGER;
-  state.enemies.push({ id: 9002, kind: "brute", x: at.x, y: at.y + px(2), health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 999, radius: px(9), xp: 1 });
+  state.enemies.push({ id: 9002, kind: "brute", x: at.x, y: at.y + px(2), health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 999, radius: px(9), xp: 1, ...freeOrder(0, 0) });
   step(state, IDLE);
   return state;
 }

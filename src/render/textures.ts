@@ -109,3 +109,51 @@ export function glowTexture(size: number, color: string, alpha: number): CanvasT
   texture.colorSpace = SRGBColorSpace;
   return texture;
 }
+
+export interface PatchLook {
+  readonly base: string;
+  readonly mark: string;
+  readonly rim: string;
+  readonly pattern: "speckle" | "coins" | "stripes" | "waves";
+}
+
+export function patchTexture(look: PatchLook): CanvasTexture {
+  const size = 48;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (context) {
+    const half = size / 2;
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const dx = (x + 0.5 - half) / half;
+        const dy = (y + 0.5 - half) / half;
+        const distance = dx * dx + dy * dy;
+        if (distance > 1) {
+          continue;
+        }
+        context.fillStyle = distance > 0.8 ? look.rim : patchMark(look.pattern, x, y) ? look.mark : look.base;
+        context.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+  return pixelTexture(canvas);
+}
+
+function patchMark(pattern: PatchLook["pattern"], x: number, y: number): boolean {
+  switch (pattern) {
+    case "speckle":
+      return (x * 7 + y * 13) % 11 === 0 || (x * 5 + y * 3) % 17 === 0;
+    case "coins": {
+      const cx = (x % 12) - 6;
+      const cy = (y % 12) - 6;
+      const ring = cx * cx + cy * cy;
+      return ring >= 6 && ring <= 14;
+    }
+    case "stripes":
+      return Math.floor((x + y) / 4) % 2 === 0;
+    case "waves":
+      return (y + Math.round(Math.sin(x / 3) * 2)) % 8 === 0;
+  }
+}

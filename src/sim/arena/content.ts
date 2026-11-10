@@ -165,10 +165,31 @@ export const WAVES: readonly WaveRow[] = [
   { fromSecond: 90, weights: [3, 2, 2, 1, 1], interval: 27, batch: 5 },
 ];
 
+export const OPENING_PACK = 8;
+export const WALL_RING_SECOND = 30;
 export const LOOT_RUNNER_SECOND = 45;
 export const ELITE_SECOND = 60;
 export const ELITE_SLOT = 3;
 export const LOOT_RUNNER_ESCAPE_SECONDS = 20;
+export const SIGNATURE_SECOND = 75;
+export const SWARM_SECOND = 100;
+
+export type SignatureWave = "viralThread" | "inboxZero" | "canyonToll" | "allHands" | "mirageSchool";
+export type WorldTwist = "none" | "leech" | "throttle" | "decoys" | "fakes";
+export type GroundHazard = "dust" | "meter" | "gate" | "darkWater";
+
+export interface TwistDefinition {
+  readonly slot: number;
+  readonly counter: PassiveId | null;
+}
+
+export const TWISTS: Readonly<Record<WorldTwist, TwistDefinition>> = {
+  none: { slot: 0, counter: null },
+  leech: { slot: 2, counter: "vectorMemory" },
+  throttle: { slot: 3, counter: "planner" },
+  decoys: { slot: 2, counter: "planner" },
+  fakes: { slot: 0, counter: "guardrails" },
+};
 
 export type WorldId = "hustlr" | "notionally" | "meterly" | "synergex" | "trustMe";
 
@@ -186,14 +207,17 @@ export interface World {
   readonly minAlive: number;
   readonly maxAlive: number;
   readonly maxShooters: number;
+  readonly signature: SignatureWave;
+  readonly twist: WorldTwist;
+  readonly hazard: GroundHazard | null;
 }
 
 export const WORLDS: readonly World[] = [
-  { id: "hustlr", tier: 1, bossHealth: 700, pattern: "spread", check: { kind: "passive", passive: "fewShot" }, slots: ["grunt", "runner", "shooter", "splitter", "heavy"], minAlive: 20, maxAlive: 260, maxShooters: 2 },
-  { id: "notionally", tier: 2, bossHealth: 1600, pattern: "trail", check: { kind: "passive", passive: "vectorMemory" }, slots: ["grunt", "splitter", "runner", "brute", "heavy"], minAlive: 60, maxAlive: 300, maxShooters: 2 },
-  { id: "meterly", tier: 3, bossHealth: 3200, pattern: "charge", check: { kind: "weapons", count: 2 }, slots: ["grunt", "charger", "exploder", "brute", "heavy"], minAlive: 90, maxAlive: 340, maxShooters: 4 },
-  { id: "synergex", tier: 4, bossHealth: 5600, pattern: "bursts", check: { kind: "passive", passive: "planner" }, slots: ["grunt", "runner", "splitter", "brute", "heavy"], minAlive: 120, maxAlive: 380, maxShooters: 4 },
-  { id: "trustMe", tier: 5, bossHealth: 9000, pattern: "fakes", check: { kind: "passive", passive: "guardrails" }, slots: ["grunt", "splitter", "shooter", "brute", "heavy"], minAlive: 150, maxAlive: 420, maxShooters: 6 },
+  { id: "hustlr", tier: 1, bossHealth: 700, pattern: "spread", check: { kind: "passive", passive: "fewShot" }, slots: ["grunt", "runner", "shooter", "splitter", "heavy"], minAlive: 20, maxAlive: 260, maxShooters: 2, signature: "viralThread", twist: "none", hazard: null },
+  { id: "notionally", tier: 2, bossHealth: 1600, pattern: "trail", check: { kind: "passive", passive: "vectorMemory" }, slots: ["grunt", "splitter", "runner", "brute", "heavy"], minAlive: 60, maxAlive: 300, maxShooters: 2, signature: "inboxZero", twist: "leech", hazard: "dust" },
+  { id: "meterly", tier: 3, bossHealth: 3200, pattern: "charge", check: { kind: "weapons", count: 2 }, slots: ["grunt", "charger", "exploder", "brute", "heavy"], minAlive: 90, maxAlive: 340, maxShooters: 4, signature: "canyonToll", twist: "throttle", hazard: "meter" },
+  { id: "synergex", tier: 4, bossHealth: 5600, pattern: "bursts", check: { kind: "passive", passive: "planner" }, slots: ["grunt", "runner", "splitter", "brute", "heavy"], minAlive: 120, maxAlive: 380, maxShooters: 4, signature: "allHands", twist: "decoys", hazard: "gate" },
+  { id: "trustMe", tier: 5, bossHealth: 9000, pattern: "fakes", check: { kind: "passive", passive: "guardrails" }, slots: ["grunt", "splitter", "shooter", "brute", "heavy"], minAlive: 150, maxAlive: 420, maxShooters: 6, signature: "mirageSchool", twist: "fakes", hazard: "darkWater" },
 ];
 
 export const BOSS_PHASE_FLOORS = [60, 30, 0] as const;

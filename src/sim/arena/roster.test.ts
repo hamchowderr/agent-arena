@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { kitingBot, pickRecommended } from "./bot";
 import { ELITE_SECOND, ENEMIES, LOOT_RUNNER_ESCAPE_SECONDS, SPLIT_COUNT, SPLIT_INTO, WAVES, WORLDS, type EnemyKind } from "./content";
+import { STAGED_EVENTS } from "./formations";
 import { distanceSquared, px, seconds } from "./math";
 import {
   FUSE_TICKS,
@@ -8,6 +9,7 @@ import {
   KNOCKBACK,
   TELEGRAPH_TICKS,
   createArena,
+  freeOrder,
   step,
   type ArenaEvent,
   type ArenaState,
@@ -20,6 +22,9 @@ function quietArena(seed: number): ArenaState {
   state.nextBossTick = Number.MAX_SAFE_INTEGER;
   state.lootSpawned = true;
   state.eliteSpawned = true;
+  for (const event of STAGED_EVENTS) {
+    state.staged.add(event);
+  }
   return state;
 }
 
@@ -45,6 +50,7 @@ function place(state: ArenaState, kind: EnemyKind, dx: number, dy: number, healt
     damage: definition.damage,
     radius: px(definition.radius),
     xp: definition.xp,
+    ...freeOrder(state.player.x + dx, state.player.y + dy),
   };
   state.enemies.push(enemy);
   return enemy;

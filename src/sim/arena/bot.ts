@@ -49,6 +49,13 @@ export function kitingBot(state: ArenaState): Input {
       awayY += Math.sign(player.y - hazard.y) * 200;
     }
   }
+  for (const patch of state.patches) {
+    const reach = patch.radius + px(10);
+    if (distanceSquared(patch.x, patch.y, player.x, player.y) < reach * reach) {
+      awayX += Math.sign(player.x - patch.x) * 120;
+      awayY += Math.sign(player.y - patch.y) * 120;
+    }
+  }
   let best = Number.POSITIVE_INFINITY;
   let gemX = 0;
   let gemY = 0;

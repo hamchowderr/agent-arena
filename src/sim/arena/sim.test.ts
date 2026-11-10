@@ -3,7 +3,7 @@ import { playBotRun } from "./bot";
 import { offerCards } from "./cards";
 import { MAX_PASSIVES, MAX_WEAPONS, WEAPONS } from "./content";
 import { distanceSquared, px, seconds, SUB } from "./math";
-import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, IDLE, maxHealth, step, xpToNext } from "./sim";
+import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, freeOrder, IDLE, maxHealth, step, xpToNext } from "./sim";
 
 describe("arena sim", () => {
   it("replays the same run from the same seed", () => {
@@ -100,7 +100,7 @@ describe("knockback", () => {
     state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
     state.nextBossTick = Number.MAX_SAFE_INTEGER;
     const at = state.player;
-    state.enemies.push({ id: 7001, kind: "brute", x: at.x + px(30), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1 });
+    state.enemies.push({ id: 7001, kind: "brute", x: at.x + px(30), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1, ...freeOrder(0, 0) });
     const brute = state.enemies[state.enemies.length - 1];
     const startX = brute?.x ?? 0;
     step(state, IDLE);
