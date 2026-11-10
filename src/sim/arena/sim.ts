@@ -11,14 +11,20 @@ import {
   EVOLUTIONS,
   LOOT_RUNNER_ESCAPE_SECONDS,
   LOOT_RUNNER_SECOND,
+  OPENING_PACK,
+  SIGNATURE_SECOND,
   SPLIT_COUNT,
   SPLIT_INTO,
+  SWARM_SECOND,
+  TWISTS,
+  WALL_RING_SECOND,
   WAVES,
   PASSIVES,
   WEAPONS,
   WORLDS,
   type BossPattern,
   type EnemyKind,
+  type GroundHazard,
   type RegularKind,
   type WaveRow,
   type WorldId,
@@ -29,6 +35,7 @@ import {
   type WeaponKind,
   type World,
 } from "./content";
+import { openingPack, signatureWave, SPIRAL_TURN, swarmStream, wallRing, type EnemyOrder, type FormationSpawn, type StagedEvent } from "./formations";
 import { Grid } from "./grid";
 import { isSimPhase, nextPhase, type RunEvent, type SimPhase } from "./run-loop";
 import { ANGLE_STEPS, cosStep, distanceSquared, isqrt, percentOf, px, scaleToLength, seconds, sinStep, SUB, TICKS_PER_SECOND, UNIT } from "./math";
@@ -97,8 +104,50 @@ export const SLAM_WARNING = 60;
 export const SLAM_RADIUS = px(40);
 export const SLAM_EVERY = seconds(5);
 export const SLAM_DAMAGE = 22;
+export const PATCH_EVERY = seconds(5);
+export const PATCH_CAP = 5;
+export const PATCH_LIFE = seconds(18);
+export const PATCH_WARMUP = seconds(0.8);
+export const PATCH_MIN_RADIUS = px(22);
+export const PATCH_RADIUS_SPREAD = px(14);
+export const DUST_SPEED_PERCENT = 55;
+export const GATE_ROOT_TICKS = seconds(0.5);
+export const METER_EVERY = seconds(1);
+export const DARK_TARGET_RANGE = px(120);
+export const TARGET_RANGE = px(260);
+export const LEECH_TICKS = seconds(3);
+export const LEECH_PERCENT = 50;
+export const LEECH_COUNTER_PERCENT = 10;
+export const THROTTLE_RANGE = px(56);
+export const THROTTLE_SLOW_PERCENT = 15;
+export const THROTTLE_COUNTER_PERCENT = 5;
+export const FAKE_SHARE_PERCENT = 33;
+export const FAKE_COUNTER_PERCENT = 8;
+export const WALL_DAMAGE_PERCENT = 50;
+export const SWEEP_DAMAGE_PERCENT = 60;
 
 export type EnemyMode = "move" | "telegraph" | "dash";
+
+export interface SpawnOptions {
+  readonly order?: EnemyOrder;
+  readonly life?: number;
+  readonly driftX?: number;
+  readonly driftY?: number;
+  readonly goalX?: number;
+  readonly goalY?: number;
+  readonly anchorX?: number;
+  readonly anchorY?: number;
+  readonly fake?: boolean;
+  readonly guardsFront?: boolean;
+  readonly wall?: boolean;
+  readonly healthPercent?: number;
+}
+
+const NO_OPTIONS: SpawnOptions = {};
+
+export function freeOrder(x: number, y: number) {
+  return { order: "free" as EnemyOrder, life: 0, driftX: 0, driftY: 0, goalX: x, goalY: y, anchorX: x, anchorY: y, fake: false, guardsFront: false, wall: false };
+}
 
 export interface Enemy {
   readonly id: number;
@@ -120,6 +169,17 @@ export interface Enemy {
   readonly damage: number;
   readonly radius: number;
   readonly xp: number;
+  order: EnemyOrder;
+  life: number;
+  readonly driftX: number;
+  readonly driftY: number;
+  readonly goalX: number;
+  readonly goalY: number;
+  readonly anchorX: number;
+  readonly anchorY: number;
+  readonly fake: boolean;
+  readonly guardsFront: boolean;
+  readonly wall: boolean;
 }
 
 export interface Projectile {
@@ -187,6 +247,16 @@ export interface Hazard {
   life: number;
 }
 
+export interface Patch {
+  readonly id: number;
+  readonly kind: GroundHazard;
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  life: number;
+  warmup: number;
+}
+
 export interface Slam {
   readonly x: number;
   readonly y: number;
@@ -220,7 +290,13 @@ export type ArenaEvent =
   | { readonly kind: "blast"; readonly x: number; readonly y: number; readonly radius: number }
   | { readonly kind: "eliteArrives"; readonly x: number; readonly y: number }
   | { readonly kind: "chest"; readonly x: number; readonly y: number; readonly prize: Card | null; readonly reel: readonly Card[] }
-  | { readonly kind: "lootEscaped" };
+  | { readonly kind: "lootEscaped" }
+  | { readonly kind: "staged"; readonly event: StagedEvent; readonly world: number }
+  | { readonly kind: "fakePopped"; readonly x: number; readonly y: number }
+  | { readonly kind: "blocked"; readonly x: number; readonly y: number }
+  | { readonly kind: "leeched" }
+  | { readonly kind: "metered"; readonly x: number; readonly y: number }
+  | { readonly kind: "rooted" };
 
 export type Status = SimPhase;
 
@@ -243,6 +319,10 @@ export interface Player {
   dashRecharge: number;
   invulnerable: number;
   regenCarry: number;
+  leechTicks: number;
+  rootTicks: number;
+  gateId: number;
+  meterCarry: number;
 }
 
 export interface Killer {
@@ -282,6 +362,10 @@ export interface ArenaState {
   worldStartTick: number;
   eliteSpawned: boolean;
   lootSpawned: boolean;
+  readonly staged: Set<StagedEvent>;
+  readonly patches: Patch[];
+  patchTimer: number;
+  quietTicks: number;
   nextId: number;
   killedBy: Killer | null;
   readonly damageByWeapon: Map<WeaponId, number>;
@@ -307,6 +391,10 @@ export function createArena(seed: number): ArenaState {
       dashRecharge: 0,
       invulnerable: 0,
       regenCarry: 0,
+      leechTicks: 0,
+      rootTicks: 0,
+      gateId: 0,
+      meterCarry: 0,
     },
     enemies: [],
     projectiles: [],
@@ -333,6 +421,10 @@ export function createArena(seed: number): ArenaState {
     worldStartTick: 0,
     eliteSpawned: false,
     lootSpawned: false,
+    staged: new Set(),
+    patches: [],
+    patchTimer: PATCH_EVERY,
+    quietTicks: 0,
     nextId: 1,
     killedBy: null,
     damageByWeapon: new Map(),
@@ -378,8 +470,59 @@ export function critPercent(state: ArenaState): number {
   return Math.min(100, BASE_CRIT + statTotal(state, "crit"));
 }
 
+export function twistCounterLevel(state: ArenaState): number {
+  const counter = TWISTS[currentWorld(state).twist].counter;
+  return counter === null ? 0 : passiveLevel(state, counter);
+}
+
+export function leechPercent(state: ArenaState): number {
+  return state.player.leechTicks > 0 ? Math.max(LEECH_COUNTER_PERCENT, LEECH_PERCENT - LEECH_COUNTER_PERCENT * twistCounterLevel(state)) : 0;
+}
+
 export function pickupRadius(state: ArenaState): number {
-  return percentOf(BASE_PICKUP, 100 + statTotal(state, "pickup"));
+  return percentOf(percentOf(BASE_PICKUP, 100 + statTotal(state, "pickup")), 100 - leechPercent(state));
+}
+
+export function throttlePercent(state: ArenaState): number {
+  const world = currentWorld(state);
+  if (world.twist !== "throttle") {
+    return 0;
+  }
+  const kind = world.slots[TWISTS.throttle.slot];
+  const found = { near: false };
+  state.grid.forEachNear(state.player.x, state.player.y, THROTTLE_RANGE + px(16), (enemy) => {
+    if (enemy.kind === kind && !enemy.fake && distanceSquared(enemy.x, enemy.y, state.player.x, state.player.y) <= THROTTLE_RANGE * THROTTLE_RANGE) {
+      found.near = true;
+      return true;
+    }
+    return false;
+  });
+  return found.near ? Math.max(0, THROTTLE_SLOW_PERCENT - THROTTLE_COUNTER_PERCENT * twistCounterLevel(state)) : 0;
+}
+
+export function fakeSharePercent(state: ArenaState): number {
+  return currentWorld(state).twist === "fakes" ? Math.max(0, FAKE_SHARE_PERCENT - FAKE_COUNTER_PERCENT * twistCounterLevel(state)) : 0;
+}
+
+export function seesThroughFakes(state: ArenaState): boolean {
+  const twist = currentWorld(state).twist;
+  if (twist === "decoys") {
+    return twistCounterLevel(state) > 0;
+  }
+  return state.weapons.some((weapon) => weapon.id === "ragSearch");
+}
+
+export function patchAt(state: ArenaState, x: number, y: number, kind: GroundHazard): Patch | null {
+  for (const patch of state.patches) {
+    if (patch.kind === kind && patch.warmup === 0 && distanceSquared(patch.x, patch.y, x, y) <= patch.radius * patch.radius) {
+      return patch;
+    }
+  }
+  return null;
+}
+
+export function inDarkWater(state: ArenaState): boolean {
+  return patchAt(state, state.player.x, state.player.y, "darkWater") !== null;
 }
 
 export function playerSpeed(state: ArenaState): number {
@@ -439,6 +582,7 @@ export function step(state: ArenaState, input: Input): void {
   updateSlam(state);
   updateBossFight(state);
   moveShots(state);
+  updatePatches(state);
   collectGems(state);
   touchPlayer(state);
   removeDead(state);
@@ -458,6 +602,12 @@ function movePlayer(state: ArenaState, input: Input): void {
   if (player.invulnerable > 0) {
     player.invulnerable -= 1;
   }
+  if (player.leechTicks > 0) {
+    player.leechTicks -= 1;
+  }
+  if (player.rootTicks > 0) {
+    player.rootTicks -= 1;
+  }
   if (input.moveX !== 0 || input.moveY !== 0) {
     const facing = scaleToLength(input.moveX, input.moveY, UNIT);
     player.facingX = facing.x;
@@ -475,11 +625,13 @@ function movePlayer(state: ArenaState, input: Input): void {
     player.y += Math.trunc((player.facingY * DASH_SPEED) / UNIT);
     return;
   }
-  if (input.moveX === 0 && input.moveY === 0) {
+  if ((input.moveX === 0 && input.moveY === 0) || player.rootTicks > 0) {
     return;
   }
   const slowed = bossPenalty(state, "trail") && inHazard(state, player.x, player.y);
-  const velocity = scaleToLength(input.moveX, input.moveY, slowed ? Math.trunc(playerSpeed(state) / 2) : playerSpeed(state));
+  const base = slowed ? Math.trunc(playerSpeed(state) / 2) : playerSpeed(state);
+  const dusty = patchAt(state, player.x, player.y, "dust") !== null;
+  const velocity = scaleToLength(input.moveX, input.moveY, dusty ? percentOf(base, DUST_SPEED_PERCENT) : base);
   player.x += velocity.x;
   player.y += velocity.y;
 }
@@ -538,15 +690,120 @@ function spawnEnemies(state: ArenaState): void {
   const floor = world.minAlive;
   if (state.bossId === null) {
     spawnSpecials(state);
+    stageEvents(state);
   }
   const row = currentWave(state);
   const elapsed = state.tick - state.worldStartTick;
-  let wanted = elapsed % row.interval === 0 ? row.batch : 0;
+  if (state.quietTicks > 0) {
+    state.quietTicks -= 1;
+  }
+  let wanted = elapsed % row.interval === 0 && state.quietTicks === 0 ? row.batch : 0;
   if (state.bossId === null && regularsAlive(state) < floor) {
     wanted = Math.max(wanted, Math.min(MAX_SPAWNS_PER_TICK, floor - regularsAlive(state)));
   }
   for (let index = 0; index < wanted && regularsAlive(state) < Math.min(ceiling, MAX_ENEMIES); index += 1) {
-    spawnEnemy(state, pickSlot(state, row), state.rng.intBelow(ANGLE_STEPS), SPAWN_DISTANCE, false);
+    const kind = pickSlot(state, row);
+    const fake = kind === world.slots[TWISTS.fakes.slot] && state.rng.chancePercent(fakeSharePercent(state));
+    spawnEnemy(state, kind, state.rng.intBelow(ANGLE_STEPS), SPAWN_DISTANCE, false, fake ? FAKE_OPTIONS : NO_OPTIONS);
+  }
+}
+
+const FAKE_OPTIONS: SpawnOptions = { fake: true };
+
+export const EVENT_QUIET: Readonly<Record<StagedEvent, number>> = {
+  opening: seconds(3),
+  wallRing: seconds(12),
+  signature: seconds(10),
+  swarm: seconds(6),
+};
+
+function stage(state: ArenaState, event: StagedEvent, second: number, spawns: () => readonly FormationSpawn[]): void {
+  if (state.staged.has(event) || worldSeconds(state) < second) {
+    return;
+  }
+  state.staged.add(event);
+  state.quietTicks = EVENT_QUIET[event];
+  const world = currentWorld(state);
+  for (const spawn of spawns()) {
+    if (regularsAlive(state) >= MAX_ENEMIES) {
+      break;
+    }
+    const kind = world.slots[spawn.slot] ?? world.slots[0];
+    spawnEnemyAt(state, kind, state.player.x + spawn.x, state.player.y + spawn.y, false, {
+      ...spawn,
+      goalX: state.player.x + spawn.goalX,
+      goalY: state.player.y + spawn.goalY,
+      anchorX: state.player.x,
+      anchorY: state.player.y,
+    });
+  }
+  if (event !== "opening") {
+    state.events.push({ kind: "staged", event, world: state.bossesDown });
+  }
+}
+
+function stageEvents(state: ArenaState): void {
+  const world = currentWorld(state);
+  const index = state.bossesDown;
+  const angle = () => state.rng.intBelow(ANGLE_STEPS);
+  stage(state, "opening", 0, () => openingPack(OPENING_PACK, angle()));
+  stage(state, "wallRing", WALL_RING_SECOND, () => wallRing(index, angle()));
+  stage(state, "signature", SIGNATURE_SECOND, () => signatureWave(world.signature, index, angle()));
+  stage(state, "swarm", SWARM_SECOND, () => swarmStream(angle(), state.rng.intBelow(px(60)) - px(30)));
+}
+
+function updatePatches(state: ArenaState): void {
+  const hazard = currentWorld(state).hazard;
+  const player = state.player;
+  for (const patch of state.patches) {
+    patch.life -= 1;
+    if (patch.warmup > 0) {
+      patch.warmup -= 1;
+    }
+  }
+  if (hazard === null) {
+    return;
+  }
+  state.patchTimer -= 1;
+  if (state.patchTimer <= 0) {
+    state.patchTimer = PATCH_EVERY;
+    if (state.patches.length < PATCH_CAP) {
+      const angle = state.rng.intBelow(ANGLE_STEPS);
+      const distance = px(60) + state.rng.intBelow(px(140));
+      state.patches.push({
+        id: state.nextId,
+        kind: hazard,
+        x: player.x + Math.trunc((cosStep(angle) * distance) / UNIT),
+        y: player.y + Math.trunc((sinStep(angle) * distance) / UNIT),
+        radius: PATCH_MIN_RADIUS + state.rng.intBelow(PATCH_RADIUS_SPREAD),
+        life: PATCH_LIFE,
+        warmup: PATCH_WARMUP,
+      });
+      state.nextId += 1;
+    }
+  }
+  if (player.dashTicks > 0) {
+    return;
+  }
+  const gate = patchAt(state, player.x, player.y, "gate");
+  if (gate === null) {
+    player.gateId = 0;
+  } else if (gate.id !== player.gateId) {
+    player.gateId = gate.id;
+    player.rootTicks = GATE_ROOT_TICKS;
+    state.events.push({ kind: "rooted" });
+  }
+  if (patchAt(state, player.x, player.y, "meter") === null) {
+    player.meterCarry = 0;
+    return;
+  }
+  player.meterCarry += 1;
+  if (player.meterCarry >= METER_EVERY) {
+    player.meterCarry = 0;
+    if (state.xp > 0) {
+      state.xp -= 1;
+      state.events.push({ kind: "metered", x: player.x, y: player.y });
+    }
   }
 }
 
@@ -570,26 +827,29 @@ function healthScale(state: ArenaState): number {
   return 100 + Math.trunc(seconds / 2) + state.bossesDown * 60;
 }
 
-function spawnEnemy(state: ArenaState, kind: EnemyKind, angle: number, distance: number, elite: boolean): Enemy {
+function spawnEnemy(state: ArenaState, kind: EnemyKind, angle: number, distance: number, elite: boolean, options: SpawnOptions = NO_OPTIONS): Enemy {
   return spawnEnemyAt(
     state,
     kind,
     state.player.x + Math.trunc((cosStep(angle) * distance) / UNIT),
     state.player.y + Math.trunc((sinStep(angle) * distance) / UNIT),
     elite,
+    options,
   );
 }
 
-function spawnEnemyAt(state: ArenaState, kind: EnemyKind, x: number, y: number, elite: boolean): Enemy {
+function spawnEnemyAt(state: ArenaState, kind: EnemyKind, x: number, y: number, elite: boolean, options: SpawnOptions = NO_OPTIONS): Enemy {
   const definition = ENEMIES[kind];
-  const scaled = kind === "boss" ? (WORLDS[state.bossesDown]?.bossHealth ?? 9000) : percentOf(definition.health, healthScale(state));
-  const health = elite ? scaled * ELITE_HEALTH_TIMES : scaled;
-  const damage = definition.damage === 0 ? 0 : definition.damage + state.bossesDown * 3 + Math.trunc(state.tick / (TICKS_PER_SECOND * 60));
+  const fake = options.fake ?? false;
+  const scaled = kind === "boss" ? (WORLDS[state.bossesDown]?.bossHealth ?? 9000) : percentOf(definition.health, percentOf(healthScale(state), options.healthPercent ?? 100));
+  const health = fake ? 1 : elite ? scaled * ELITE_HEALTH_TIMES : scaled;
+  const full = definition.damage === 0 || fake ? 0 : definition.damage + state.bossesDown * 3 + Math.trunc(state.tick / (TICKS_PER_SECOND * 60));
+  const damage = options.wall ? percentOf(full, WALL_DAMAGE_PERCENT) : options.order === "march" || options.order === "spiral" ? percentOf(full, SWEEP_DAMAGE_PERCENT) : full;
   const enemy: Enemy = {
     id: state.nextId,
     kind,
     elite,
-    mass: elite ? Math.max(definition.mass, 80) : definition.mass,
+    mass: options.wall ? 100 : elite ? Math.max(definition.mass, 80) : definition.mass,
     mode: "move",
     timer: kind === "shooter" ? SHOOTER_EVERY : 0,
     dashX: 0,
@@ -604,7 +864,18 @@ function spawnEnemyAt(state: ArenaState, kind: EnemyKind, x: number, y: number, 
     speed: definition.speed,
     damage: elite ? percentOf(damage, ELITE_DAMAGE_PERCENT) : damage,
     radius: px(elite ? percentOf(definition.radius, ELITE_RADIUS_PERCENT) : definition.radius),
-    xp: elite ? definition.xp * 10 : definition.xp,
+    xp: fake ? 0 : elite ? definition.xp * 10 : definition.xp,
+    order: options.order ?? "free",
+    life: options.life ?? 0,
+    driftX: options.driftX ?? 0,
+    driftY: options.driftY ?? 0,
+    goalX: options.goalX ?? x,
+    goalY: options.goalY ?? y,
+    anchorX: options.anchorX ?? x,
+    anchorY: options.anchorY ?? y,
+    fake,
+    guardsFront: options.guardsFront ?? false,
+    wall: options.wall ?? false,
   };
   state.nextId += 1;
   state.enemies.push(enemy);
@@ -682,6 +953,9 @@ function enemyStep(state: ArenaState, enemy: Enemy): { readonly x: number; reado
   if (enemy.kind === "boss") {
     return chase();
   }
+  if (enemy.order !== "free") {
+    return orderedStep(state, enemy, chase);
+  }
   if (enemy.timer > 0) {
     enemy.timer -= 1;
   }
@@ -755,6 +1029,33 @@ function enemyStep(state: ArenaState, enemy: Enemy): { readonly x: number; reado
   }
 }
 
+function orderedStep(state: ArenaState, enemy: Enemy, chase: () => { readonly x: number; readonly y: number }): { readonly x: number; readonly y: number } {
+  if (enemy.life > 0) {
+    enemy.life -= 1;
+  }
+  if (enemy.life === 0) {
+    if (enemy.order === "spiral") {
+      enemy.order = "free";
+      return chase();
+    }
+    enemy.health = 0;
+    return { x: 0, y: 0 };
+  }
+  switch (enemy.order) {
+    case "march":
+      return { x: enemy.driftX, y: enemy.driftY };
+    case "spiral":
+      return rotate(chase(), SPIRAL_TURN);
+    case "hold": {
+      const dx = enemy.goalX - enemy.x;
+      const dy = enemy.goalY - enemy.y;
+      return dx * dx + dy * dy <= enemy.speed * enemy.speed ? { x: dx, y: dy } : scaleToLength(dx, dy, enemy.speed);
+    }
+    case "free":
+      return chase();
+  }
+}
+
 function explode(state: ArenaState, enemy: Enemy): void {
   enemy.health = 0;
   state.events.push({ kind: "blast", x: enemy.x, y: enemy.y, radius: BLAST_RADIUS });
@@ -767,9 +1068,10 @@ function explode(state: ArenaState, enemy: Enemy): void {
 
 function nearestEnemy(state: ArenaState, x: number, y: number, maxDistance: number): Enemy | null {
   const found: { enemy: Enemy | null; distance: number } = { enemy: null, distance: maxDistance * maxDistance };
+  const grounded = seesThroughFakes(state);
   for (let radius = px(48); found.enemy === null && radius < maxDistance * 2; radius *= 2) {
     state.grid.forEachNear(x, y, Math.min(radius, maxDistance), (enemy) => {
-      if (enemy.health <= 0) {
+      if (enemy.health <= 0 || (grounded && enemy.fake)) {
         return;
       }
       const distance = distanceSquared(x, y, enemy.x, enemy.y);
@@ -783,6 +1085,8 @@ function nearestEnemy(state: ArenaState, x: number, y: number, maxDistance: numb
 }
 
 function fireWeapons(state: ArenaState): void {
+  const throttle = throttlePercent(state);
+  const range = inDarkWater(state) ? DARK_TARGET_RANGE : TARGET_RANGE;
   for (const owned of state.weapons) {
     const definition = WEAPONS[owned.id];
     const stats = weaponStats(owned.id, owned.level);
@@ -798,11 +1102,14 @@ function fireWeapons(state: ArenaState): void {
     if (bossPenalty(state, "charge")) {
       owned.cooldown = percentOf(owned.cooldown, THROTTLE_PERCENT);
     }
+    if (throttle > 0) {
+      owned.cooldown = percentOf(owned.cooldown, 100 + throttle);
+    }
     if (definition.kind === "pulse") {
       pulse(state, owned.id, px(stats.radius), effectiveDamage(state, stats.damage));
       continue;
     }
-    const target = bossInReach(state, BOSS_FOCUS_RANGE) ?? nearestEnemy(state, state.player.x, state.player.y, px(260));
+    const target = bossInReach(state, BOSS_FOCUS_RANGE) ?? nearestEnemy(state, state.player.x, state.player.y, range);
     if (!target) {
       owned.cooldown = 4;
       continue;
@@ -917,11 +1224,12 @@ function moveProjectiles(state: ArenaState): void {
     if (projectile.hallucinated) {
       continue;
     }
+    const grounded = seesThroughFakes(state);
     state.grid.forEachNear(projectile.x, projectile.y, projectile.radius + px(20), (enemy) => {
       if (projectile.pierce <= 0) {
         return true;
       }
-      if (enemy.health <= 0 || projectile.hit.has(enemy.id)) {
+      if (enemy.health <= 0 || projectile.hit.has(enemy.id) || (grounded && enemy.fake)) {
         return;
       }
       const reach = projectile.radius + enemy.radius;
@@ -941,6 +1249,18 @@ function moveProjectiles(state: ArenaState): void {
 function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: WeaponId): void {
   const fight = enemy.id === state.bossId ? state.fight : null;
   if (fight && fight.transition > 0) {
+    return;
+  }
+  if (enemy.guardsFront && facesAgent(state, enemy)) {
+    enemy.hitFlash = 3;
+    if (state.tick % 6 === 0) {
+      state.events.push({ kind: "blocked", x: enemy.x, y: enemy.y });
+    }
+    return;
+  }
+  if (enemy.fake) {
+    enemy.health = 0;
+    state.events.push({ kind: "fakePopped", x: enemy.x, y: enemy.y });
     return;
   }
   const crit = state.rng.chancePercent(critPercent(state));
@@ -977,6 +1297,11 @@ function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: Weap
   defeatEnemy(state, enemy);
 }
 
+function facesAgent(state: ArenaState, enemy: Enemy): boolean {
+  const player = state.player;
+  return distanceSquared(player.x, player.y, enemy.anchorX, enemy.anchorY) < distanceSquared(enemy.x, enemy.y, enemy.anchorX, enemy.anchorY);
+}
+
 function defeatEnemy(state: ArenaState, enemy: Enemy): void {
   state.kills += 1;
   state.events.push({ kind: "kill", x: enemy.x, y: enemy.y, enemy: enemy.kind, elite: enemy.elite });
@@ -990,9 +1315,10 @@ function defeatEnemy(state: ArenaState, enemy: Enemy): void {
   }
   if (enemy.kind === "splitter") {
     const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, KNOCKBACK);
+    const decoy = currentWorld(state).twist === "decoys" ? state.rng.intBelow(SPLIT_COUNT) : -1;
     for (let index = 0; index < SPLIT_COUNT; index += 1) {
       const side = index * 2 - (SPLIT_COUNT - 1);
-      const child = spawnEnemyAt(state, SPLIT_INTO, enemy.x - away.y * side, enemy.y + away.x * side, false);
+      const child = spawnEnemyAt(state, SPLIT_INTO, enemy.x - away.y * side, enemy.y + away.x * side, false, index === decoy ? FAKE_OPTIONS : NO_OPTIONS);
       child.knockX = away.x;
       child.knockY = away.y;
     }
@@ -1040,6 +1366,10 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   state.worldStartTick = state.tick;
   state.eliteSpawned = false;
   state.lootSpawned = false;
+  state.staged.clear();
+  state.quietTicks = 0;
+  state.patches.length = 0;
+  state.patchTimer = PATCH_EVERY;
   if (state.bossesDown >= WORLDS.length) {
     move(state, "finalBossDown");
     return;
@@ -1298,6 +1628,11 @@ function touchPlayer(state: ArenaState): void {
   const hit = found.enemy;
   if (hit !== null) {
     hurtPlayer(state, hit.damage, hit.kind, false);
+    const world = currentWorld(state);
+    if (world.twist === "leech" && hit.kind === world.slots[TWISTS.leech.slot] && state.status === "playing") {
+      state.player.leechTicks = LEECH_TICKS;
+      state.events.push({ kind: "leeched" });
+    }
   }
 }
 
@@ -1333,6 +1668,7 @@ function removeDead(state: ArenaState): void {
   filterInPlace(state.gems, (gem) => !Number.isNaN(gem.x));
   filterInPlace(state.shots, (shot) => shot.life > 0);
   filterInPlace(state.hazards, (hazard) => hazard.life > 0);
+  filterInPlace(state.patches, (patch) => patch.life > 0 && distanceSquared(patch.x, patch.y, player.x, player.y) < DESPAWN_DISTANCE * DESPAWN_DISTANCE);
 }
 
 function filterInPlace<T>(items: T[], keep: (item: T) => boolean): void {

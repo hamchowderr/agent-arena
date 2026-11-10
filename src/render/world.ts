@@ -40,12 +40,12 @@ import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import type { Sprite } from "../art/sprites";
 import { agentClips } from "../art/clips";
 import { agentBody } from "../art/agent";
-import { REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
+import { REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
+import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, seesThroughFakes, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
-import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, pixelTexture, spriteImage, type AtlasImage } from "./textures";
+import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, patchTexture, pixelTexture, spriteImage, type AtlasImage, type PatchLook } from "./textures";
 
 export const RENDER_WIDTH = 480;
 export const RENDER_HEIGHT = 270;
@@ -84,6 +84,16 @@ const BIG_HAZARD_SCALE = 18 / 13;
 const HAZARD_BLINK_TICKS = 40;
 const FLASH_COLOR = new Color(4, 4, 4);
 const PLAIN_COLOR = new Color(1, 1, 1);
+const SEEN_FAKE_COLOR = new Color(0.35, 0.35, 0.45);
+const FAKE_FLICKER_TICKS = 12;
+const FAKE_HIDDEN_TICKS = 3;
+const PATCH_OPACITY = 0.82;
+const PATCH_LOOKS: Readonly<Record<GroundHazard, PatchLook>> = {
+  dust: { base: "#8d8270", mark: "#b7ab92", rim: "#6b6253", pattern: "speckle" },
+  meter: { base: "#b07a22", mark: "#ffd66b", rim: "#7a5214", pattern: "coins" },
+  gate: { base: "#1f7f78", mark: "#9ff6ec", rim: "#0f4a46", pattern: "stripes" },
+  darkWater: { base: "#0b1630", mark: "#3a5a9a", rim: "#050a18", pattern: "waves" },
+};
 
 
 function animate(material: MeshBasicMaterial, frames: number): void {
@@ -146,7 +156,7 @@ class SpriteBatch {
     this.count = 0;
   }
 
-  add(x: number, y: number, z: number, flash = false, rotation: Quaternion | null = null, frame = 0, flip = false): void {
+  add(x: number, y: number, z: number, flash = false, rotation: Quaternion | null = null, frame = 0, flip = false, dim = false): void {
     if (this.count >= this.mesh.instanceMatrix.count) {
       return;
     }
@@ -157,7 +167,7 @@ class SpriteBatch {
       this.matrix.makeTranslation(x, y, z);
     }
     this.mesh.setMatrixAt(this.count, this.matrix);
-    this.mesh.setColorAt(this.count, flash ? FLASH_COLOR : PLAIN_COLOR);
+    this.mesh.setColorAt(this.count, flash ? FLASH_COLOR : dim ? SEEN_FAKE_COLOR : PLAIN_COLOR);
     this.frame?.setX(this.count, frame);
     this.flip?.setX(this.count, flip ? 1 : 0);
     this.count += 1;
@@ -252,6 +262,7 @@ uniform sampler2D scene;
 uniform vec2 texel;
 uniform float hurt;
 uniform float letterbox;
+uniform float dark;
 varying vec2 vUv;
 void main() {
   float edge = clamp((abs(vUv.y - 0.5) - 0.24) / 0.26, 0.0, 1.0);
@@ -264,6 +275,8 @@ void main() {
   vec2 centered = vUv - 0.5;
   float vignette = smoothstep(0.85, 0.25, length(centered * vec2(1.0, 1.25)));
   color.rgb *= mix(0.55, 1.05, vignette);
+  float sight = smoothstep(0.5, 0.18, length(centered * vec2(1.0, 1.6)));
+  color.rgb *= mix(1.0, 0.12 + 0.88 * sight, dark);
   color.rgb = mix(color.rgb, color.rgb * vec3(1.06, 1.0, 0.9), 0.5);
   float border = max(smoothstep(0.42, 0.5, abs(centered.x)), smoothstep(0.40, 0.5, abs(centered.y)));
   color.rgb = mix(color.rgb, vec3(1.0, 0.45, 0.2), border * hurt * 0.85);
@@ -334,7 +347,10 @@ export class ArenaRenderer {
   private propChunkX = Number.NaN;
   private propChunkY = Number.NaN;
   private seed = 0;
+  private readonly patches: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
+  private readonly patchMaterials: Readonly<Record<GroundHazard, MeshBasicMaterial>>;
   hurt = 0;
+  dark = 0;
   letterbox = 0;
   shake = 0;
 
@@ -352,6 +368,7 @@ export class ArenaRenderer {
         texel: { value: [1 / RENDER_WIDTH, 1 / RENDER_HEIGHT] },
         hurt: { value: 0 },
         letterbox: { value: 0 },
+        dark: { value: 0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -394,6 +411,20 @@ export class ArenaRenderer {
     this.bossRing.position.y = 0.45;
     this.bossRing.scale.setScalar(BOSS_RING_RADIUS);
     this.scene.add(this.bossRing);
+
+    const patchMaterial = (kind: GroundHazard) =>
+      new MeshBasicMaterial({ map: patchTexture(PATCH_LOOKS[kind]), transparent: true, opacity: PATCH_OPACITY, alphaTest: 0.1, depthWrite: false, toneMapped: false });
+    this.patchMaterials = { dust: patchMaterial("dust"), meter: patchMaterial("meter"), gate: patchMaterial("gate"), darkWater: patchMaterial("darkWater") };
+    const patchGeometry = new PlaneGeometry(2, 2);
+    patchGeometry.rotateX(-Math.PI / 2);
+    for (let index = 0; index < PATCH_CAP + 2; index += 1) {
+      const mesh = new Mesh(patchGeometry, this.patchMaterials.dust);
+      mesh.position.y = 0.25;
+      mesh.visible = false;
+      mesh.renderOrder = 0;
+      this.scene.add(mesh);
+      this.patches.push(mesh);
+    }
 
     this.shadows = new ShadowBatch(this.scene, 1400);
     this.enemies = this.enemyBatches(WORLD_LOOKS[1], 1);
@@ -635,6 +666,7 @@ export class ArenaRenderer {
     for (const batch of batches) {
       batch.begin();
     }
+    const seesFakes = seesThroughFakes(state);
     if (this.facing.size > state.enemies.length * 2 + 64) {
       this.facing.clear();
     }
@@ -652,11 +684,16 @@ export class ArenaRenderer {
         this.enemies.boss.add(x, 0, z, false, null, this.bossFrame(state, enemy.hitFlash), flip);
         continue;
       }
-      this.shadows.add(x, z, enemy.radius / SUB / 0.55);
+      if (enemy.fake && (state.tick + enemy.id) % FAKE_FLICKER_TICKS < FAKE_HIDDEN_TICKS) {
+        continue;
+      }
+      if (!enemy.fake) {
+        this.shadows.add(x, z, enemy.radius / SUB / 0.55);
+      }
       const hurt = enemy.hitFlash > 0;
       const frame = hurt ? WALK_FRAMES + (enemy.hitFlash > HIT_FLASH_TICKS / 2 ? 0 : 1) : telegraph ? 0 : this.walkFrame(enemy.kind, enemy.id, state.tick);
       const batch = enemy.elite ? this.elites[enemy.kind] : this.enemies[enemy.kind];
-      batch.add(x, 0, z, telegraph && Math.floor(state.tick / 3) % 2 === 0, null, frame, flip);
+      batch.add(x, 0, z, telegraph && Math.floor(state.tick / 3) % 2 === 0, null, frame, flip, enemy.fake && seesFakes);
     }
     for (let index = this.dying.length - 1; index >= 0; index -= 1) {
       const body = this.dying[index];
@@ -740,6 +777,7 @@ export class ArenaRenderer {
     this.shadows.begin();
     this.tick = state.tick;
     this.syncEnemies(state);
+    this.syncPatches(state);
 
     for (const batch of this.agent) {
       batch.begin();
@@ -827,11 +865,11 @@ export class ArenaRenderer {
 
     this.shots.begin();
     this.seenFakes.begin();
-    const seesFakes = (state.passives.get("guardrails") ?? 0) > 0;
+    const seesFakeShots = (state.passives.get("guardrails") ?? 0) > 0;
     for (const shot of state.shots) {
       const x = shot.x / SUB;
       const z = shot.y / SUB;
-      (shot.fake && seesFakes ? this.seenFakes : this.shots).add(x, 3, z);
+      (shot.fake && seesFakeShots ? this.seenFakes : this.shots).add(x, 3, z);
       this.shadows.add(x, z, 4);
     }
     this.shots.commit();
@@ -922,8 +960,31 @@ export class ArenaRenderer {
     }
   }
 
+  private syncPatches(state: ArenaState): void {
+    this.patches.forEach((mesh, index) => {
+      const patch = state.patches[index];
+      if (!patch) {
+        mesh.visible = false;
+        return;
+      }
+      const warming = patch.warmup > 0;
+      mesh.visible = !warming || Math.floor(patch.warmup / 6) % 2 === 0;
+      mesh.material = this.patchMaterials[patch.kind];
+      mesh.position.x = patch.x / SUB;
+      mesh.position.z = patch.y / SUB;
+      const grow = warming ? 0.55 + 0.45 * (1 - patch.warmup / PATCH_WARMUP) : 1;
+      const fading = patch.life < 60 ? patch.life / 60 : 1;
+      mesh.scale.setScalar((patch.radius / SUB) * grow * Math.max(0.2, fading));
+    });
+    const target = inDarkWater(state) ? 1 : 0;
+    this.dark += (target - this.dark) * 0.12;
+  }
+
   render(): void {
     const uniforms = this.postMaterial.uniforms;
+    if (uniforms["dark"]) {
+      uniforms["dark"].value = this.dark;
+    }
     if (uniforms["hurt"]) {
       uniforms["hurt"].value = this.hurt;
     }

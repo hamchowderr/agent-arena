@@ -3,7 +3,7 @@ import { playBotRun } from "./bot";
 import { offerCards } from "./cards";
 import { MAX_PASSIVES, MAX_WEAPONS, WEAPONS } from "./content";
 import { distanceSquared, px, seconds, SUB } from "./math";
-import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, IDLE, dronePosition, maxHealth, orbitPosition, step, xpToNext } from "./sim";
+import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, freeOrder, IDLE, dronePosition, maxHealth, orbitPosition, step, xpToNext } from "./sim";
 
 describe("arena sim", () => {
   it("replays the same run from the same seed", () => {
@@ -31,10 +31,13 @@ describe("arena sim", () => {
   });
 
   it("lets the kiting bot level up and survive the first minute", () => {
-    const { state } = playBotRun(3, seconds(60));
-    expect(state.status).toBe("playing");
-    expect(state.level).toBeGreaterThanOrEqual(4);
-    expect(state.kills).toBeGreaterThan(30);
+    const runs = [1, 2, 3, 4, 5].map((seed) => playBotRun(seed, seconds(60)).state);
+    for (const state of runs) {
+      expect(state.status).toBe("playing");
+      expect(state.level).toBeGreaterThanOrEqual(3);
+      expect(state.kills).toBeGreaterThan(30);
+    }
+    expect(runs.reduce((sum, state) => sum + state.level, 0) / runs.length).toBeGreaterThanOrEqual(5);
   });
 
   it("brings the first boss at two minutes, on screen just above the player", () => {
@@ -100,7 +103,7 @@ describe("knockback", () => {
     state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
     state.nextBossTick = Number.MAX_SAFE_INTEGER;
     const at = state.player;
-    state.enemies.push({ id: 7001, kind: "brute", x: at.x + px(30), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1 });
+    state.enemies.push({ id: 7001, kind: "brute", x: at.x + px(30), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1, ...freeOrder(0, 0) });
     const brute = state.enemies[state.enemies.length - 1];
     const startX = brute?.x ?? 0;
     step(state, IDLE);
@@ -120,7 +123,7 @@ describe("knockback", () => {
     state.eliteSpawned = true;
     state.lootSpawned = true;
     const at = state.player;
-    state.enemies.push({ id: 7003, kind: "brute", x: at.x + px(120), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1 });
+    state.enemies.push({ id: 7003, kind: "brute", x: at.x + px(120), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1, ...freeOrder(0, 0) });
     const drones = [0, 1, 2].map((index) => dronePosition(state, index, 3));
     step(state, IDLE);
     const shots = state.projectiles.filter((projectile) => projectile.weapon === "subagents");
@@ -141,7 +144,7 @@ describe("knockback", () => {
       state.eliteSpawned = true;
       state.lootSpawned = true;
       const blade = orbitPosition(state, { id: "codeExec", level: 1, cooldown: 0, orbitHits: new Map() }, 0);
-      state.enemies.push({ id: 7002, kind: "grunt", x: blade.x, y: blade.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(6), xp: 1 });
+      state.enemies.push({ id: 7002, kind: "grunt", x: blade.x, y: blade.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(6), xp: 1, ...freeOrder(0, 0) });
       step(state, IDLE);
       return Math.hypot(state.enemies[0]?.knockX ?? 0, state.enemies[0]?.knockY ?? 0);
     };

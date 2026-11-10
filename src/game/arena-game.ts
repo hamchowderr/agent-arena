@@ -2,13 +2,15 @@ import { setMusic } from "../audio/music";
 import { cueFor } from "../audio/score";
 import { Effects } from "../render/effects";
 import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
-import { WORLDS } from "../sim/arena/content";
+import { WORLDS, type SignatureWave } from "../sim/arena/content";
+import type { StagedEvent } from "../sim/arena/formations";
 import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { createArena, currentWorld, elapsedSeconds, score, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
+import { createArena, currentWorld, elapsedSeconds, score, throttlePercent, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
 import { act, decodeReplay, encodeReplay, replayMatches, startRecording, type Action, type Recording, type Replay } from "../sim/arena/replay";
 import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
 import { currentLocale, nextLocale, setLocale, t, type LocaleCode } from "../i18n";
+import type { MessageKey } from "../i18n/locales/en";
 import { STICK_RADIUS, STILL, stickDirection, stickKnob, type Direction, type Stick } from "./controls";
 import { bossName, bossPitch, clock, passiveName, rivalName, tierStage } from "./format";
 import { replayCode } from "./replay-link";
@@ -48,6 +50,20 @@ const STEP_MS = 1000 / TICKS_PER_SECOND;
 const MAX_STEPS_PER_FRAME = 4;
 const MAX_FLOATS = 90;
 const HUD_PER_RENDER = HUD_WIDTH / RENDER_WIDTH;
+const TWIST_FLOAT_EVERY = 45;
+
+const SIGNATURE_TEXT: Readonly<Record<SignatureWave, readonly [MessageKey, MessageKey]>> = {
+  viralThread: ["signature.viralThread", "signature.viralThreadLine"],
+  inboxZero: ["signature.inboxZero", "signature.inboxZeroLine"],
+  canyonToll: ["signature.canyonToll", "signature.canyonTollLine"],
+  allHands: ["signature.allHands", "signature.allHandsLine"],
+  mirageSchool: ["signature.mirageSchool", "signature.mirageSchoolLine"],
+};
+
+const STAGED_TEXT: Readonly<Record<Exclude<StagedEvent, "opening" | "signature">, readonly [MessageKey, MessageKey]>> = {
+  wallRing: ["event.wallRing", "event.wallRingLine"],
+  swarm: ["event.swarm", "event.swarmLine"],
+};
 const REPLAY_SPEEDS = [1, 2, 4] as const;
 const REPLAY_CARD_HOLD = 50;
 const NOTICE_FRAMES = 150;
@@ -104,6 +120,7 @@ export class ArenaGame {
   private hover = -1;
   private musicOn = false;
   private renderedTier: Tier = 1;
+  private twistFloatAt = 0;
   private recording: Recording | null = null;
   private playback: Playback | null = null;
   private watched: { readonly mismatch: boolean } | null = null;
@@ -689,9 +706,49 @@ export class ArenaGame {
           break;
         case "lootEscaped":
           break;
+        case "staged": {
+          const world = WORLDS[event.world];
+          if (event.event === "opening" || !world) {
+            break;
+          }
+          const [title, line] = event.event === "signature" ? SIGNATURE_TEXT[world.signature] : STAGED_TEXT[event.event];
+          this.renderer.shake = Math.max(this.renderer.shake, 0.4);
+          this.banner = { title: t(title), subtitle: t(line), age: 0, life: 160 };
+          break;
+        }
+        case "fakePopped":
+          this.effects.spawn("poof", event.x, event.y);
+          this.twistFloat("twist.fake", event.x, event.y, "#d77bba");
+          break;
+        case "blocked":
+          this.twistFloat("twist.blocked", event.x, event.y, "#9ff6ff");
+          break;
+        case "leeched":
+          this.twistFloat("twist.leeched", this.state.player.x, this.state.player.y, "#a77ee0");
+          break;
+        case "rooted":
+          this.renderer.shake = Math.max(this.renderer.shake, 0.3);
+          this.twistFloat("twist.rooted", this.state.player.x, this.state.player.y, "#2fb5ad");
+          break;
+        case "metered":
+          if (this.floats.length < MAX_FLOATS) {
+            this.floats.push({ text: "-1", x: event.x, y: event.y, color: "#e9a93a", size: 20, age: 0 });
+          }
+          break;
       }
     }
+    if (this.state.tick % TICKS_PER_SECOND === 0 && throttlePercent(this.state) > 0) {
+      this.twistFloat("twist.throttled", this.state.player.x, this.state.player.y, "#e9a93a");
+    }
     this.syncMusic();
+  }
+
+  private twistFloat(key: MessageKey, x: number, y: number, color: string): void {
+    if (this.floats.length >= MAX_FLOATS || this.frameCount < this.twistFloatAt) {
+      return;
+    }
+    this.twistFloatAt = this.frameCount + TWIST_FLOAT_EVERY;
+    this.floats.push({ text: t(key), x, y: y - 10 * SUB, color, size: 20, age: 0 });
   }
 
   private projectToHud(x: number, y: number): { readonly x: number; readonly y: number } {
