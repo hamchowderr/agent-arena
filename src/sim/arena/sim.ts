@@ -68,7 +68,7 @@ const CONFIDENT_EXPERT_HALLUCINATION = 25;
 export const ELITE_HEALTH_TIMES = 10;
 export const ELITE_DAMAGE_PERCENT = 130;
 export const ELITE_RADIUS_PERCENT = 170;
-export const TELEGRAPH_TICKS = 30;
+export const TELEGRAPH_TICKS = 48;
 export const ENEMY_DASH_TICKS = 24;
 export const ENEMY_DASH_TIMES = 5;
 export const ENEMY_DASH_RANGE = px(110);
@@ -77,7 +77,7 @@ export const SHOOTER_RANGE = px(110);
 export const SHOOTER_EVERY = 170;
 export const ENEMY_SHOT_SPEED = 14;
 export const FUSE_RANGE = px(24);
-export const FUSE_TICKS = 36;
+export const FUSE_TICKS = 48;
 export const BLAST_RADIUS = px(28);
 export const BLAST_DAMAGE = 18;
 export const LOOT_GEM_EVERY_HIT = 1;
@@ -691,15 +691,15 @@ function enemyStep(state: ArenaState, enemy: Enemy): { readonly x: number; reado
       }
       if (enemy.mode === "telegraph") {
         if (enemy.timer <= 0) {
-          const dash = scaleToLength(player.x - enemy.x, player.y - enemy.y, enemy.speed * ENEMY_DASH_TIMES);
-          enemy.dashX = dash.x;
-          enemy.dashY = dash.y;
           enemy.mode = "dash";
           enemy.timer = ENEMY_DASH_TICKS;
         }
         return { x: 0, y: 0 };
       }
       if (enemy.timer <= 0 && near(ENEMY_DASH_RANGE)) {
+        const dash = scaleToLength(player.x - enemy.x, player.y - enemy.y, enemy.speed * ENEMY_DASH_TIMES);
+        enemy.dashX = dash.x;
+        enemy.dashY = dash.y;
         enemy.mode = "telegraph";
         enemy.timer = TELEGRAPH_TICKS;
         return { x: 0, y: 0 };
@@ -708,7 +708,7 @@ function enemyStep(state: ArenaState, enemy: Enemy): { readonly x: number; reado
     case "shoot":
       if (enemy.mode === "telegraph") {
         if (enemy.timer <= 0) {
-          fireShot(state, enemy, scaleToLength(player.x - enemy.x, player.y - enemy.y, ENEMY_SHOT_SPEED), false);
+          fireShot(state, enemy, { x: enemy.dashX, y: enemy.dashY }, false);
           enemy.mode = "move";
           enemy.timer = SHOOTER_EVERY;
         }
@@ -716,6 +716,9 @@ function enemyStep(state: ArenaState, enemy: Enemy): { readonly x: number; reado
       }
       if (near(SHOOTER_RANGE)) {
         if (enemy.timer <= 0) {
+          const aim = scaleToLength(player.x - enemy.x, player.y - enemy.y, ENEMY_SHOT_SPEED);
+          enemy.dashX = aim.x;
+          enemy.dashY = aim.y;
           enemy.mode = "telegraph";
           enemy.timer = TELEGRAPH_TICKS;
         }

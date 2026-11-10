@@ -16,3 +16,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm run art-sheet
+      - uses: actions/upload-artifact@v4
+        with:
+          name: art-sheet
+          path: art-sheet/

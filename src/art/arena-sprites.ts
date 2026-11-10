@@ -1,3 +1,4 @@
+import type { RegularKind } from "../sim/arena/content";
 import type { Sprite } from "./sprites";
 
 export { FACTION_KEY } from "./shade";
@@ -333,3 +334,15 @@ export const BOSS_OUTLINED: Sprite = outlined(BOSS, "w");
 export function eliteSprite(sprite: Sprite): Sprite {
   return outlined(outlined(sprite, "w"), "r");
 }
+
+export const ENEMY_SPRITES: Readonly<Record<RegularKind, Sprite>> = {
+  grunt: GRUNT,
+  runner: RUNNER,
+  charger: CHARGER,
+  shooter: SHOOTER,
+  exploder: EXPLODER,
+  splitter: SPLITTER,
+  brute: BRUTE,
+  heavy: HEAVY,
+  lootRunner: LOOT_RUNNER,
+};

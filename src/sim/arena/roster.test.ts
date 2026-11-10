@@ -125,6 +125,24 @@ describe("enemy behaviors", () => {
     expect(still).toBeGreaterThanOrEqual(TELEGRAPH_TICKS - 1);
   });
 
+  it("locks a charger's aim when its tell starts, so stepping aside dodges it", () => {
+    const state = quietArena(37);
+    const charger = place(state, "charger", px(60), 0);
+    for (let tick = 0; tick < 120 && charger.mode !== "telegraph"; tick += 1) {
+      stepIsolated(state, 1, [charger]);
+    }
+    expect(charger.mode).toBe("telegraph");
+    const aim = { x: charger.dashX, y: charger.dashY };
+    state.player.y += px(80);
+    for (let tick = 0; tick < 120 && charger.mode !== "dash"; tick += 1) {
+      stepIsolated(state, 1, [charger]);
+    }
+    expect(charger.mode).toBe("dash");
+    expect({ x: charger.dashX, y: charger.dashY }).toEqual(aim);
+    expect(aim.x).toBeLessThan(0);
+    expect(aim.y).toBe(0);
+  });
+
   it("blows up an exploder next to the agent and hurts it", () => {
     const state = quietArena(32);
     const exploder = place(state, "exploder", px(10), 0);
