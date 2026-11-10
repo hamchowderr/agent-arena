@@ -30,6 +30,7 @@ import {
   HALLUCINATION,
   HAZARD,
   PROPS,
+  DRONE,
 } from "../art/arena-sprites";
 import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FPS, DEATH_FRAMES, WALK_FRAMES } from "../art/animate";
 import { RENDER_SCALE } from "../art/art-rules";
@@ -41,7 +42,7 @@ import { agentClips } from "../art/clips";
 import { agentBody } from "../art/agent";
 import { REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { CHARGE_WINDUP, HIT_FLASH_TICKS, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
+import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
 import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, pixelTexture, spriteImage, type AtlasImage } from "./textures";
@@ -318,6 +319,7 @@ export class ArenaRenderer {
   private readonly armGlows = new Map<string, SpriteBatch>();
   private readonly levels = new Map<WeaponId, number>();
   private readonly glows: Readonly<Record<"token" | "bigToken", SpriteBatch>>;
+  private readonly drones: SpriteBatch;
   private readonly hallucinations: SpriteBatch;
   private readonly shots: SpriteBatch;
   private readonly seenFakes: SpriteBatch;
@@ -422,6 +424,7 @@ export class ArenaRenderer {
       token: this.glowBatch(14, 10, "#ffcd75", 0.4, 900),
       bigToken: this.glowBatch(22, 14, "#fff1a8", 0.55, 200),
     };
+    this.drones = this.batch([DRONE], 1, 12, false);
     this.hallucinations = this.batch([HALLUCINATION], 1, 100, true);
     this.shots = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
     this.shots.mesh.renderOrder = 12;
@@ -784,7 +787,11 @@ export class ArenaRenderer {
     this.bigGems.begin();
     this.chests.begin();
     for (const gem of state.gems) {
-      const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5;
+      if (!gem.chest && gem.life < GEM_FADE_TICKS && Math.floor(gem.life / 6) % 2 === 0) {
+        continue;
+      }
+      const hop = gem.settle > 0 ? Math.sin((gem.settle / GEM_SETTLE_TICKS) * Math.PI) * 9 : 0;
+      const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5 + hop;
       (gem.chest ? this.chests : gem.value > 1 ? this.bigGems : this.gems).add(gem.x / SUB, bob, gem.y / SUB);
       if (!gem.chest) {
         (gem.value > 1 ? this.glows.bigToken : this.glows.token).add(gem.x / SUB, 0.6, gem.y / SUB);
@@ -841,6 +848,21 @@ export class ArenaRenderer {
     }
     this.hazards.commit();
     this.bigHazards.commit();
+
+    this.drones.begin();
+    for (const owned of state.weapons) {
+      if (WEAPONS[owned.id].kind !== "seeker") {
+        continue;
+      }
+      const count = weaponStats(owned.id, owned.level).count;
+      for (let index = 0; index < count; index += 1) {
+        const drone = dronePosition(state, index, count);
+        const lift = 8 + Math.sin(state.tick / 7 + index) * 1.5;
+        this.drones.add(drone.x / SUB, lift, drone.y / SUB);
+        this.shadows.add(drone.x / SUB, drone.y / SUB, 6);
+      }
+    }
+    this.drones.commit();
 
     for (const owned of state.weapons) {
       if (WEAPONS[owned.id].kind !== "orbit") {

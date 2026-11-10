@@ -23,6 +23,9 @@ export const en = {
   "card.passive": "PASSIVE",
   "card.new": "NEW",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "HEAL",
+  "card.restore.name": "Hot reload",
+  "card.restore.blurb": "Everything is maxed. Heal 40% of your HP.",
 
   "pause.title": "Paused",
   "pause.keys": "[P] Resume   [M] Music",
@@ -32,6 +35,7 @@ export const en = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "Max HP",
+  "stat.health": "HP",
   "stat.damage": "Damage",
   "stat.damageBonus": "Damage bonus",
   "stat.crit": "Crit chance",
@@ -110,6 +114,8 @@ export const en = {
   "elite.arrives": "A rented agent shows up",
   "elite.subtitle": "{rival} sent its best. It drops a chest.",
   "chest.open": "Chest! Free upgrade",
+  "chest.title": "Chest!",
+  "chest.hint": "Luck of the draw. No picks, just spin.",
 
   "tier.1.name": "Raw LLM",
   "tier.1.stage": "Pre-seed",
@@ -148,7 +154,7 @@ export const en = {
   "weapon.shell.name": "Shell",
   "weapon.shell.blurb": "A pulse around you damages every rival in range.",
   "weapon.subagents.name": "Subagents",
-  "weapon.subagents.blurb": "Small agents seek out rivals on their own.",
+  "weapon.subagents.blurb": "Little helper agents fly with you and fire homing shots.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "Grounded beams that pierce everything in their path.",
   "weapon.codeInterpreter.name": "Code interpreter",

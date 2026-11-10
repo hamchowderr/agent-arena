@@ -25,6 +25,9 @@ export const es = {
   "card.passive": "PASIVA",
   "card.new": "NUEVA",
   "card.levelChange": "NV {from} → {to}",
+  "card.restore.kind": "CURA",
+  "card.restore.name": "Recarga en caliente",
+  "card.restore.blurb": "Todo está al máximo. Recupera el 40% de tus PV.",
 
   "pause.title": "Pausa",
   "pause.keys": "[P] Seguir   [M] Música",
@@ -34,6 +37,7 @@ export const es = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "PV máx.",
+  "stat.health": "PV",
   "stat.damage": "Daño",
   "stat.damageBonus": "Bonus de daño",
   "stat.crit": "Prob. crítico",
@@ -112,6 +116,8 @@ export const es = {
   "elite.arrives": "Llega un agente alquilado",
   "elite.subtitle": "{rival} envió a su mejor agente. Suelta un cofre.",
   "chest.open": "¡Cofre! Mejora gratis",
+  "chest.title": "¡Cofre!",
+  "chest.hint": "Pura suerte. Sin elegir, solo girar.",
 
   "tier.1.name": "LLM en bruto",
   "tier.1.stage": "Pre-semilla",
@@ -150,7 +156,7 @@ export const es = {
   "weapon.shell.name": "Shell",
   "weapon.shell.blurb": "Un pulso a tu alrededor daña a todos los rivales cercanos.",
   "weapon.subagents.name": "Subagentes",
-  "weapon.subagents.blurb": "Pequeños agentes buscan rivales por su cuenta.",
+  "weapon.subagents.blurb": "Pequeños agentes ayudantes vuelan contigo y disparan tiros teledirigidos.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "Rayos con fuentes que lo atraviesan todo a su paso.",
   "weapon.codeInterpreter.name": "Intérprete de código",

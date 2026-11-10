@@ -16,6 +16,7 @@ export interface WeaponDefinition {
   readonly speed: number;
   readonly levels: readonly WeaponLevel[];
   readonly evolved?: true;
+  readonly knockback?: number;
 }
 
 const level = (damage: number, cooldown: number, count: number, pierce: number, radius: number): WeaponLevel => ({
@@ -43,6 +44,7 @@ export const WEAPONS = {
     kind: "orbit",
     tier: 1,
     speed: 3,
+    knockback: 110,
     levels: [level(8, 18, 1, 99, 26), level(10, 18, 2, 99, 28), level(12, 16, 2, 99, 30), level(14, 16, 3, 99, 32), level(16, 14, 4, 99, 34)],
   },
   shell: {
@@ -69,6 +71,7 @@ export const WEAPONS = {
     tier: 1,
     speed: 5,
     evolved: true,
+    knockback: 140,
     levels: [level(24, 10, 6, 99, 40)],
   },
   ciPipeline: {

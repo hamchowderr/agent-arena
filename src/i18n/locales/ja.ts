@@ -25,6 +25,9 @@ export const ja = {
   "card.passive": "パッシブ",
   "card.new": "新規",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "回復",
+  "card.restore.name": "ホットリロード",
+  "card.restore.blurb": "すべて最大。HPを40%回復する。",
 
   "pause.title": "ポーズ",
   "pause.keys": "[P] 再開   [M] 音楽",
@@ -34,6 +37,7 @@ export const ja = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "最大HP",
+  "stat.health": "HP",
   "stat.damage": "ダメージ",
   "stat.damageBonus": "ダメージボーナス",
   "stat.crit": "会心率",
@@ -112,6 +116,8 @@ export const ja = {
   "elite.arrives": "レンタルエージェントが現れた",
   "elite.subtitle": "{rival}の精鋭だ。倒すと宝箱を落とす。",
   "chest.open": "宝箱！無料アップグレード",
+  "chest.title": "宝箱！",
+  "chest.hint": "運しだい。選べない、回すだけ。",
 
   "tier.1.name": "素のLLM",
   "tier.1.stage": "プレシード",
@@ -150,7 +156,7 @@ export const ja = {
   "weapon.shell.name": "シェル",
   "weapon.shell.blurb": "周囲に波動を放ち、範囲内のライバル全員にダメージ。",
   "weapon.subagents.name": "サブエージェント",
-  "weapon.subagents.blurb": "小さなエージェントが自分でライバルを追いかける。",
+  "weapon.subagents.blurb": "小さな助手エージェントがそばを飛び、追尾弾を撃つ。",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "根拠つきのビームが進路上のすべてを貫く。",
   "weapon.codeInterpreter.name": "コードインタープリター",

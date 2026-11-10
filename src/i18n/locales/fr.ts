@@ -25,6 +25,9 @@ export const fr = {
   "card.passive": "PASSIF",
   "card.new": "NOUVEAU",
   "card.levelChange": "NIV {from} → {to}",
+  "card.restore.kind": "SOIN",
+  "card.restore.name": "Rechargement à chaud",
+  "card.restore.blurb": "Tout est au max. Rends 40 % de tes PV.",
 
   "pause.title": "Pause",
   "pause.keys": "[P] Reprendre   [M] Musique",
@@ -34,6 +37,7 @@ export const fr = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "PV max",
+  "stat.health": "PV",
   "stat.damage": "Dégâts",
   "stat.damageBonus": "Bonus de dégâts",
   "stat.crit": "Chance critique",
@@ -112,6 +116,8 @@ export const fr = {
   "elite.arrives": "Un agent loué arrive",
   "elite.subtitle": "{rival} envoie son meilleur agent. Il lâche un coffre.",
   "chest.open": "Coffre ! Amélioration gratuite",
+  "chest.title": "Coffre !",
+  "chest.hint": "Pure chance. Pas de choix, ça tourne.",
 
   "tier.1.name": "LLM brut",
   "tier.1.stage": "Pré-amorçage",
@@ -150,7 +156,7 @@ export const fr = {
   "weapon.shell.name": "Shell",
   "weapon.shell.blurb": "Une onde autour de toi blesse tous les rivaux à portée.",
   "weapon.subagents.name": "Sous-agents",
-  "weapon.subagents.blurb": "De petits agents traquent les rivaux tout seuls.",
+  "weapon.subagents.blurb": "De petits agents t'accompagnent et tirent des projectiles à tête chercheuse.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "Des rayons sourcés qui transpercent tout sur leur passage.",
   "weapon.codeInterpreter.name": "Interpréteur de code",

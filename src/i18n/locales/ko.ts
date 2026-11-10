@@ -25,6 +25,9 @@ export const ko = {
   "card.passive": "패시브",
   "card.new": "신규",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "회복",
+  "card.restore.name": "핫 리로드",
+  "card.restore.blurb": "모두 최대치. HP를 40% 회복한다.",
 
   "pause.title": "일시정지",
   "pause.keys": "[P] 계속   [M] 음악",
@@ -34,6 +37,7 @@ export const ko = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "최대 HP",
+  "stat.health": "HP",
   "stat.damage": "피해",
   "stat.damageBonus": "피해 보너스",
   "stat.crit": "치명타 확률",
@@ -112,6 +116,8 @@ export const ko = {
   "elite.arrives": "임대 에이전트가 나타났다",
   "elite.subtitle": "{rival}의 정예 에이전트. 쓰러뜨리면 상자를 떨군다.",
   "chest.open": "상자! 무료 업그레이드",
+  "chest.title": "상자!",
+  "chest.hint": "운에 맡겨라. 고를 수 없다, 돌릴 뿐.",
 
   "tier.1.name": "날것의 LLM",
   "tier.1.stage": "프리시드",
@@ -150,7 +156,7 @@ export const ko = {
   "weapon.shell.name": "셸",
   "weapon.shell.blurb": "주변에 파동을 일으켜 범위 안의 모든 라이벌에게 피해를 줍니다.",
   "weapon.subagents.name": "서브에이전트",
-  "weapon.subagents.blurb": "작은 에이전트들이 알아서 라이벌을 쫓습니다.",
+  "weapon.subagents.blurb": "작은 도우미 에이전트가 곁을 날며 유도탄을 쏩니다.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "근거 있는 광선이 경로의 모든 것을 꿰뚫습니다.",
   "weapon.codeInterpreter.name": "코드 인터프리터",

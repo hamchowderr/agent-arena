@@ -109,7 +109,7 @@ describe("boss phases", () => {
 
   it("goes through phases 2 and 3 in order before every boss the bot beats", () => {
     let beaten = 0;
-    for (const seed of [1]) {
+    for (const seed of [1, 2]) {
       const state = createArena(seed);
       let phases: number[] = [];
       while (state.tick < seconds(330) && (state.status === "playing" || state.status === "levelUp")) {

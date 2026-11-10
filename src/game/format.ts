@@ -30,11 +30,11 @@ export function passiveName(id: PassiveId): string {
 }
 
 export function cardName(card: Card): string {
-  return card.kind === "passive" ? passiveName(card.id) : weaponName(card.id);
+  return card.kind === "restore" ? t("card.restore.name") : card.kind === "passive" ? passiveName(card.id) : weaponName(card.id);
 }
 
 export function cardBlurb(card: Card): string {
-  return card.kind === "passive" ? t(`passive.${card.id}.blurb`) : t(`weapon.${card.id}.blurb`);
+  return card.kind === "restore" ? t("card.restore.blurb") : card.kind === "passive" ? t(`passive.${card.id}.blurb`) : t(`weapon.${card.id}.blurb`);
 }
 
 export function rivalName(world: World | WorldId): string {

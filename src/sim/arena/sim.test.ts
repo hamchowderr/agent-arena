@@ -3,7 +3,7 @@ import { playBotRun } from "./bot";
 import { offerCards } from "./cards";
 import { MAX_PASSIVES, MAX_WEAPONS, WEAPONS } from "./content";
 import { distanceSquared, px, seconds, SUB } from "./math";
-import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, IDLE, maxHealth, step, xpToNext } from "./sim";
+import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, IDLE, dronePosition, maxHealth, orbitPosition, step, xpToNext } from "./sim";
 
 describe("arena sim", () => {
   it("replays the same run from the same seed", () => {
@@ -110,5 +110,41 @@ describe("knockback", () => {
     }
     expect((brute?.x ?? 0) - startX).toBeGreaterThan(SUB * 2);
     expect(Math.abs(brute?.knockX ?? 99)).toBeLessThan(KNOCKBACK);
+  });
+
+  it("fires sub-agent shots from helper drones that fly beside the agent", () => {
+    const state = createArena(13);
+    state.weapons.length = 0;
+    state.weapons.push({ id: "subagents", level: 3, cooldown: 0, orbitHits: new Map() });
+    state.nextBossTick = Number.MAX_SAFE_INTEGER;
+    state.eliteSpawned = true;
+    state.lootSpawned = true;
+    const at = state.player;
+    state.enemies.push({ id: 7003, kind: "brute", x: at.x + px(120), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1 });
+    const drones = [0, 1, 2].map((index) => dronePosition(state, index, 3));
+    step(state, IDLE);
+    const shots = state.projectiles.filter((projectile) => projectile.weapon === "subagents");
+    expect(shots).toHaveLength(3);
+    shots.forEach((shot, index) => {
+      const drone = drones[index];
+      expect(Math.hypot(shot.x - shot.vx - (drone?.x ?? 0), shot.y - shot.vy - (drone?.y ?? 0))).toBeLessThan(px(4));
+      expect(Math.hypot((drone?.x ?? 0) - at.x, (drone?.y ?? 0) - at.y)).toBeGreaterThan(px(20));
+    });
+  });
+
+  it("lets orbiting code blocks shove fodder clear instead of grinding in place", () => {
+    const shoved = () => {
+      const state = createArena(12);
+      state.weapons.length = 0;
+      state.weapons.push({ id: "codeExec", level: 1, cooldown: 0, orbitHits: new Map() });
+      state.nextBossTick = Number.MAX_SAFE_INTEGER;
+      state.eliteSpawned = true;
+      state.lootSpawned = true;
+      const blade = orbitPosition(state, { id: "codeExec", level: 1, cooldown: 0, orbitHits: new Map() }, 0);
+      state.enemies.push({ id: 7002, kind: "grunt", x: blade.x, y: blade.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(6), xp: 1 });
+      step(state, IDLE);
+      return Math.hypot(state.enemies[0]?.knockX ?? 0, state.enemies[0]?.knockY ?? 0);
+    };
+    expect(shoved()).toBeGreaterThanOrEqual(KNOCKBACK * 3);
   });
 });

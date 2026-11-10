@@ -25,6 +25,9 @@ export const zhHans = {
   "card.passive": "被动",
   "card.new": "新",
   "card.levelChange": "等级 {from} → {to}",
+  "card.restore.kind": "治疗",
+  "card.restore.name": "热重载",
+  "card.restore.blurb": "全部已满级。恢复 40% 生命值。",
 
   "pause.title": "已暂停",
   "pause.keys": "[P] 继续   [M] 音乐",
@@ -34,6 +37,7 @@ export const zhHans = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "最大生命",
+  "stat.health": "生命",
   "stat.damage": "伤害",
   "stat.damageBonus": "伤害加成",
   "stat.crit": "暴击率",
@@ -112,6 +116,8 @@ export const zhHans = {
   "elite.arrives": "租来的智能体出现了",
   "elite.subtitle": "{rival}派出了精英。击败它会掉落宝箱。",
   "chest.open": "宝箱！免费升级",
+  "chest.title": "宝箱！",
+  "chest.hint": "全凭运气。不能挑选，只管转。",
 
   "tier.1.name": "原始 LLM",
   "tier.1.stage": "种子前",
@@ -150,7 +156,7 @@ export const zhHans = {
   "weapon.shell.name": "终端",
   "weapon.shell.blurb": "以你为中心的脉冲，伤害范围内所有对手。",
   "weapon.subagents.name": "子智能体",
-  "weapon.subagents.blurb": "小智能体会自己追踪对手。",
+  "weapon.subagents.blurb": "小助手智能体伴你飞行，发射追踪弹。",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "有据可查的光束，贯穿路径上的一切。",
   "weapon.codeInterpreter.name": "代码解释器",
