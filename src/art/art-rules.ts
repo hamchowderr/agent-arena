@@ -27,7 +27,7 @@ export const ENEMY_ART_TIER: Readonly<Record<EnemyKind, ArtTier>> = {
   boss: "boss",
 };
 
-export const RENDER_SCALE = { regular: 1, elite: 2, boss: 2 } as const;
+export const RENDER_SCALE = { regular: 1, elite: 2, boss: 1 } as const;
 
 export const MIN_ENEMY_COLORS = 10;
 export const MAX_SPRITE_COLORS = 24;

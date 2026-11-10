@@ -193,32 +193,6 @@ export const CHEST: Sprite = [
   ".kkkkkkkkkkkk.",
 ];
 
-export const BOSS: Sprite = [
-  ".......y...y...y.......",
-  ".......yy.yyy.yy.......",
-  ".......yyyyyyyyy.......",
-  ".......kkkkkkkkk.......",
-  ".....kkXXXXXXXXXkk.....",
-  "....kXXXXXXXXXXXXXk....",
-  "...kXXXXXXXXXXXXXXXk...",
-  "...kXdddddddddddddXk...",
-  "...kXdmmmdddddmmmdXk...",
-  "...kXdmwmdddddmwmdXk...",
-  "...kXdddddddddddddXk...",
-  "...kXXXXXkkkkkXXXXXk...",
-  "....kXXXXXXXXXXXXXk....",
-  "..kkkSSSSkwwwkSSSSkkk..",
-  ".kXXkSSSSSkrkSSSSSkXXk.",
-  "kXXXkSSSSSkrkSSSSSkXXXk",
-  "kXXkkSSSSkrrrkSSSSkkXXk",
-  "kXXk.kSSSkrrrkSSSk.kXXk",
-  ".kk..kSSSSkrkSSSSk..kk.",
-  ".....kSSSSSkSSSSSk.....",
-  ".....kSSSSkkkSSSSk.....",
-  ".....kXXXk...kXXXk.....",
-  ".....kkkkk...kkkkk.....",
-];
-
 export const ENEMY_SHOT: Sprite = [".kkk.", "kroyk", "kowok", "kroyk", ".kkk."];
 
 export const HAZARD: Sprite = [
@@ -348,8 +322,6 @@ export function outlined(sprite: Sprite, key: string): Sprite {
     }).join(""),
   );
 }
-
-export const BOSS_OUTLINED: Sprite = outlined(BOSS, "w");
 
 const CROWN: Sprite = ["y..y..y", "yy.y.yy", "yyyyyyy", "ooooooo"];
 

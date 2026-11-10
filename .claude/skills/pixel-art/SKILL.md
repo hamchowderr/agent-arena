@@ -31,7 +31,8 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 
 ## 2. Bosses
 
-- 3 to 5 times the size of fodder. A boss is the world's mascot: a recognizable object with a face.
+- 3 to 5 times the size of fodder. A boss is the world's mascot: a recognizable object with a face. Each world has its own boss in `src/art/bosses.ts` (rocket, binder, meter, clipboard, light bulb), drawn at native size with the shape helpers in `src/art/raster.ts` (rect, ellipse, ring, line, polygon), then outlined.
+- A boss drawing takes a `BossLook` (`flicker` for little moving parts like a flame or needle, `angry` for the attack face). `bossClips()` in `src/art/clips.ts` turns it into idle (4 frames, breathing squash), windup (3, crouch, angry), impact (3, stretch up), hurt (2) and a death puff. The renderer plays windup during the 0.8 s before an attack and impact right after it.
 - Every attack has its own windup pose, impact pose and effect.
 - Each attack shows a ground mark that is the exact shape and size of what it will hit (a lane, a ring, a cone).
 
