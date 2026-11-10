@@ -38,11 +38,9 @@ export function hueOf(hex: string): number {
   return h * 60;
 }
 
-export function saturationOf(hex: string): number {
+export function chromaOf(hex: string): number {
   const { r, g, b } = rgbOf(hex);
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  return max === 0 ? 0 : (max - min) / max;
+  return (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
 }
 
 export function hueGap(a: number, b: number): number {
@@ -90,14 +88,20 @@ export function interiorColors(grid: ColorGrid): string[] {
 }
 
 export function dominantHue(grid: ColorGrid): number {
-  const counts = new Map<string, number>();
+  let x = 0;
+  let y = 0;
   for (const color of interiorColors(grid)) {
-    if (saturationOf(color) >= 0.25) {
-      counts.set(color, (counts.get(color) ?? 0) + 1);
+    const weight = chromaOf(color);
+    if (weight >= 0.25) {
+      const angle = (hueOf(color) * Math.PI) / 180;
+      x += Math.cos(angle) * weight;
+      y += Math.sin(angle) * weight;
     }
   }
-  const [best] = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  return best ? hueOf(best[0]) : 0;
+  if (x === 0 && y === 0) {
+    return 0;
+  }
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
 export function averageLuminance(colors: readonly string[]): number {
