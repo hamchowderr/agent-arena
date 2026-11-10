@@ -51,6 +51,118 @@ export const BRUTE: Sprite = [
   "................",
 ];
 
+export const CHARGER: Sprite = [
+  "..............",
+  "..k.......k...",
+  "..kk.kkkk.kk..",
+  "...kkXXXXkk...",
+  "..kXXXXXXXXk..",
+  ".kXXwkXXwkXXk.",
+  ".kXXXXXXXXXXk.",
+  "kXXXyyyyyyXXk.",
+  "kXXXXXXXXXXk..",
+  ".kkXXkkkXXk...",
+  "..kXk...kXk...",
+  "..kk.....kk...",
+];
+
+export const SHOOTER: Sprite = [
+  "............",
+  "...kkkkkk...",
+  "..kXXXXXXk..",
+  ".kXwXXXXwXk.",
+  ".kXkXXXXkXk.",
+  ".kXXkkkkXXk.",
+  ".kXkyyyykXk.",
+  ".kXkyddykXk.",
+  ".kXXkkkkXXk.",
+  "..kXXXXXXk..",
+  "..kXk..kXk..",
+  "..kk....kk..",
+];
+
+export const EXPLODER: Sprite = [
+  "......yo....",
+  ".....kk.....",
+  "....kkkk....",
+  "..kkXXXXkk..",
+  ".kXXXXXXXXk.",
+  ".kXwkXXwkXk.",
+  "kXXXXXXXXXXk",
+  "kXXXXyyXXXXk",
+  "kXXXXXXXXXXk",
+  ".kXXXXXXXXk.",
+  "..kkXXXXkk..",
+  "....kkkk....",
+];
+
+export const SPLITTER: Sprite = [
+  "..............",
+  "...kkkkkkkk...",
+  "..kXXXkkXXXk..",
+  ".kXXXXkkXXXXk.",
+  ".kXwkXkkXwkXk.",
+  ".kXXXXkkXXXXk.",
+  ".kXXyykkyyXXk.",
+  ".kXXXXkkXXXXk.",
+  ".kXXXXkkXXXXk.",
+  "..kXXXkkXXXk..",
+  "...kkkkkkkk...",
+  "...kXk..kXk...",
+  "...kk....kk...",
+  "..............",
+];
+
+export const HEAVY: Sprite = [
+  "....................",
+  "..kkkkkkkkkkkkkkkk..",
+  ".kXXXXXXXXXXXXXXXXk.",
+  ".kXXXXXXXXXXXXXXXXk.",
+  ".kXXwwwXXXXXXwwwXXk.",
+  ".kXXwkkXXXXXXwkkXXk.",
+  ".kXXXXXXXXXXXXXXXXk.",
+  ".kXXXXXXXXXXXXXXXXk.",
+  ".kXXXyyyyyyyyyyXXXk.",
+  ".kXXXykkkkkkkkyXXXk.",
+  ".kXXXyyyyyyyyyyXXXk.",
+  ".kXXXXXXXXXXXXXXXXk.",
+  ".kXXXXXXXXXXXXXXXXk.",
+  ".kSSSSSSSSSSSSSSSSk.",
+  ".kXXXXXXXXXXXXXXXXk.",
+  "..kkkkkkkkkkkkkkkk..",
+  "...kXXXk....kXXXk...",
+  "...kXXXk....kXXXk...",
+  "...kkkkk....kkkkk...",
+  "....................",
+];
+
+export const LOOT_RUNNER: Sprite = [
+  "............",
+  "..kkkkkkkk..",
+  ".kyyyyyyyyk.",
+  ".kywkyywkyk.",
+  ".kyyyyyyyyk.",
+  ".kyoooooooyk",
+  ".kyyyyyyyyk.",
+  "..kkkkkkkk..",
+  "...kyk.kyk..",
+  "..kyk...kyk.",
+  "..kk.....kk.",
+  "............",
+];
+
+export const CHEST: Sprite = [
+  "..kkkkkkkk..",
+  ".koooooooyk.",
+  "kooooooooook",
+  "kkkkkkkkkkkk",
+  "kooooyyooook",
+  "kooooykooook",
+  "kooooooooook",
+  "kooooooooook",
+  ".kkkkkkkkkk.",
+];
+
 export const BOSS: Sprite = [
   "......y..y..y.......",
   "......yy.yy.yy......",
@@ -205,3 +317,7 @@ export function outlined(sprite: Sprite, key: string): Sprite {
 }
 
 export const BOSS_OUTLINED: Sprite = outlined(BOSS, "w");
+
+export function eliteSprite(sprite: Sprite): Sprite {
+  return outlined(outlined(sprite, "w"), "r");
+}

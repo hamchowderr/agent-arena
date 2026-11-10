@@ -117,7 +117,11 @@ export const EVOLUTIONS: readonly Evolution[] = [
   { weapon: "shell", passive: "autoTestHook", result: "ciPipeline" },
 ];
 
-export type EnemyKind = "grunt" | "runner" | "brute" | "boss";
+export const REGULAR_KINDS = ["grunt", "runner", "charger", "shooter", "exploder", "splitter", "brute", "heavy", "lootRunner"] as const;
+export type RegularKind = (typeof REGULAR_KINDS)[number];
+export type EnemyKind = RegularKind | "boss";
+
+export type EnemyBehavior = "chase" | "charge" | "shoot" | "explode" | "flee";
 
 export interface EnemyDefinition {
   readonly health: number;
@@ -125,14 +129,46 @@ export interface EnemyDefinition {
   readonly damage: number;
   readonly radius: number;
   readonly xp: number;
+  readonly mass: number;
+  readonly behavior: EnemyBehavior;
 }
 
 export const ENEMIES: Readonly<Record<EnemyKind, EnemyDefinition>> = {
-  grunt: { health: 9, speed: 8, damage: 4, radius: 6, xp: 1 },
-  runner: { health: 6, speed: 14, damage: 4, radius: 5, xp: 1 },
-  brute: { health: 50, speed: 6, damage: 9, radius: 9, xp: 5 },
-  boss: { health: 0, speed: 11, damage: 18, radius: 18, xp: 40 },
+  grunt: { health: 9, speed: 8, damage: 4, radius: 6, xp: 1, mass: 0, behavior: "chase" },
+  runner: { health: 6, speed: 14, damage: 4, radius: 5, xp: 1, mass: 0, behavior: "chase" },
+  charger: { health: 20, speed: 6, damage: 6, radius: 7, xp: 2, mass: 20, behavior: "charge" },
+  shooter: { health: 22, speed: 7, damage: 5, radius: 7, xp: 3, mass: 20, behavior: "shoot" },
+  exploder: { health: 26, speed: 11, damage: 6, radius: 7, xp: 3, mass: 10, behavior: "explode" },
+  splitter: { health: 16, speed: 8, damage: 5, radius: 8, xp: 2, mass: 20, behavior: "chase" },
+  brute: { health: 60, speed: 6, damage: 9, radius: 9, xp: 6, mass: 50, behavior: "chase" },
+  heavy: { health: 100, speed: 5, damage: 8, radius: 12, xp: 12, mass: 80, behavior: "chase" },
+  lootRunner: { health: 120, speed: 12, damage: 0, radius: 7, xp: 0, mass: 30, behavior: "flee" },
+  boss: { health: 0, speed: 11, damage: 18, radius: 18, xp: 40, mass: 100, behavior: "chase" },
 };
+
+export const SPLIT_INTO: RegularKind = "grunt";
+export const SPLIT_COUNT = 2;
+
+export type TierSlots = readonly [RegularKind, RegularKind, RegularKind, RegularKind, RegularKind];
+
+export interface WaveRow {
+  readonly fromSecond: number;
+  readonly weights: readonly [number, number, number, number, number];
+  readonly interval: number;
+  readonly batch: number;
+}
+
+export const WAVES: readonly WaveRow[] = [
+  { fromSecond: 0, weights: [8, 1, 0, 0, 0], interval: 45, batch: 2 },
+  { fromSecond: 30, weights: [5, 2, 1, 0, 0], interval: 39, batch: 3 },
+  { fromSecond: 60, weights: [3, 2, 2, 1, 0], interval: 33, batch: 4 },
+  { fromSecond: 90, weights: [3, 2, 2, 1, 1], interval: 27, batch: 5 },
+];
+
+export const LOOT_RUNNER_SECOND = 45;
+export const ELITE_SECOND = 60;
+export const ELITE_SLOT = 3;
+export const LOOT_RUNNER_ESCAPE_SECONDS = 20;
 
 export type WorldId = "hustlr" | "notionally" | "meterly" | "synergex" | "trustMe";
 
@@ -146,14 +182,18 @@ export interface World {
   readonly bossHealth: number;
   readonly pattern: BossPattern;
   readonly check: BossCheck;
+  readonly slots: TierSlots;
+  readonly minAlive: number;
+  readonly maxAlive: number;
+  readonly maxShooters: number;
 }
 
 export const WORLDS: readonly World[] = [
-  { id: "hustlr", tier: 1, bossHealth: 700, pattern: "spread", check: { kind: "passive", passive: "fewShot" } },
-  { id: "notionally", tier: 2, bossHealth: 1600, pattern: "trail", check: { kind: "passive", passive: "vectorMemory" } },
-  { id: "meterly", tier: 3, bossHealth: 3200, pattern: "charge", check: { kind: "weapons", count: 2 } },
-  { id: "synergex", tier: 4, bossHealth: 5600, pattern: "bursts", check: { kind: "passive", passive: "planner" } },
-  { id: "trustMe", tier: 5, bossHealth: 9000, pattern: "fakes", check: { kind: "passive", passive: "guardrails" } },
+  { id: "hustlr", tier: 1, bossHealth: 700, pattern: "spread", check: { kind: "passive", passive: "fewShot" }, slots: ["grunt", "runner", "shooter", "splitter", "heavy"], minAlive: 20, maxAlive: 260, maxShooters: 2 },
+  { id: "notionally", tier: 2, bossHealth: 1600, pattern: "trail", check: { kind: "passive", passive: "vectorMemory" }, slots: ["grunt", "splitter", "runner", "brute", "heavy"], minAlive: 60, maxAlive: 300, maxShooters: 2 },
+  { id: "meterly", tier: 3, bossHealth: 3200, pattern: "charge", check: { kind: "weapons", count: 2 }, slots: ["grunt", "charger", "exploder", "brute", "heavy"], minAlive: 90, maxAlive: 340, maxShooters: 4 },
+  { id: "synergex", tier: 4, bossHealth: 5600, pattern: "bursts", check: { kind: "passive", passive: "planner" }, slots: ["grunt", "runner", "splitter", "brute", "heavy"], minAlive: 120, maxAlive: 380, maxShooters: 4 },
+  { id: "trustMe", tier: 5, bossHealth: 9000, pattern: "fakes", check: { kind: "passive", passive: "guardrails" }, slots: ["grunt", "splitter", "shooter", "brute", "heavy"], minAlive: 150, maxAlive: 420, maxShooters: 6 },
 ];
 
 export const BOSS_PHASE_FLOORS = [60, 30, 0] as const;
