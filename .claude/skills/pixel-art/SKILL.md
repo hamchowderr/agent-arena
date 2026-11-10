@@ -27,7 +27,7 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 - **Pop off the ground. [checked: contrast]** The body's average brightness must have a contrast of at least 1.6 against every world's base ground tile.
 - **Side view, light from the top.** Most enemies are wider than they are tall and face the way they move. Light falls from the top-left, so tops get the light step and the bottom and right edges get the shadow step (`shade()` in `src/art/shade.ts` does this for you).
 - **Dark tinted outlines, never flat black everywhere.** `shade()` turns the outer `k` pixels into the ramp's dark line color. Keep pure black for eyes and small accents.
-- **Elites:** the same enemy at twice the size, with a thick gold outline and a crown or similar mark. Draw it at that size rather than scaling it.
+- **Elites:** the same enemy at twice the size, with a thick gold outline and a crown (`eliteSprite()` adds both). Draw it at that size rather than scaling it.
 
 ## 2. Bosses
 
@@ -48,6 +48,14 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 | boss impact | 3 | 10 | Add a 3-frame impact effect |
 | boss death | 3 | 6 | |
 | pickup bob | 4 | 5 | Pickups are 8–9 px |
+
+Regular enemies and elites get their walk, hurt and death clips from `src/art/animate.ts`, built from the one sprite you draw, so you don't draw frames by hand:
+
+- **walk:** the bottom rows that are much narrower than the body count as legs. With two or more legs the feet swing in opposite directions on frames 1 and 3 and the body lifts 1 px on frames 2 and 4. Without legs the body just bobs. Draw legs as separate narrow columns under the body if you want a stride. Speed per enemy is `WALK_FPS` in `src/art/clips.ts`.
+- **hurt:** the walk frame mixed toward `HURT_TINT` (pale cool blue), strong then weaker. The renderer shows it for `HIT_FLASH_TICKS`.
+- **death:** a squash flash, then the body breaks into 2 or 3 px chunks of its own colors that fly out and fall, inside a puff cloud of its lightest color that thins out by ordered dither.
+- Enemies face the player. Draw every enemy facing right; the renderer mirrors it.
+- `npm run art-sheet` also writes `art-sheet/animations.png`: every enemy's walk, hurt and death frames in a row. `src/art/animate.test.ts` checks the frame counts and that each clip moves, lightens or breaks apart.
 
 ## 4. Attacks and effects
 
