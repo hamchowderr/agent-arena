@@ -1,6 +1,6 @@
 import { REGULAR_KINDS, WORLDS, type EnemyKind } from "../sim/arena/content";
 import { deathFrames, hurtFrames, walkFrames } from "./animate";
-import { ENEMY_SPRITES, eliteSprite } from "./arena-sprites";
+import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, ENEMY_SHOT, ENEMY_SPRITES, eliteSprite, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
 import { bossSprite } from "./bosses";
 import { bossClips } from "./clips";
 import { ENEMY_ART_TIER, RENDER_SCALE, type ArtTier } from "./art-rules";
@@ -193,6 +193,15 @@ export function bossSheet(): Picture {
     }),
     WORLDS.map((world) => WORLD_LOOKS[world.tier].ground[0]),
     2,
+  );
+}
+
+export function pickupSheet(): Picture {
+  const sprites = [BOLT, BEAM, RAG_BEAM, SEEKER, CODE_BLOCK, GEM, BIG_GEM, ENEMY_SHOT];
+  return framesSheet(
+    WORLDS.map(() => sprites.map((sprite) => shade([sprite], WORLD_LOOKS[1].faction))),
+    WORLDS.map((world) => WORLD_LOOKS[world.tier].ground[0]),
+    6,
   );
 }
 

@@ -224,25 +224,69 @@ export const HAZARD: Sprite = [
   "..........................",
 ];
 
-export const GEM: Sprite = ["..m..", ".mcm.", "mcwcm", ".mcm.", "..m.."];
+export const GEM: Sprite = [
+  "...bbb...",
+  "..bcccb..",
+  ".bcmmmcb.",
+  "bcmBBBmcb",
+  "bcmwBmmcb",
+  "bcmmBmmcb",
+  ".bcmmmcb.",
+  "..bcccb..",
+  "...bbb...",
+]
 
-export const BIG_GEM: Sprite = ["...y...", "..yoy..", ".yowoy.", "yowwwoy", ".yowoy.", "..yoy..", "...y..."];
+export const BIG_GEM: Sprite = [
+  "....ppp....",
+  "..ppoooop..",
+  ".poyyyyyop.",
+  ".poyrrryop.",
+  "poywyryyyop",
+  "poyyyryyyop",
+  "poyyyryyyop",
+  ".poyyyyyop.",
+  ".pooyyyoop.",
+  "..ppoooop..",
+  "....ppp....",
+]
 
-export const BOLT: Sprite = ["..yy..", ".yooy.", "yowwoy", "yowwoy", ".yooy.", "..yy.."];
+export const BOLT: Sprite = [
+  ".kkkkkk.",
+  "kwwwwwwk",
+  "kwcwwwwk",
+  "kwwcwwwk",
+  "kwcwccwk",
+  "kwwwwwwk",
+  ".kkkkkk.",
+  "..kk....",
+  "..k.....",
+]
 
-export const BEAM: Sprite = ["....mmmmmmmm", "..mmccccccww", "mmcccwwwwwww", "..mmccccccww", "....mmmmmmmm"];
+export const BEAM: Sprite = beamSprite(40, 5, ["c", "m", "w"])
 
-export const SEEKER: Sprite = [".lll.", "lgwgl", "lgggl", ".lgl.", "..l.."];
+export const SEEKER: Sprite = [
+  "....y....",
+  "....s....",
+  "..kkkkk..",
+  ".kwwwwwk.",
+  ".kwcwcwk.",
+  ".kwwwwwk.",
+  "..kkkkk..",
+  "...m.m...",
+  "...c.c...",
+]
 
 export const CODE_BLOCK: Sprite = [
-  "kkkkkkkk",
-  "kSSSSSSk",
-  "kSllSSSk",
-  "kSSlllSk",
-  "kSllSSSk",
-  "kSSSSSSk",
-  "kkkkkkkk",
-];
+  "kkkkkkkkkk",
+  "kwwwwwwwwk",
+  "kwwbwwbwwk",
+  "kwwbggbwwk",
+  "kwbwwwwbwk",
+  "kwwbggbwwk",
+  "kwwbwwbwwk",
+  "kwwwwwwwwk",
+  "kkkkkkkkkk",
+]
 
 export const HALLUCINATION: Sprite = [".pp.", "prrp", "prrp", ".pp."];
 
@@ -303,6 +347,29 @@ export const FLOWER: Sprite = [".r.r.", "rryrr", ".rrr.", "..g..", ".gg.."];
 export const TUFT: Sprite = ["l.l.l.", ".lglg.", "gGgGgg"];
 
 export const CABLE: Sprite = ["..dddd..", ".dSSSSd.", "dS.dd.Sd", "dS.dd.Sd", ".dSSSSd.", "..dddd.."];
+
+function beamSprite(length: number, height: number, [outer, inner, core]: readonly [string, string, string]): Sprite {
+  const middle = Math.floor(height / 2);
+  return Array.from({ length: height }, (_, y) =>
+    Array.from({ length: length }, (_, x) => {
+      const reach = x / (length - 1);
+      const edge = Math.abs(y - middle) / Math.max(1, middle);
+      const dither = (x + y) % 2 === 0;
+      if (reach > 0.93) {
+        return edge < 1 ? core : inner;
+      }
+      if (edge === 0) {
+        return reach > 0.55 ? core : reach > 0.25 ? inner : reach > 0.06 && dither ? outer : ".";
+      }
+      if (edge < 1) {
+        return reach > 0.7 ? inner : reach > 0.3 ? outer : reach > 0.15 && dither ? outer : ".";
+      }
+      return reach > 0.8 && dither ? outer : ".";
+    }).join(""),
+  );
+}
+
+export const RAG_BEAM: Sprite = beamSprite(52, 7, ["g", "l", "w"]);
 
 export const PROPS: readonly Sprite[] = [BUSH, ROCK, SERVER, CRATE, FLOWER, TUFT, TUFT, FLOWER, CABLE];
 
