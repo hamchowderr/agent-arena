@@ -195,6 +195,7 @@ export interface Slam {
 
 export const HIT_FLASH_TICKS = 12;
 export const GEM_SETTLE_TICKS = 30;
+export const LEVEL_UP_HEAL_PERCENT = 15;
 export const GEM_LIFE_TICKS = seconds(20);
 export const GEM_FADE_TICKS = seconds(3);
 export const ELITE_CHEST_PRIZES = 1;
@@ -1276,6 +1277,7 @@ function gainXp(state: ArenaState, amount: number): void {
     state.xp -= xpToNext(state.level);
     state.level += 1;
     state.pendingLevelUps += 1;
+    state.player.health = Math.min(maxHealth(state), state.player.health + percentOf(maxHealth(state), LEVEL_UP_HEAL_PERCENT));
   }
 }
 
