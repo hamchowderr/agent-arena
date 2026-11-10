@@ -6,6 +6,7 @@ A free, open-source (AGPL-3.0-or-later) browser autobattler. Players grow an age
 - `npm run dev`: local dev server
 - `npm run balance`: the balance bots play 1000 seeded runs of the old turn-based stage loop and print clear rates per stage. The targets in `src/sim/run.ts` (`BALANCE_TARGETS`) are tested in CI.
 - `npm run arena-balance`: the kiting bot plays seeded real-time arena runs (`src/sim/arena/`) and prints survival time, level, kills and bosses per run. Set `RUNS` to change the count.
+- `npm run art-sheet`: renders every enemy on every world's ground to `art-sheet/enemies.png`. CI uploads it as the `art-sheet` artifact on every PR.
 - `npm run check`: lint, typecheck, tests, build, and size budget. It must pass before every push.
 
 ## Rules that are enforced
@@ -32,6 +33,9 @@ PRs show proof: a failing test that now passes, a replay seed, or a screenshot. 
 - **beads (`bd`)** is the issue tracker and tracks agent work across Claude Code sessions. Check `bd ready` at the start of a session and claim an issue before starting. File new issues instead of leaving TODOs.
 - **Beads sync** lives on DoltHub at `chowderr/agent_arena`. `scripts/beads-sync.sh` runs at session start: it installs the DoltHub key from `DOLT_CREDS_JWK` and `DOLT_CREDS_KEY_ID` when they are set, then bootstraps or pulls. Run `bd dolt push` after changing issues. Without the key everything still works locally from `.beads/issues.jsonl`.
 - **pstack** (open-pstack for Claude Code) provides the engineering-rigor skills.
+
+## Art rules
+- **Read `.claude/skills/pixel-art/SKILL.md` before drawing anything.** `src/art/audit.test.ts` enforces the limits in `src/art/art-rules.ts`: size by tier, colors per sprite, ground contrast, hue spread within a world, unique silhouettes, native scale and tells of at least 0.8 s. Sprites that still break a rule are listed in `REDRAW_PENDING`, and that list may only shrink.
 
 ## Content rules
 - **Story: own your agent.** The player builds and owns their agent. Every rival company wants you to rent theirs, an agent you don't own or control. Rival names and plot get filled in over time, so use placeholders until then.

@@ -26,26 +26,19 @@ import {
   BIG_GEM,
   BOLT,
   BOSS_OUTLINED,
-  BRUTE,
-  CHARGER,
   CHEST,
   CODE_BLOCK,
   eliteSprite,
-  EXPLODER,
   ENEMY_SHOT,
+  ENEMY_SPRITES,
   GEM,
-  GRUNT,
   HALLUCINATION,
   HAZARD,
-  HEAVY,
-  LOOT_RUNNER,
   PROPS,
-  RUNNER,
   SEEKER,
-  SHOOTER,
-  SPLITTER,
 } from "../art/arena-sprites";
-import { PALETTE } from "../art/palette";
+import { RENDER_SCALE } from "../art/art-rules";
+import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import { agentSprite, type Sprite } from "../art/sprites";
 import { REGULAR_KINDS, WEAPONS, type EnemyKind, type RegularKind } from "../sim/arena/content";
 import { px, SUB } from "../sim/arena/math";
@@ -58,24 +51,12 @@ export const RENDER_WIDTH = 480;
 export const RENDER_HEIGHT = 270;
 const PITCH = (48 * Math.PI) / 180;
 const CAMERA_DISTANCE = 380;
-const BOSS_SCALE = 2;
 const TRAIL_LENGTH = 10;
 const SHAKE_UNITS = 6;
 const BOSS_RING_RADIUS = 30;
 const CHUNK = 192;
 const PROPS_PER_CHUNK = 26;
 const MAX_SHOT_SPRITES = 160;
-const ENEMY_SPRITES: Readonly<Record<RegularKind, Sprite>> = {
-  grunt: GRUNT,
-  runner: RUNNER,
-  charger: CHARGER,
-  shooter: SHOOTER,
-  exploder: EXPLODER,
-  splitter: SPLITTER,
-  brute: BRUTE,
-  heavy: HEAVY,
-  lootRunner: LOOT_RUNNER,
-};
 const ENEMY_CAPACITY: Readonly<Record<RegularKind, number>> = {
   grunt: 420,
   runner: 300,
@@ -95,20 +76,6 @@ const HAZARD_BLINK_TICKS = 40;
 const FLASH_COLOR = new Color(4, 4, 4);
 const PLAIN_COLOR = new Color(1, 1, 1);
 
-export interface WorldLook {
-  readonly ground: readonly [string, string, string, string];
-  readonly fog: string;
-  readonly faction: string;
-  readonly boss: string;
-}
-
-export const WORLD_LOOKS: Readonly<Record<Tier, WorldLook>> = {
-  1: { ground: ["#3f7a3a", "#4a8a40", "#356b33", "#6aa84a"], fog: "#1b2a2a", faction: "#e8603c", boss: PALETTE.p },
-  2: { ground: ["#5a7a3a", "#6b8a44", "#4d6a32", "#9ab25a"], fog: "#2a2a1b", faction: "#a77ee0", boss: PALETTE.o },
-  3: { ground: ["#3a6a6a", "#447a78", "#325a5c", "#6aa8a0"], fog: "#14222a", faction: "#e9a93a", boss: PALETTE.p },
-  4: { ground: ["#5a4a6a", "#6a5a7a", "#4a3a5a", "#8a7aa8"], fog: "#1a1424", faction: "#2fb5ad", boss: PALETTE.o },
-  5: { ground: ["#6a5a3a", "#7a6a44", "#5a4a32", "#b29a5a"], fog: "#2a2014", faction: "#e562c0", boss: PALETTE.p },
-};
 
 class SpriteBatch {
   readonly mesh: InstancedMesh;
@@ -414,7 +381,7 @@ export class ArenaRenderer {
   private enemyBatches(look: WorldLook): Record<EnemyKind, SpriteBatch> {
     const batches = { boss: this.bossBatch(look.boss) } as Record<EnemyKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.batch([ENEMY_SPRITES[kind]], 1, ENEMY_CAPACITY[kind], false, look.faction);
+      batches[kind] = this.batch([ENEMY_SPRITES[kind]], RENDER_SCALE.regular, ENEMY_CAPACITY[kind], false, look.faction);
     }
     return batches;
   }
@@ -422,7 +389,7 @@ export class ArenaRenderer {
   private eliteBatches(look: WorldLook): Record<RegularKind, SpriteBatch> {
     const batches = {} as Record<RegularKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.batch([eliteSprite(ENEMY_SPRITES[kind])], 2, ELITE_CAPACITY, false, look.faction);
+      batches[kind] = this.batch([eliteSprite(ENEMY_SPRITES[kind])], RENDER_SCALE.elite, ELITE_CAPACITY, false, look.faction);
     }
     return batches;
   }
@@ -437,7 +404,7 @@ export class ArenaRenderer {
   }
 
   private bossBatch(color: string): SpriteBatch {
-    const batch = this.batch([BOSS_OUTLINED], BOSS_SCALE, 2, false, color);
+    const batch = this.batch([BOSS_OUTLINED], RENDER_SCALE.boss, 2, false, color);
     batch.mesh.renderOrder = 10;
     const material = batch.mesh.material as MeshBasicMaterial;
     material.depthTest = false;
