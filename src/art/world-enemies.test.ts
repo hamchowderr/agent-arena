@@ -25,11 +25,11 @@ describe("world enemies", () => {
     expect(new Set(frames.map((frame) => frame.join("/"))).size).toBeGreaterThanOrEqual(2);
   });
 
-  it.each(CASES.filter(([world]) => world === "hustlr"))("%s %s is a hand-posed character whose every frame passes the art rules", (world, kind) => {
+  it.each(CASES)("%s %s is a hand-posed character whose every frame passes the art rules", (world, kind) => {
     const frames = enemyPoses(world, kind) ?? [];
     expect(frames).toHaveLength(WALK_FRAMES);
     expect(new Set(frames.map((frame) => frame.join("/"))).size).toBeGreaterThanOrEqual(2);
-    const look = WORLD_LOOKS[1];
+    const look = WORLD_LOOKS[WORLDS.find((each) => each.id === world)?.tier ?? 1];
     const range = TIER_SPAN[ENEMY_ART_TIER[kind]];
     for (const frame of frames) {
       expect(new Set(frame.map((row) => row.length)).size).toBe(1);
