@@ -1,5 +1,6 @@
 import type { RegularKind, WorldId } from "../sim/arena/content";
 import { ENEMY_SPRITES, outlined } from "./arena-sprites";
+import { PROMPT_PLAINS, type Pose } from "./cast";
 import { Raster } from "./raster";
 import type { Sprite } from "./sprites";
 
@@ -401,8 +402,15 @@ export const WORLD_ENEMY_SPRITES: Readonly<Record<WorldId, WorldSprites>> = {
   trustMe: { grunt: hallucination(), splitter: chunk(), shooter: confidentAnswer(), brute: deepIndex(), heavy: abyssalCitation(), lootRunner: realSource() },
 };
 
+const POSES: Readonly<Partial<Record<WorldId, Partial<Record<RegularKind, Pose>>>>> = { hustlr: PROMPT_PLAINS };
+
+export function enemyPoses(world: WorldId, kind: RegularKind): Sprite[] | undefined {
+  const pose = POSES[world]?.[kind];
+  return pose ? [0, 1, 2, 3].map(pose) : undefined;
+}
+
 export function enemySprite(world: WorldId, kind: RegularKind): Sprite {
-  return WORLD_ENEMY_SPRITES[world][kind] ?? ENEMY_SPRITES[kind];
+  return POSES[world]?.[kind]?.(0) ?? WORLD_ENEMY_SPRITES[world][kind] ?? ENEMY_SPRITES[kind];
 }
 
 interface WallStyle {

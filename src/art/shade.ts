@@ -1,3 +1,4 @@
+import { FLAT_COLORS } from "./form";
 import { isMaterial, MATERIALS } from "./materials";
 import { PALETTE, TRANSPARENT, type PaletteKey } from "./palette";
 import type { Sprite } from "./sprites";
@@ -155,7 +156,7 @@ export function shade(layers: readonly Sprite[], faction: string): ColorGrid {
           }
         }
       }
-      return PALETTE[key as PaletteKey] ?? null;
+      return PALETTE[key as PaletteKey] ?? FLAT_COLORS[key] ?? null;
     }),
   );
 }
