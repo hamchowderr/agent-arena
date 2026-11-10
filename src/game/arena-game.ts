@@ -8,7 +8,7 @@ import { choose, createArena, currentWorld, reroll, skip, step, type ArenaEvent,
 import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
 import { currentLocale, nextLocale, setLocale, t, type LocaleCode } from "../i18n";
-import { bossName, bossPitch, rivalName, tierStage } from "./format";
+import { bossName, bossPitch, passiveName, rivalName, tierStage } from "./format";
 import {
   cardRects,
   drawBanner,
@@ -319,6 +319,28 @@ export class ArenaGame {
           }
           break;
         }
+        case "bossPhase": {
+          const check = currentWorld(this.state).check;
+          const part = check.kind === "passive" ? passiveName(check.passive) : t("boss.checkWeapons");
+          this.renderer.shake = Math.max(this.renderer.shake, 0.9);
+          this.hitStop = Math.max(this.hitStop, 8);
+          const boss = this.state.enemies.find((enemy) => enemy.id === this.state.bossId) ?? this.state.player;
+          this.effects.spawn("pow", boss.x, boss.y);
+          this.banner =
+            event.phase === 2
+              ? { title: t("boss.phase2"), subtitle: event.checkPassed ? t("boss.checkPassed", { part }) : t("boss.checkFailed", { part }), age: 0, life: 170 }
+              : { title: t("boss.phase3"), subtitle: t("boss.phase3Line"), age: 0, life: 170 };
+          break;
+        }
+        case "bossHealed":
+          if (this.floats.length < MAX_FLOATS) {
+            this.floats.push({ text: `+${event.amount}`, x: event.x, y: event.y, color: "#a7f070", size: 22, age: 0 });
+          }
+          break;
+        case "acquired":
+          this.renderer.shake = 2;
+          this.renderer.hurt = 1;
+          break;
         case "bossDown": {
           this.renderer.shake = 1.6;
           this.hitStop = Math.max(this.hitStop, 14);

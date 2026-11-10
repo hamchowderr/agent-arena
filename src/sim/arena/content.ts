@@ -136,19 +136,28 @@ export const ENEMIES: Readonly<Record<EnemyKind, EnemyDefinition>> = {
 
 export type WorldId = "hustlr" | "notionally" | "meterly" | "synergex" | "trustMe";
 
+export type BossPattern = "spread" | "trail" | "charge" | "bursts" | "fakes";
+
+export type BossCheck = { readonly kind: "passive"; readonly passive: PassiveId } | { readonly kind: "weapons"; readonly count: number };
+
 export interface World {
   readonly id: WorldId;
   readonly tier: Tier;
   readonly bossHealth: number;
+  readonly pattern: BossPattern;
+  readonly check: BossCheck;
 }
 
 export const WORLDS: readonly World[] = [
-  { id: "hustlr", tier: 1, bossHealth: 700 },
-  { id: "notionally", tier: 2, bossHealth: 1600 },
-  { id: "meterly", tier: 3, bossHealth: 3200 },
-  { id: "synergex", tier: 4, bossHealth: 5600 },
-  { id: "trustMe", tier: 5, bossHealth: 9000 },
+  { id: "hustlr", tier: 1, bossHealth: 700, pattern: "spread", check: { kind: "passive", passive: "fewShot" } },
+  { id: "notionally", tier: 2, bossHealth: 1600, pattern: "trail", check: { kind: "passive", passive: "vectorMemory" } },
+  { id: "meterly", tier: 3, bossHealth: 3200, pattern: "charge", check: { kind: "weapons", count: 2 } },
+  { id: "synergex", tier: 4, bossHealth: 5600, pattern: "bursts", check: { kind: "passive", passive: "planner" } },
+  { id: "trustMe", tier: 5, bossHealth: 9000, pattern: "fakes", check: { kind: "passive", passive: "guardrails" } },
 ];
+
+export const BOSS_PHASE_FLOORS = [60, 30, 0] as const;
+export const ACQUISITION_SECONDS = 60;
 
 export const BOSS_EVERY_SECONDS = 120;
 export const MAX_WEAPONS = 5;
