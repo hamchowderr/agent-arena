@@ -264,6 +264,18 @@ export const BOLT: Sprite = [
 
 export const BEAM: Sprite = beamSprite(40, 5, ["c", "m", "w"])
 
+export const DRONE: Sprite = [
+  "..kkkkk..",
+  "....k....",
+  ".kkkkkkk.",
+  "kmmmmmmmk",
+  "kmkmmmkmk",
+  "kmmmmmmmk",
+  "kccccccck",
+  ".kkkkkkk.",
+  "...kSk...",
+];
+
 export const SEEKER: Sprite = [
   "....y....",
   "....s....",

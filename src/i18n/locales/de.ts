@@ -25,6 +25,9 @@ export const de = {
   "card.passive": "PASSIV",
   "card.new": "NEU",
   "card.levelChange": "LV {from} → {to}",
+  "card.restore.kind": "HEILUNG",
+  "card.restore.name": "Hot Reload",
+  "card.restore.blurb": "Alles ist ausgebaut. Heilt 40 % deiner LP.",
 
   "pause.title": "Pause",
   "pause.keys": "[P] Weiter   [M] Musik",
@@ -34,6 +37,7 @@ export const de = {
   "pause.dps": "{dps} DPS",
 
   "stat.maxHealth": "Max. LP",
+  "stat.health": "LP",
   "stat.damage": "Schaden",
   "stat.damageBonus": "Schadensbonus",
   "stat.crit": "Kritische Chance",
@@ -112,6 +116,8 @@ export const de = {
   "elite.arrives": "Ein gemieteter Agent taucht auf",
   "elite.subtitle": "{rival} schickt seinen besten Agenten. Er lässt eine Truhe fallen.",
   "chest.open": "Truhe! Gratis-Upgrade",
+  "chest.title": "Truhe!",
+  "chest.hint": "Reines Glück. Keine Wahl, nur drehen.",
 
   "tier.1.name": "Rohes LLM",
   "tier.1.stage": "Pre-Seed",
@@ -150,7 +156,7 @@ export const de = {
   "weapon.shell.name": "Shell",
   "weapon.shell.blurb": "Ein Impuls um dich herum trifft jeden Rivalen in Reichweite.",
   "weapon.subagents.name": "Subagenten",
-  "weapon.subagents.blurb": "Kleine Agenten jagen Rivalen auf eigene Faust.",
+  "weapon.subagents.blurb": "Kleine Helfer-Agenten fliegen mit dir und feuern zielsuchende Schüsse.",
   "weapon.ragSearch.name": "RAG",
   "weapon.ragSearch.blurb": "Fundierte Strahlen, die alles auf ihrem Weg durchbohren.",
   "weapon.codeInterpreter.name": "Code-Interpreter",
