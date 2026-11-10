@@ -3,7 +3,7 @@ import { BASE_CRIT, hallucinationPercent, maxHealth, statTotal, type ArenaState 
 
 export const CARDS_PER_DRAFT = 3;
 
-export type ChangeStat = PassiveStat | "every" | "shots" | "blocks" | "pierce" | "radius";
+export type ChangeStat = PassiveStat | "health" | "every" | "shots" | "blocks" | "pierce" | "radius";
 
 export type ChangeUnit = "plain" | "ticks" | "percent" | "bonusPercent" | "regen";
 
@@ -17,7 +17,19 @@ export interface CardChange {
 export type Card =
   | { readonly kind: "weapon"; readonly id: WeaponId; readonly toLevel: number; readonly recommended: boolean; readonly changes: readonly CardChange[] }
   | { readonly kind: "passive"; readonly id: PassiveId; readonly toLevel: number; readonly recommended: boolean; readonly changes: readonly CardChange[] }
-  | { readonly kind: "evolve"; readonly id: WeaponId; readonly toLevel: 1; readonly recommended: boolean; readonly changes: readonly CardChange[] };
+  | { readonly kind: "evolve"; readonly id: WeaponId; readonly toLevel: 1; readonly recommended: boolean; readonly changes: readonly CardChange[] }
+  | { readonly kind: "restore"; readonly id: "restore"; readonly toLevel: 1; readonly recommended: true; readonly changes: readonly CardChange[] };
+
+export const RESTORE_PERCENT = 40;
+
+export function restoreAmount(state: ArenaState): number {
+  return Math.trunc((maxHealth(state) * RESTORE_PERCENT) / 100);
+}
+
+function restoreCard(state: ArenaState): Card {
+  const before = state.player.health;
+  return { kind: "restore", id: "restore", toLevel: 1, recommended: true, changes: [{ stat: "health", unit: "plain", before, after: Math.min(maxHealth(state), before + restoreAmount(state)) }] };
+}
 
 type Candidate = (
   | { readonly kind: "weapon"; readonly id: WeaponId; readonly toLevel: number }
@@ -116,6 +128,9 @@ function candidates(state: ArenaState): Candidate[] {
 
 export function offerCards(state: ArenaState): Card[] {
   const pool = candidates(state);
+  if (pool.length === 0) {
+    return [restoreCard(state)];
+  }
   const picked: Candidate[] = [];
   while (picked.length < CARDS_PER_DRAFT && pool.length > 0) {
     const total = pool.reduce((sum, candidate) => sum + candidate.weight, 0);

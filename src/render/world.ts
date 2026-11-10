@@ -2,6 +2,7 @@ import {
   AdditiveBlending,
   Color,
   Fog,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   Mesh,
@@ -22,30 +23,29 @@ import {
   type Texture,
 } from "three";
 import {
-  BEAM,
   BIG_GEM,
-  BOLT,
-  BOSS_OUTLINED,
   CHEST,
-  CODE_BLOCK,
-  eliteSprite,
   ENEMY_SHOT,
-  ENEMY_SPRITES,
   GEM,
   HALLUCINATION,
   HAZARD,
   PROPS,
-  SEEKER,
+  DRONE,
 } from "../art/arena-sprites";
+import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FPS, DEATH_FRAMES, WALK_FRAMES } from "../art/animate";
 import { RENDER_SCALE } from "../art/art-rules";
+import { WEAPON_STAGES, weaponSprite, weaponStage, type WeaponStage } from "../art/weapon-art";
+import { BOSS_CLIP_START, bossClips, enemyClips, WALK_FPS } from "../art/clips";
 import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
-import { agentSprite, type Sprite } from "../art/sprites";
-import { REGULAR_KINDS, WEAPONS, type EnemyKind, type GroundHazard, type RegularKind } from "../sim/arena/content";
-import { px, SUB } from "../sim/arena/math";
-import { inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, seesThroughFakes, weaponStats, type ArenaState } from "../sim/arena/sim";
+import type { Sprite } from "../art/sprites";
+import { agentClips } from "../art/clips";
+import { agentBody } from "../art/agent";
+import { REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
+import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
+import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, seesThroughFakes, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
-import { circleTexture, glowTexture, groundTexture, GROUND_TILE, patchTexture, pixelTexture, spriteImage, type PatchLook } from "./textures";
+import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, patchTexture, pixelTexture, spriteImage, type AtlasImage, type PatchLook } from "./textures";
 
 export const RENDER_WIDTH = 480;
 export const RENDER_HEIGHT = 270;
@@ -53,7 +53,11 @@ const PITCH = (48 * Math.PI) / 180;
 const CAMERA_DISTANCE = 380;
 const TRAIL_LENGTH = 10;
 const SHAKE_UNITS = 6;
-const BOSS_RING_RADIUS = 30;
+const BOSS_RING_RADIUS = 40;
+const BOSS_SHADOW = 52;
+const BOSS_WINDUP_TICKS = CHARGE_WINDUP;
+const BOSS_WINDUP_MIN_INTERVAL = 60;
+const BOSS_HURT_TICKS = 4;
 const CHUNK = 192;
 const PROPS_PER_CHUNK = 26;
 const MAX_SHOT_SPRITES = 160;
@@ -69,6 +73,11 @@ const ENEMY_CAPACITY: Readonly<Record<RegularKind, number>> = {
   lootRunner: 2,
 };
 const ELITE_CAPACITY = 2;
+const DEATH_CAPACITY = 48;
+const AGENT_WALK_FPS = 10;
+const MAX_DYING = 160;
+const FACING_DEADZONE = px(3);
+const DEATH_TICKS_PER_FRAME = TICKS_PER_SECOND / DEATH_FPS;
 const MAX_HAZARD_SPRITES = 40;
 const HAZARD_PIXELS = 13;
 const BIG_HAZARD_SCALE = 18 / 13;
@@ -87,20 +96,53 @@ const PATCH_LOOKS: Readonly<Record<GroundHazard, PatchLook>> = {
 };
 
 
+function animate(material: MeshBasicMaterial, frames: number): void {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float aFrame;\nattribute float aFlip;")
+      .replace("#include <uv_vertex>", `#include <uv_vertex>\nvMapUv = vec2((aFrame + mix(uv.x, 1.0 - uv.x, aFlip)) / ${frames.toFixed(1)}, uv.y);`);
+  };
+  material.customProgramCacheKey = () => `frames-${frames}`;
+}
+
+interface BatchShape {
+  readonly frames: number;
+  readonly sink: number;
+  readonly lead?: number | undefined;
+  readonly glow?: boolean;
+}
+
+const STILL: BatchShape = { frames: 1, sink: 0 };
+
 class SpriteBatch {
   readonly mesh: InstancedMesh;
   private count = 0;
   private readonly matrix = new Matrix4();
+  private readonly frame: InstancedBufferAttribute | null;
+  private readonly flip: InstancedBufferAttribute | null;
 
-  constructor(scene: Scene, texture: Texture, width: number, height: number, capacity: number, flat: boolean) {
+  constructor(scene: Scene, texture: Texture, width: number, height: number, capacity: number, flat: boolean, shape: BatchShape = STILL) {
     const geometry = new PlaneGeometry(width, height);
     if (flat) {
+      geometry.translate(shape.lead === undefined ? 0 : shape.lead - width / 2, 0, 0);
       geometry.rotateX(-Math.PI / 2);
     } else {
-      geometry.translate(0, height / 2, 0);
+      geometry.translate(0, height / 2 - shape.sink, 0);
       geometry.rotateX(-(Math.PI / 2 - PITCH) * 0.5);
     }
-    const material = new MeshBasicMaterial({ map: texture, alphaTest: 0.5, toneMapped: false });
+    const material = shape.glow
+      ? new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: AdditiveBlending, toneMapped: false })
+      : new MeshBasicMaterial({ map: texture, alphaTest: 0.5, toneMapped: false });
+    if (shape.frames > 1) {
+      this.frame = new InstancedBufferAttribute(new Float32Array(capacity), 1);
+      this.flip = new InstancedBufferAttribute(new Float32Array(capacity), 1);
+      geometry.setAttribute("aFrame", this.frame);
+      geometry.setAttribute("aFlip", this.flip);
+      animate(material, shape.frames);
+    } else {
+      this.frame = null;
+      this.flip = null;
+    }
     this.mesh = new InstancedMesh(geometry, material, capacity);
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
@@ -114,7 +156,7 @@ class SpriteBatch {
     this.count = 0;
   }
 
-  add(x: number, y: number, z: number, flash = false, rotation: Quaternion | null = null, dim = false): void {
+  add(x: number, y: number, z: number, flash = false, rotation: Quaternion | null = null, frame = 0, flip = false, dim = false): void {
     if (this.count >= this.mesh.instanceMatrix.count) {
       return;
     }
@@ -126,6 +168,8 @@ class SpriteBatch {
     }
     this.mesh.setMatrixAt(this.count, this.matrix);
     this.mesh.setColorAt(this.count, flash ? FLASH_COLOR : dim ? SEEN_FAKE_COLOR : PLAIN_COLOR);
+    this.frame?.setX(this.count, frame);
+    this.flip?.setX(this.count, flip ? 1 : 0);
     this.count += 1;
   }
 
@@ -135,6 +179,10 @@ class SpriteBatch {
     if (this.mesh.instanceColor) {
       this.mesh.instanceColor.needsUpdate = true;
     }
+    if (this.frame && this.flip) {
+      this.frame.needsUpdate = true;
+      this.flip.needsUpdate = true;
+    }
   }
 
   dispose(scene: Scene): void {
@@ -143,6 +191,15 @@ class SpriteBatch {
     (this.mesh.material as MeshBasicMaterial).map?.dispose();
     (this.mesh.material as MeshBasicMaterial).dispose();
   }
+}
+
+interface Dying {
+  readonly x: number;
+  readonly z: number;
+  readonly kind: EnemyKind;
+  readonly elite: boolean;
+  readonly flip: boolean;
+  readonly start: number;
 }
 
 class ShadowBatch {
@@ -230,6 +287,10 @@ void main() {
 }
 `;
 
+function worldOf(tier: Tier): WorldId {
+  return WORLDS.find((world) => world.tier === tier)?.id ?? "hustlr";
+}
+
 function hash(seed: number, x: number, y: number, salt: number): number {
   return mixSeed(mixSeed(seed, x * 7919 + salt), y * 104729 + salt);
 }
@@ -250,16 +311,28 @@ export class ArenaRenderer {
   private readonly shadows: ShadowBatch;
   private enemies: Record<EnemyKind, SpriteBatch>;
   private elites: Record<RegularKind, SpriteBatch>;
+  private deaths: Record<RegularKind, SpriteBatch>;
+  private eliteDeaths: Record<RegularKind, SpriteBatch>;
+  private bossDeath: SpriteBatch;
+  private bossVolley = -1;
+  private bossImpactTick = -1000;
+  private readonly dying: Dying[] = [];
+  private readonly facing = new Map<number, boolean>();
+  private tick = 0;
+  private lastPlayerX = 0;
+  private lastPlayerZ = 0;
+  private agentFlip = false;
   private readonly chests: SpriteBatch;
   private readonly agent: SpriteBatch[];
   private readonly ghosts: SpriteBatch[];
   private readonly trail: { x: number; z: number }[] = [];
   private readonly gems: SpriteBatch;
   private readonly bigGems: SpriteBatch;
-  private readonly bolts: SpriteBatch;
-  private readonly beams: SpriteBatch;
-  private readonly seekers: SpriteBatch;
-  private readonly blocks: SpriteBatch;
+  private readonly arms = new Map<string, SpriteBatch>();
+  private readonly armGlows = new Map<string, SpriteBatch>();
+  private readonly levels = new Map<WeaponId, number>();
+  private readonly glows: Readonly<Record<"token" | "bigToken", SpriteBatch>>;
+  private readonly drones: SpriteBatch;
   private readonly hallucinations: SpriteBatch;
   private readonly shots: SpriteBatch;
   private readonly seenFakes: SpriteBatch;
@@ -354,17 +427,20 @@ export class ArenaRenderer {
     }
 
     this.shadows = new ShadowBatch(this.scene, 1400);
-    this.enemies = this.enemyBatches(WORLD_LOOKS[1]);
-    this.elites = this.eliteBatches(WORLD_LOOKS[1]);
+    this.enemies = this.enemyBatches(WORLD_LOOKS[1], 1);
+    this.elites = this.eliteBatches(WORLD_LOOKS[1], 1);
+    this.deaths = this.deathBatches(WORLD_LOOKS[1], 1, false);
+    this.eliteDeaths = this.deathBatches(WORLD_LOOKS[1], 1, true);
+    this.bossDeath = this.bossDeathBatch(1);
     this.chests = this.batch([CHEST], 2, 4, false);
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
-      const batch = this.batch(agentSprite(tier), 1, 1, false);
+      const batch = this.atlasBatch(atlasImage(agentClips(tier)), 1, 1, 0);
       batch.mesh.renderOrder = 11;
       (batch.mesh.material as MeshBasicMaterial).depthTest = false;
       return batch;
     });
     this.ghosts = ([1, 2, 3, 4, 5] as const).map((tier) => {
-      const batch = this.batch(agentSprite(tier), 1, TRAIL_LENGTH, false);
+      const batch = this.batch([agentBody(tier)], 1, TRAIL_LENGTH, false);
       const material = batch.mesh.material as MeshBasicMaterial;
       material.transparent = true;
       material.opacity = 0.4;
@@ -374,10 +450,12 @@ export class ArenaRenderer {
     });
     this.gems = this.batch([GEM], 1, 900, false);
     this.bigGems = this.batch([BIG_GEM], 1, 200, false);
-    this.bolts = this.batch([BOLT], 1, 200, true);
-    this.beams = this.batch([BEAM], 1, 100, true);
-    this.seekers = this.batch([SEEKER], 1, 100, true);
-    this.blocks = this.batch([CODE_BLOCK], 1, 16, false);
+    this.buildArms();
+    this.glows = {
+      token: this.glowBatch(14, 10, "#ffcd75", 0.4, 900),
+      bigToken: this.glowBatch(22, 14, "#fff1a8", 0.55, 200),
+    };
+    this.drones = this.batch([DRONE], 1, 12, false);
     this.hallucinations = this.batch([HALLUCINATION], 1, 100, true);
     this.shots = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
     this.shots.mesh.renderOrder = 12;
@@ -409,20 +487,91 @@ export class ArenaRenderer {
     return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
   }
 
-  private enemyBatches(look: WorldLook): Record<EnemyKind, SpriteBatch> {
-    const batches = { boss: this.bossBatch(look.boss) } as Record<EnemyKind, SpriteBatch>;
+  private buildArms(): void {
+    const looks: readonly { readonly weapon: WeaponId; readonly stages: readonly WeaponStage[]; readonly flat: boolean; readonly capacity: number; readonly glow: string }[] = [
+      { weapon: "prompt", stages: WEAPON_STAGES, flat: false, capacity: 200, glow: "#73eff7" },
+      { weapon: "webSearch", stages: WEAPON_STAGES, flat: true, capacity: 100, glow: "#41a6f6" },
+      { weapon: "ragSearch", stages: [0], flat: true, capacity: 100, glow: "#a7f070" },
+      { weapon: "subagents", stages: WEAPON_STAGES, flat: false, capacity: 100, glow: "#73eff7" },
+      { weapon: "codeExec", stages: WEAPON_STAGES, flat: false, capacity: 16, glow: "#ffcd75" },
+      { weapon: "codeInterpreter", stages: [0], flat: false, capacity: 16, glow: "#ffcd75" },
+    ];
+    for (const look of looks) {
+      for (const stage of look.stages) {
+        const sprite = weaponSprite(look.weapon, stage);
+        const key = `${look.weapon}:${stage}`;
+        const width = sprite[0]?.length ?? 1;
+        const evolved = look.stages.length === 1;
+        const boost = evolved ? 1.6 : 1 + stage * 0.3;
+        const alpha = Math.min(0.85, 0.45 + stage * 0.12 + (evolved ? 0.25 : 0));
+        if (look.flat) {
+          this.arms.set(key, this.onTop(this.leadBatch([sprite], look.capacity)));
+          this.armGlows.set(key, this.glowBatch(width * 1.4, 16 * boost, look.glow, alpha, look.capacity, 8));
+        } else {
+          this.arms.set(key, this.onTop(this.batch([sprite], 1, look.capacity, false)));
+          this.armGlows.set(key, this.glowBatch(width * 2 * boost, width * 1.5 * boost, look.glow, alpha, look.capacity));
+        }
+      }
+    }
+  }
+
+  private arm(weapon: WeaponId): string {
+    const evolved = weapon === "ragSearch" || weapon === "codeInterpreter";
+    return `${weapon}:${evolved ? 0 : weaponStage(this.levels.get(weapon) ?? 1)}`;
+  }
+
+  private onTop(batch: SpriteBatch): SpriteBatch {
+    batch.mesh.renderOrder = 11;
+    (batch.mesh.material as MeshBasicMaterial).depthTest = false;
+    return batch;
+  }
+
+  private leadBatch(layers: readonly Sprite[], capacity: number): SpriteBatch {
+    const image = spriteImage(layers);
+    return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width, image.height, capacity, true, { frames: 1, sink: 0, lead: 2 });
+  }
+
+  private glowBatch(width: number, height: number, color: string, alpha: number, capacity: number, lead?: number): SpriteBatch {
+    const batch = new SpriteBatch(this.scene, glowTexture(64, color, alpha), width, height, capacity, true, { frames: 1, sink: 0, lead, glow: true });
+    batch.mesh.renderOrder = 2;
+    return batch;
+  }
+
+  private atlasBatch(image: AtlasImage, scale: number, capacity: number, sink: number): SpriteBatch {
+    return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, false, { frames: image.frames, sink: sink * scale });
+  }
+
+  private enemyBatches(look: WorldLook, tier: Tier): Record<EnemyKind, SpriteBatch> {
+    const batches = { boss: this.bossBatch(worldOf(tier), look.faction) } as Record<EnemyKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.batch([ENEMY_SPRITES[kind]], RENDER_SCALE.regular, ENEMY_CAPACITY[kind], false, look.faction);
+      batches[kind] = this.atlasBatch(atlasImage(enemyClips(worldOf(tier), kind, look.faction, false).moving), RENDER_SCALE.regular, ENEMY_CAPACITY[kind], 0);
     }
     return batches;
   }
 
-  private eliteBatches(look: WorldLook): Record<RegularKind, SpriteBatch> {
+  private eliteBatches(look: WorldLook, tier: Tier): Record<RegularKind, SpriteBatch> {
     const batches = {} as Record<RegularKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.batch([eliteSprite(ENEMY_SPRITES[kind])], RENDER_SCALE.elite, ELITE_CAPACITY, false, look.faction);
+      batches[kind] = this.atlasBatch(atlasImage(enemyClips(worldOf(tier), kind, look.faction, true).moving), RENDER_SCALE.elite, ELITE_CAPACITY, 0);
     }
     return batches;
+  }
+
+  private deathBatches(look: WorldLook, tier: Tier, elite: boolean): Record<RegularKind, SpriteBatch> {
+    const batches = {} as Record<RegularKind, SpriteBatch>;
+    for (const kind of REGULAR_KINDS) {
+      const death = enemyClips(worldOf(tier), kind, look.faction, elite).death;
+      const scale = elite ? RENDER_SCALE.elite : RENDER_SCALE.regular;
+      batches[kind] = this.atlasBatch(atlasImage(death.frames), scale, elite ? ELITE_CAPACITY : DEATH_CAPACITY, death.below);
+    }
+    return batches;
+  }
+
+  die(x: number, y: number, kind: EnemyKind, elite: boolean, playerX: number): void {
+    if (this.dying.length >= MAX_DYING) {
+      return;
+    }
+    this.dying.push({ x: x / SUB, z: y / SUB, kind, elite, flip: playerX < x, start: this.tick });
   }
 
   private hazardBatch(scale: number): SpriteBatch {
@@ -434,8 +583,16 @@ export class ArenaRenderer {
     return batch;
   }
 
-  private bossBatch(color: string): SpriteBatch {
-    const batch = this.batch([BOSS_OUTLINED], RENDER_SCALE.boss, 2, false, color);
+  private bossDeathBatch(tier: Tier): SpriteBatch {
+    const death = bossClips(worldOf(tier), WORLD_LOOKS[tier].faction).death;
+    const batch = this.atlasBatch(atlasImage(death.frames), RENDER_SCALE.boss, 2, death.below);
+    batch.mesh.renderOrder = 10;
+    (batch.mesh.material as MeshBasicMaterial).depthTest = false;
+    return batch;
+  }
+
+  private bossBatch(world: WorldId, faction: string): SpriteBatch {
+    const batch = this.atlasBatch(atlasImage(bossClips(world, faction).moving), RENDER_SCALE.boss, 2, 0);
     batch.mesh.renderOrder = 10;
     const material = batch.mesh.material as MeshBasicMaterial;
     material.depthTest = false;
@@ -454,12 +611,106 @@ export class ArenaRenderer {
     map.repeat.set(40, 40);
     material.map = map;
     material.needsUpdate = true;
-    for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites)]) {
+    for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths)]) {
       batch.dispose(this.scene);
     }
-    this.enemies = this.enemyBatches(look);
-    this.elites = this.eliteBatches(look);
+    this.enemies = this.enemyBatches(look, tier);
+    this.elites = this.eliteBatches(look, tier);
+    this.deaths = this.deathBatches(look, tier, false);
+    this.eliteDeaths = this.deathBatches(look, tier, true);
+    this.bossDeath.dispose(this.scene);
+    this.bossDeath = this.bossDeathBatch(tier);
+    this.dying.length = 0;
+    this.facing.clear();
     this.propChunkX = Number.NaN;
+  }
+
+  private walkFrame(kind: RegularKind, id: number, tick: number): number {
+    return Math.floor(((tick + id * 17) * WALK_FPS[kind]) / TICKS_PER_SECOND) % WALK_FRAMES;
+  }
+
+  private bossFrame(state: ArenaState, hitFlash: number): number {
+    const fight = state.fight;
+    if (fight && fight.volley !== this.bossVolley) {
+      if (this.bossVolley >= 0 && fight.volley > this.bossVolley) {
+        this.bossImpactTick = state.tick;
+      }
+      this.bossVolley = fight.volley;
+    }
+    if (!fight) {
+      this.bossVolley = -1;
+    }
+    const idle = BOSS_CLIP_START.idle + (Math.floor((state.tick * BOSS_IDLE_FPS) / TICKS_PER_SECOND) % BOSS_IDLE_FRAMES);
+    if (!fight || fight.transition > 0) {
+      return idle;
+    }
+    if (fight.windup > 0) {
+      return BOSS_CLIP_START.windup + Math.min(BOSS_WINDUP_FRAMES - 1, Math.floor(((BOSS_WINDUP_TICKS - Math.min(BOSS_WINDUP_TICKS, fight.windup)) * BOSS_WINDUP_FRAMES) / BOSS_WINDUP_TICKS));
+    }
+    const sinceImpact = state.tick - this.bossImpactTick;
+    const impactTicks = (BOSS_IMPACT_FRAMES * TICKS_PER_SECOND) / BOSS_IMPACT_FPS;
+    if (fight.chargeTicks > 0 || sinceImpact < impactTicks) {
+      return BOSS_CLIP_START.impact + Math.min(BOSS_IMPACT_FRAMES - 1, Math.floor((Math.max(0, sinceImpact) * BOSS_IMPACT_FRAMES) / impactTicks));
+    }
+    if (this.bossImpactTick >= 0 && sinceImpact > BOSS_WINDUP_MIN_INTERVAL && fight.attackTimer <= BOSS_WINDUP_TICKS) {
+      return BOSS_CLIP_START.windup + Math.min(BOSS_WINDUP_FRAMES - 1, Math.floor(((BOSS_WINDUP_TICKS - fight.attackTimer) * BOSS_WINDUP_FRAMES) / BOSS_WINDUP_TICKS));
+    }
+    if (hitFlash > HIT_FLASH_TICKS - BOSS_HURT_TICKS) {
+      return BOSS_CLIP_START.hurt + (hitFlash > HIT_FLASH_TICKS - BOSS_HURT_TICKS / 2 ? 0 : 1);
+    }
+    return idle;
+  }
+
+  private syncEnemies(state: ArenaState): void {
+    const batches = [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths), this.bossDeath];
+    for (const batch of batches) {
+      batch.begin();
+    }
+    const seesFakes = seesThroughFakes(state);
+    if (this.facing.size > state.enemies.length * 2 + 64) {
+      this.facing.clear();
+    }
+    for (const enemy of state.enemies) {
+      const x = enemy.x / SUB;
+      const z = enemy.y / SUB;
+      const telegraph = enemy.mode === "telegraph";
+      const dx = state.player.x - enemy.x;
+      if (Math.abs(dx) > FACING_DEADZONE) {
+        this.facing.set(enemy.id, dx < 0);
+      }
+      const flip = this.facing.get(enemy.id) ?? false;
+      if (enemy.kind === "boss") {
+        this.shadows.add(x, z, BOSS_SHADOW);
+        this.enemies.boss.add(x, 0, z, false, null, this.bossFrame(state, enemy.hitFlash), flip);
+        continue;
+      }
+      if (enemy.fake && (state.tick + enemy.id) % FAKE_FLICKER_TICKS < FAKE_HIDDEN_TICKS) {
+        continue;
+      }
+      if (!enemy.fake) {
+        this.shadows.add(x, z, enemy.radius / SUB / 0.55);
+      }
+      const hurt = enemy.hitFlash > 0;
+      const frame = hurt ? WALK_FRAMES + (enemy.hitFlash > HIT_FLASH_TICKS / 2 ? 0 : 1) : telegraph ? 0 : this.walkFrame(enemy.kind, enemy.id, state.tick);
+      const batch = enemy.elite ? this.elites[enemy.kind] : this.enemies[enemy.kind];
+      batch.add(x, 0, z, telegraph && Math.floor(state.tick / 3) % 2 === 0, null, frame, flip, enemy.fake && seesFakes);
+    }
+    for (let index = this.dying.length - 1; index >= 0; index -= 1) {
+      const body = this.dying[index];
+      if (!body) {
+        continue;
+      }
+      const frame = Math.floor((state.tick - body.start) / DEATH_TICKS_PER_FRAME);
+      if (frame >= DEATH_FRAMES || frame < 0) {
+        this.dying.splice(index, 1);
+        continue;
+      }
+      const batch = body.kind === "boss" ? this.bossDeath : (body.elite ? this.eliteDeaths : this.deaths)[body.kind];
+      batch.add(body.x, 0, body.z, false, null, frame, body.flip);
+    }
+    for (const batch of batches) {
+      batch.commit();
+    }
   }
 
   pulse(x: number, y: number, radius: number, color: string): void {
@@ -524,34 +775,24 @@ export class ArenaRenderer {
     this.placeProps(playerX, playerZ);
 
     this.shadows.begin();
-    const enemyBatches = [...Object.values(this.enemies), ...Object.values(this.elites)];
-    for (const batch of enemyBatches) {
-      batch.begin();
-    }
-    const seesFakes = seesThroughFakes(state);
-    for (const enemy of state.enemies) {
-      const x = enemy.x / SUB;
-      const z = enemy.y / SUB;
-      if (enemy.fake && (state.tick + enemy.id) % FAKE_FLICKER_TICKS < FAKE_HIDDEN_TICKS) {
-        continue;
-      }
-      const telegraph = enemy.mode === "telegraph" && Math.floor(state.tick / 3) % 2 === 0;
-      const batch = enemy.elite && enemy.kind !== "boss" ? this.elites[enemy.kind] : this.enemies[enemy.kind];
-      batch.add(x, 0, z, enemy.hitFlash > 0 || telegraph, null, enemy.fake && seesFakes);
-      if (!enemy.fake) {
-        this.shadows.add(x, z, enemy.radius / SUB / 0.55);
-      }
-    }
+    this.tick = state.tick;
+    this.syncEnemies(state);
     this.syncPatches(state);
-    for (const batch of enemyBatches) {
-      batch.commit();
-    }
 
     for (const batch of this.agent) {
       batch.begin();
     }
     const blink = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable / 3) % 2 === 0;
-    this.agent[state.tier - 1]?.add(playerX, state.player.dashTicks > 0 ? 3 : 0, playerZ, blink);
+    const stepX = playerX - this.lastPlayerX;
+    const stepZ = playerZ - this.lastPlayerZ;
+    const moving = Math.abs(stepX) + Math.abs(stepZ) > 0.01;
+    if (Math.abs(stepX) > 0.01) {
+      this.agentFlip = stepX < 0;
+    }
+    this.lastPlayerX = playerX;
+    this.lastPlayerZ = playerZ;
+    const agentFrame = moving ? Math.floor((state.tick * AGENT_WALK_FPS) / TICKS_PER_SECOND) % WALK_FRAMES : 0;
+    this.agent[state.tier - 1]?.add(playerX, state.player.dashTicks > 0 ? 3 : 0, playerZ, blink, null, agentFrame, this.agentFlip);
     if (state.player.dashTicks > 0) {
       this.trail.push({ x: playerX, z: playerZ });
       if (this.trail.length > TRAIL_LENGTH) {
@@ -577,38 +818,49 @@ export class ArenaRenderer {
       batch.commit();
     }
 
+    for (const glow of Object.values(this.glows)) {
+      glow.begin();
+    }
     this.gems.begin();
     this.bigGems.begin();
     this.chests.begin();
     for (const gem of state.gems) {
-      const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5;
+      if (!gem.chest && gem.life < GEM_FADE_TICKS && Math.floor(gem.life / 6) % 2 === 0) {
+        continue;
+      }
+      const hop = gem.settle > 0 ? Math.sin((gem.settle / GEM_SETTLE_TICKS) * Math.PI) * 9 : 0;
+      const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5 + hop;
       (gem.chest ? this.chests : gem.value > 1 ? this.bigGems : this.gems).add(gem.x / SUB, bob, gem.y / SUB);
+      if (!gem.chest) {
+        (gem.value > 1 ? this.glows.bigToken : this.glows.token).add(gem.x / SUB, 0.6, gem.y / SUB);
+      }
     }
     this.gems.commit();
     this.bigGems.commit();
     this.chests.commit();
 
-    this.bolts.begin();
-    this.beams.begin();
-    this.seekers.begin();
+    this.levels.clear();
+    for (const owned of state.weapons) {
+      this.levels.set(owned.id, owned.level);
+    }
+    for (const batch of [...this.arms.values(), ...this.armGlows.values()]) {
+      batch.begin();
+    }
     this.hallucinations.begin();
     for (const projectile of state.projectiles) {
       const x = projectile.x / SUB;
       const z = projectile.y / SUB;
       this.heading.setFromAxisAngle(this.up, -Math.atan2(projectile.vy, projectile.vx));
-      const batch = projectile.hallucinated
-        ? this.hallucinations
-        : projectile.kind === "beam"
-          ? this.beams
-          : projectile.kind === "seeker"
-            ? this.seekers
-            : this.bolts;
-      batch.add(x, 6, z, false, this.heading);
+      if (projectile.hallucinated) {
+        this.hallucinations.add(x, 6, z, false, this.heading);
+        continue;
+      }
+      const key = this.arm(projectile.weapon);
+      const flat = projectile.kind === "beam";
+      this.arms.get(key)?.add(x, flat ? 6 : 4, z, false, flat ? this.heading : null);
+      this.armGlows.get(key)?.add(x, 0.7, z, false, flat ? this.heading : null);
       this.shadows.add(x, z, 5);
     }
-    this.bolts.commit();
-    this.beams.commit();
-    this.seekers.commit();
     this.hallucinations.commit();
 
     this.shots.begin();
@@ -635,19 +887,40 @@ export class ArenaRenderer {
     this.hazards.commit();
     this.bigHazards.commit();
 
-    this.blocks.begin();
+    this.drones.begin();
     for (const owned of state.weapons) {
-      if (WEAPONS[owned.id].kind !== "orbit") {
+      if (WEAPONS[owned.id].kind !== "seeker") {
         continue;
       }
       const count = weaponStats(owned.id, owned.level).count;
       for (let index = 0; index < count; index += 1) {
+        const drone = dronePosition(state, index, count);
+        const lift = 8 + Math.sin(state.tick / 7 + index) * 1.5;
+        this.drones.add(drone.x / SUB, lift, drone.y / SUB);
+        this.shadows.add(drone.x / SUB, drone.y / SUB, 6);
+      }
+    }
+    this.drones.commit();
+
+    for (const owned of state.weapons) {
+      if (WEAPONS[owned.id].kind !== "orbit") {
+        continue;
+      }
+      const key = this.arm(owned.id);
+      const count = weaponStats(owned.id, owned.level).count;
+      for (let index = 0; index < count; index += 1) {
         const blade = orbitPosition(state, owned, index);
-        this.blocks.add(blade.x / SUB, 4, blade.y / SUB);
+        this.arms.get(key)?.add(blade.x / SUB, 4, blade.y / SUB);
+        this.armGlows.get(key)?.add(blade.x / SUB, 0.7, blade.y / SUB);
         this.shadows.add(blade.x / SUB, blade.y / SUB, 7);
       }
     }
-    this.blocks.commit();
+    for (const batch of [...this.arms.values(), ...this.armGlows.values()]) {
+      batch.commit();
+    }
+    for (const glow of Object.values(this.glows)) {
+      glow.commit();
+    }
     this.shadows.commit();
 
     const boss = state.enemies.find((enemy) => enemy.id === state.bossId);

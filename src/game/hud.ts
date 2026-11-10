@@ -1,4 +1,4 @@
-import { PASSIVE_ICONS, WEAPON_ICONS } from "../art/icons";
+import { PASSIVE_ICONS, RESTORE_ICON, WEAPON_ICONS } from "../art/icons";
 import type { Sprite } from "../art/sprites";
 import type { Card } from "../sim/arena/cards";
 import { BOSS_PHASE_FLOORS, isEvolvedWeapon, PASSIVES, WEAPONS, WORLDS, type PassiveId, type WeaponId } from "../sim/arena/content";
@@ -32,6 +32,7 @@ const TILE = "#3a4466";
 const TILE_LIGHT = "#56628a";
 const WEAPON_ACCENT = "#41a6f6";
 const PASSIVE_ACCENT = "#a7f070";
+const RESTORE_ACCENT = "#38b764";
 const CARD_FACE = "#20243a";
 const CARD_INSET = "#151827";
 
@@ -70,6 +71,17 @@ export interface Banner {
   age: number;
   readonly life: number;
 }
+
+export interface ChestSpin {
+  readonly prize: Card;
+  readonly reel: readonly Card[];
+  age: number;
+}
+
+export const CHEST_SPIN_FRAMES = 84;
+export const CHEST_HOLD_FRAMES = 54;
+const REEL_SLOTS = 18;
+const REEL_SLOT_HEIGHT = 132;
 
 const iconCache = new Map<string, HTMLCanvasElement>();
 
@@ -346,6 +358,70 @@ export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState
   drawButton(context, SKIP_RECT, t("levelUp.skip", { count: state.skips }), state.skips > 0);
 }
 
+function reelCard(spin: ChestSpin, slot: number): Card {
+  return slot >= REEL_SLOTS - 1 ? spin.prize : (spin.reel[slot % Math.max(1, spin.reel.length)] ?? spin.prize);
+}
+
+function cardIcon(card: Card): HTMLCanvasElement {
+  return card.kind === "restore" ? cachedIcon("restore", RESTORE_ICON) : card.kind === "passive" ? passiveIcon(card.id) : weaponIcon(card.id);
+}
+
+export function drawChestSpin(context: CanvasRenderingContext2D, spin: ChestSpin, frame: number): void {
+  context.fillStyle = "rgba(8, 10, 18, 0.62)";
+  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+  const landed = spin.age >= CHEST_SPIN_FRAMES;
+  const progress = Math.min(1, spin.age / CHEST_SPIN_FRAMES);
+  const eased = 1 - (1 - progress) ** 3;
+  const position = eased * (REEL_SLOTS - 1);
+  text(context, t("chest.title"), HUD_WIDTH / 2, 70, 60, GOLD, "center");
+  text(context, t("chest.hint"), HUD_WIDTH / 2, 142, 20, "#9fb0d0", "center");
+  const machine = { x: HUD_WIDTH / 2 - 190, y: 186, w: 380, h: 420 };
+  context.fillStyle = SHADOW;
+  context.fillRect(machine.x - 8, machine.y - 8, machine.w + 16, machine.h + 16);
+  context.fillStyle = landed && Math.floor(frame / 6) % 2 === 0 ? GOLD : "#b86f50";
+  context.fillRect(machine.x - 4, machine.y - 4, machine.w + 8, machine.h + 8);
+  context.fillStyle = "#3e2731";
+  context.fillRect(machine.x, machine.y, machine.w, machine.h);
+  for (let bulb = 0; bulb < 10; bulb += 1) {
+    const lit = (bulb + Math.floor(frame / (landed ? 4 : 2))) % 2 === 0;
+    context.fillStyle = lit ? GOLD : "#6b4a3a";
+    const bx = machine.x + 22 + bulb * ((machine.w - 44) / 9);
+    context.fillRect(bx - 5, machine.y + 10, 10, 10);
+    context.fillRect(bx - 5, machine.y + machine.h - 20, 10, 10);
+  }
+  const reelWindow = { x: machine.x + 40, y: machine.y + 40, w: machine.w - 80, h: machine.h - 80 };
+  context.fillStyle = CARD_INSET;
+  context.fillRect(reelWindow.x, reelWindow.y, reelWindow.w, reelWindow.h);
+  const centerY = reelWindow.y + reelWindow.h / 2;
+  context.save();
+  context.beginPath();
+  context.rect(reelWindow.x, reelWindow.y, reelWindow.w, reelWindow.h);
+  context.clip();
+  const first = Math.max(0, Math.floor(position) - 2);
+  for (let slot = first; slot <= Math.min(REEL_SLOTS - 1, first + 4); slot += 1) {
+    const y = centerY + (slot - position) * REEL_SLOT_HEIGHT;
+    const card = reelCard(spin, slot);
+    const tile = { x: reelWindow.x + reelWindow.w / 2 - 56, y: y - 56, w: 112, h: 112 };
+    context.globalAlpha = Math.max(0.25, 1 - Math.abs(slot - position) * 0.55);
+    iconTile(context, tile, cardAccent(card));
+    drawIcon(context, cardIcon(card), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 96);
+  }
+  context.globalAlpha = 1;
+  context.restore();
+  context.fillStyle = landed ? GOLD : "#f4f1e8";
+  context.fillRect(reelWindow.x - 4, centerY - 70, 14, 6);
+  context.fillRect(reelWindow.x - 4, centerY + 64, 14, 6);
+  context.fillRect(reelWindow.x + reelWindow.w - 10, centerY - 70, 14, 6);
+  context.fillRect(reelWindow.x + reelWindow.w - 10, centerY + 64, 14, 6);
+  if (landed) {
+    const card = spin.prize;
+    const name = cardName(card);
+    text(context, name, HUD_WIDTH / 2, 640, fitSize(context, name, 900, 40), INK, "center");
+    const badge = card.kind === "evolve" ? t("card.evolve") : card.kind === "restore" ? t("card.restore.kind") : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
+    text(context, badge, HUD_WIDTH / 2, 698, 24, cardAccent(card), "center");
+  }
+}
+
 function drawButton(context: CanvasRenderingContext2D, rect: Rect, label: string, enabled: boolean): void {
   context.globalAlpha = enabled ? 1 : 0.4;
   panel(context, rect);
@@ -355,11 +431,11 @@ function drawButton(context: CanvasRenderingContext2D, rect: Rect, label: string
 }
 
 function cardAccent(card: Card): string {
-  return card.kind === "evolve" ? GOLD : card.kind === "weapon" ? WEAPON_ACCENT : PASSIVE_ACCENT;
+  return card.kind === "evolve" ? GOLD : card.kind === "weapon" ? WEAPON_ACCENT : card.kind === "restore" ? RESTORE_ACCENT : PASSIVE_ACCENT;
 }
 
 function cardMaxLevel(card: Card): number {
-  return card.kind === "passive" ? PASSIVES[card.id].maxLevel : WEAPONS[card.id].levels.length;
+  return card.kind === "restore" ? 0 : card.kind === "passive" ? PASSIVES[card.id].maxLevel : WEAPONS[card.id].levels.length;
 }
 
 function drawPips(context: CanvasRenderingContext2D, card: Card, centerX: number, y: number): void {
@@ -389,9 +465,9 @@ function drawCard(context: CanvasRenderingContext2D, card: Card, rect: Rect, ind
   context.fillRect(box.x, box.y, box.w, box.h);
   context.fillStyle = accent;
   context.fillRect(box.x, box.y, box.w, 40);
-  const kindLabel = card.kind === "evolve" ? t("card.evolve") : card.kind === "weapon" ? t("card.weapon") : t("card.passive");
+  const kindLabel = card.kind === "evolve" ? t("card.evolve") : card.kind === "weapon" ? t("card.weapon") : card.kind === "restore" ? t("card.restore.kind") : t("card.passive");
   text(context, kindLabel, box.x + 18, box.y + 11, 18, SHADOW);
-  const badge = card.kind === "evolve" ? "★" : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
+  const badge = card.kind === "evolve" || card.kind === "restore" ? "★" : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
   text(context, badge, box.x + box.w - 18, box.y + 11, 18, SHADOW, "right");
   if (card.recommended) {
     const label = t("card.recommended");
@@ -404,10 +480,10 @@ function drawCard(context: CanvasRenderingContext2D, card: Card, rect: Rect, ind
   }
   const tile = { x: box.x + box.w / 2 - 56, y: box.y + 58, w: 112, h: 112 };
   iconTile(context, tile, accent);
-  drawIcon(context, card.kind === "passive" ? passiveIcon(card.id) : weaponIcon(card.id), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 96);
+  drawIcon(context, cardIcon(card), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 96);
   const name = cardName(card);
   text(context, name, box.x + box.w / 2, box.y + 186, fitSize(context, name, box.w - 32, 26), INK, "center");
-  if (card.kind !== "evolve") {
+  if (card.kind !== "evolve" && card.kind !== "restore") {
     drawPips(context, card, box.x + box.w / 2, box.y + 222);
   }
   wrap(context, cardBlurb(card), box.w - 40, 15).slice(0, 2).forEach((line, lineIndex) =>
@@ -469,7 +545,17 @@ export function drawPause(context: CanvasRenderingContext2D, state: ArenaState):
   });
 }
 
-export function drawResults(context: CanvasRenderingContext2D, state: ArenaState): void {
+export const SHARE_RECT: Rect = { x: HUD_WIDTH / 2 - 486, y: 678, w: 300, h: 56 };
+export const POST_RECT: Rect = { x: HUD_WIDTH / 2 - 150, y: 678, w: 300, h: 56 };
+export const WATCH_RECT: Rect = { x: HUD_WIDTH / 2 + 186, y: 678, w: 300, h: 56 };
+
+export interface ResultsView {
+  readonly replay: boolean;
+  readonly mismatch: boolean;
+  readonly shareReady: boolean;
+}
+
+export function drawResults(context: CanvasRenderingContext2D, state: ArenaState, view: ResultsView): void {
   context.fillStyle = "rgba(8, 10, 18, 0.84)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
   const won = state.status === "won";
@@ -509,8 +595,43 @@ export function drawResults(context: CanvasRenderingContext2D, state: ArenaState
     text(context, compact(damage), right.x + right.w - 28, y, 16, "#a7f070", "right");
     bar(context, { x: right.x + 28, y: y + 26, w: right.w - 56, h: 10 }, damage / total, "#41a6f6");
   });
-  text(context, t("results.keys"), HUD_WIDTH / 2, 700, 22, GOLD, "center");
-  text(context, t("mastra.link"), HUD_WIDTH / 2, 746, 16, "#9fb0d0", "center");
+  drawButton(context, SHARE_RECT, t("share.button"), view.shareReady);
+  drawButton(context, POST_RECT, t("share.x"), view.shareReady);
+  drawButton(context, WATCH_RECT, view.replay ? t("replay.again") : t("replay.watch"), true);
+  text(context, view.replay ? t("replay.keys") : t("results.keys"), HUD_WIDTH / 2, 748, 18, GOLD, "center");
+  text(context, t("mastra.link"), HUD_WIDTH / 2, 780, 14, "#9fb0d0", "center");
+  if (view.replay) {
+    drawReplayTag(context, t("replay.tag"));
+  }
+  if (view.mismatch) {
+    text(context, t("replay.mismatch"), HUD_WIDTH / 2, 158, 16, "#ff9b9b", "center");
+  }
+}
+
+export function drawReplayTag(context: CanvasRenderingContext2D, label: string): void {
+  const size = 18;
+  const width = measure(context, label, size) + 32;
+  const rect = { x: HUD_WIDTH - 24 - width, y: 96, w: width, h: 36 };
+  context.fillStyle = SHADOW;
+  context.fillRect(rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6);
+  context.fillStyle = "#e43b44";
+  context.fillRect(rect.x, rect.y, rect.w, rect.h);
+  text(context, label, rect.x + rect.w / 2, rect.y + 9, size, INK, "center");
+}
+
+export function drawReplayHud(context: CanvasRenderingContext2D, speed: number): void {
+  drawReplayTag(context, t("replay.speed", { speed }));
+  text(context, t("replay.hint"), HUD_WIDTH - 24, 142, 15, "#9fb0d0", "right");
+}
+
+export function drawNotice(context: CanvasRenderingContext2D, notice: string, alpha: number): void {
+  const size = 20;
+  const width = measure(context, notice, size) + 48;
+  const rect = { x: HUD_WIDTH / 2 - width / 2, y: 18, w: width, h: 48 };
+  context.globalAlpha = Math.max(0, Math.min(1, alpha));
+  panel(context, rect, GOLD);
+  text(context, notice, HUD_WIDTH / 2, rect.y + 14, size, INK, "center");
+  context.globalAlpha = 1;
 }
 
 export function drawTitle(context: CanvasRenderingContext2D, pulse: number): void {

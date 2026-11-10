@@ -24,8 +24,15 @@ describe("outlined", () => {
     expect(sprites.outlined(["k"], "w")).toEqual([".w.", "wkw", ".w."]);
   });
 
-  it("makes the boss two pixels wider and taller", () => {
-    expect(sprites.BOSS_OUTLINED).toHaveLength(sprites.BOSS.length + 2);
-    expect(sprites.BOSS_OUTLINED[0]).toHaveLength((sprites.BOSS[0]?.length ?? 0) + 2);
+  it("makes a sprite two pixels wider and taller", () => {
+    const outline = sprites.outlined(sprites.GRUNT, "w");
+    expect(outline).toHaveLength(sprites.GRUNT.length + 2);
+    expect(outline[0]).toHaveLength((sprites.GRUNT[0]?.length ?? 0) + 2);
+  });
+
+  it("crowns elites with a gold outline", () => {
+    const elite = sprites.eliteSprite(sprites.GRUNT);
+    expect(elite.join("")).toContain("y");
+    expect(elite[0]).toContain("y");
   });
 });

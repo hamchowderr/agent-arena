@@ -1,0 +1,135 @@
+import { describe, expect, it } from "vitest";
+import { REGULAR_KINDS, WORLDS } from "../sim/arena/content";
+import { BOSS_IDLE_FRAMES, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FRAMES, deathFrames, squash, HURT_FRAMES, HURT_TINT, hurtFrames, legRowCount, WALK_FRAMES, walkFrames } from "./animate";
+import { ENEMY_SPRITES } from "./arena-sprites";
+import { MAX_SILHOUETTE_OVERLAP } from "./art-rules";
+import { averageLuminance, rgbOf, silhouetteOverlap } from "./audit";
+import { bossSprite } from "./bosses";
+import { BOSS_CLIP_START, bossClips, enemyClips } from "./clips";
+import { shade, type ColorGrid } from "./shade";
+import { WORLD_LOOKS } from "./world-looks";
+
+const FACTION = WORLD_LOOKS[1].faction;
+
+function colors(grid: ColorGrid): string[] {
+  return grid.flat().filter((color): color is string => color !== null);
+}
+
+function distanceToTint(grid: ColorGrid): number {
+  const tint = rgbOf(HURT_TINT);
+  const all = colors(grid).map(rgbOf);
+  return all.reduce((sum, { r, g, b }) => sum + Math.hypot(r - tint.r, g - tint.g, b - tint.b), 0) / Math.max(1, all.length);
+}
+
+describe("walk cycle", () => {
+  it.each(REGULAR_KINDS)("%s walks in four frames of one size that actually move", (kind) => {
+    const frames = walkFrames(ENEMY_SPRITES[kind]);
+    expect(frames).toHaveLength(WALK_FRAMES);
+    const width = frames[0]?.[0]?.length;
+    for (const frame of frames) {
+      expect(frame).toHaveLength(ENEMY_SPRITES[kind].length + 1);
+      for (const row of frame) {
+        expect(row).toHaveLength(width ?? 0);
+      }
+    }
+    expect(new Set(frames.map((frame) => frame.join("/"))).size).toBeGreaterThanOrEqual(2);
+  });
+
+  it("swings the feet of enemies with two legs in opposite directions", () => {
+    const sprite = ENEMY_SPRITES.grunt;
+    expect(legRowCount(sprite)).toBeGreaterThan(0);
+    const [contact, , other] = walkFrames(sprite);
+    expect(contact?.at(-1)).not.toEqual(other?.at(-1));
+  });
+
+  it("keeps every pixel of the body in each frame", () => {
+    for (const kind of REGULAR_KINDS) {
+      const filled = ENEMY_SPRITES[kind].join("").replaceAll(".", "").length;
+      for (const frame of walkFrames(ENEMY_SPRITES[kind])) {
+        expect(frame.join("").replaceAll(".", "").length).toBeGreaterThanOrEqual(filled);
+      }
+    }
+  });
+});
+
+describe("hurt frames", () => {
+  it("uses a light, cool tint", () => {
+    const { r, b } = rgbOf(HURT_TINT);
+    expect(b).toBeGreaterThan(r);
+    expect(averageLuminance([HURT_TINT])).toBeGreaterThan(0.7);
+    expect(HURT_TINT).not.toBe("#ffffff");
+  });
+
+  it.each(REGULAR_KINDS)("%s turns lighter and cooler when hit, not pure white", (kind) => {
+    const base = shade([ENEMY_SPRITES[kind]], FACTION);
+    const hurt = hurtFrames(base);
+    expect(hurt).toHaveLength(HURT_FRAMES);
+    for (const frame of hurt) {
+      expect(averageLuminance(colors(frame))).toBeGreaterThan(averageLuminance(colors(base)));
+      expect(distanceToTint(frame)).toBeLessThan(distanceToTint(base));
+      expect(colors(frame).filter((color) => color === "#ffffff").length / colors(frame).length).toBeLessThan(0.05);
+    }
+    expect(averageLuminance(colors(hurt[0] ?? []))).toBeGreaterThan(averageLuminance(colors(hurt[1] ?? [])));
+  });
+});
+
+describe("death puff", () => {
+  it.each(REGULAR_KINDS)("%s bursts into its own material over five frames", (kind) => {
+    const base = shade([ENEMY_SPRITES[kind]], FACTION);
+    const { frames } = deathFrames(base);
+    expect(frames).toHaveLength(DEATH_FRAMES);
+    const own = new Set(colors(base));
+    const debris = colors(frames[2] ?? []).filter((color) => own.has(color));
+    expect(new Set(debris).size).toBeGreaterThanOrEqual(3);
+    expect(colors(frames.at(-1) ?? []).length).toBeLessThan(colors(frames[1] ?? []).length);
+    expect(colors(frames.at(-1) ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("draws every death frame at one size", () => {
+    const { frames } = deathFrames(shade([ENEMY_SPRITES.heavy], FACTION));
+    const height = frames[0]?.length;
+    const width = frames[0]?.[0]?.length;
+    for (const frame of frames) {
+      expect(frame).toHaveLength(height ?? 0);
+      expect(frame[0]).toHaveLength(width ?? 0);
+    }
+  });
+});
+
+describe("enemy clips", () => {
+  it.each(REGULAR_KINDS)("%s packs walk then hurt frames, for regular and elite", (kind) => {
+    for (const elite of [false, true]) {
+      const clips = enemyClips("hustlr", kind, FACTION, elite);
+      expect(clips.moving).toHaveLength(WALK_FRAMES + HURT_FRAMES);
+      expect(clips.death.frames).toHaveLength(DEATH_FRAMES);
+    }
+  });
+});
+
+describe("boss clips", () => {
+  it("squashes from the bottom and stretches upward", () => {
+    const sprite = ["ab", "cd", "ef", "gh"];
+    expect(squash(sprite, 0)).toEqual(sprite);
+    expect(squash(sprite, 1)).toHaveLength(4);
+    expect(squash(sprite, 1)[0]).toBe("...");
+    expect(squash(sprite, -2)).toHaveLength(6);
+  });
+
+  it.each(WORLDS.map((world) => world.id))("%s has idle, windup, impact and hurt frames that differ", (world) => {
+    const clips = bossClips(world, FACTION);
+    expect(clips.moving).toHaveLength(BOSS_IDLE_FRAMES + BOSS_WINDUP_FRAMES + BOSS_IMPACT_FRAMES + HURT_FRAMES);
+    expect(BOSS_CLIP_START.hurt).toBe(BOSS_IDLE_FRAMES + BOSS_WINDUP_FRAMES + BOSS_IMPACT_FRAMES);
+    const keys = clips.moving.map((frame) => JSON.stringify(frame));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(clips.death.frames).toHaveLength(DEATH_FRAMES);
+  });
+
+  it("gives every world's boss its own silhouette", () => {
+    const grids = WORLDS.map((world) => [world.id, shade([bossSprite(world.id)], FACTION)] as const);
+    for (const [index, [id, grid]] of grids.entries()) {
+      for (const [other, otherGrid] of grids.slice(index + 1)) {
+        expect(silhouetteOverlap(grid, otherGrid), `${id} and ${other} look alike`).toBeLessThan(MAX_SILHOUETTE_OVERLAP);
+      }
+    }
+  });
+});

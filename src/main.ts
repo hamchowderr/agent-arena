@@ -1,3 +1,4 @@
+import { PAD, readPad } from "./game/controls";
 const worldCanvas = document.querySelector<HTMLCanvasElement>("#world");
 const hudCanvas = document.querySelector<HTMLCanvasElement>("#hud");
 const loadingNote = document.querySelector<HTMLElement>("#status");
@@ -37,7 +38,7 @@ async function boot(): Promise<void> {
   if (!worldCanvas || !hudCanvas || !hud) {
     return;
   }
-  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale } = await import("./game/arena-game");
+  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale, postToXUrl, readReplayCode, replayCodeFrom, replayUrl } = await import("./game/arena-game");
   hudCanvas.width = HUD_WIDTH;
   hudCanvas.height = HUD_HEIGHT;
   const query = new URLSearchParams(window.location.search);
@@ -53,16 +54,49 @@ async function boot(): Promise<void> {
       }
       saveLocale(code);
     },
-    onScreen: (screen, state) => {
+    onScreen: (screen) => {
       hudCanvas.dataset["screen"] = screen;
-      if (screen === "results") {
-        const url = new URL(window.location.href);
-        url.searchParams.set("seed", String(state.seed));
-        window.history.replaceState(null, "", url);
+    },
+    onReplayCode: (seed, code) => {
+      window.history.replaceState(null, "", replayUrl(window.location.href, seed, code));
+    },
+    share: async ({ target, seed, code, title, text }) => {
+      const link = replayUrl(window.location.href, seed, code);
+      if (target === "x") {
+        const tab = window.open(postToXUrl(text, link), "_blank");
+        if (tab) {
+          tab.opener = null;
+        }
+        return tab ? "opened" : "failed";
+      }
+      if (typeof navigator.share === "function") {
+        try {
+          await navigator.share({ title, text, url: link });
+          return "shared";
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return "cancelled";
+          }
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(link);
+        return "copied";
+      } catch {
+        return "failed";
       }
     },
   });
   await game.changeLocale(detectLocale([wanted, readSavedLocale(), ...navigator.languages]));
+  const sharedCode = replayCodeFrom(window.location.hash);
+  if (sharedCode !== null) {
+    const replay = await readReplayCode(sharedCode);
+    if (replay) {
+      game.watch(replay, sharedCode);
+    } else {
+      game.notifyBrokenReplay();
+    }
+  }
   loadingNote?.remove();
   const toHud = (event: PointerEvent) => {
     const box = hudCanvas.getBoundingClientRect();
@@ -70,12 +104,20 @@ async function boot(): Promise<void> {
   };
   hudCanvas.addEventListener("pointermove", (event) => {
     const point = toHud(event);
+    game.touchMove(event.pointerId, point.x, point.y);
     game.pointer(point.x, point.y, false);
   });
   hudCanvas.addEventListener("pointerdown", (event) => {
     const point = toHud(event);
+    if (event.pointerType !== "mouse" && game.touchStart(event.pointerId, point.x, point.y)) {
+      hudCanvas.setPointerCapture(event.pointerId);
+      return;
+    }
     game.pointer(point.x, point.y, true);
   });
+  const endTouch = (event: PointerEvent) => game.touchEnd(event.pointerId);
+  hudCanvas.addEventListener("pointerup", endTouch);
+  hudCanvas.addEventListener("pointercancel", endTouch);
   window.addEventListener("keydown", (event) => {
     if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
@@ -86,7 +128,35 @@ async function boot(): Promise<void> {
   });
   window.addEventListener("keyup", (event) => game.keyUp(event.key));
   window.addEventListener("blur", () => game.keyUp("*"));
+  const tap = (key: string) => {
+    game.keyDown(key);
+    game.keyUp(key);
+  };
+  let padHeld: boolean[] = [];
+  const pollPad = () => {
+    const pad = [...(navigator.getGamepads?.() ?? [])].find((candidate) => candidate?.connected);
+    if (!pad) {
+      return;
+    }
+    const frame = readPad(pad, padHeld);
+    padHeld = [...frame.held];
+    game.padMove(frame.direction);
+    for (const button of frame.pressed) {
+      if (button === PAD.confirm) {
+        game.confirm();
+      } else if (button === PAD.start || button === PAD.back) {
+        tap(game.screen === "title" ? "enter" : "escape");
+      } else if (button === PAD.reroll) {
+        tap("r");
+      } else if (button === PAD.skip) {
+        tap("x");
+      } else if (button === PAD.left || button === PAD.right) {
+        game.nudgeCard(button === PAD.left ? -1 : 1);
+      }
+    }
+  };
   const loop = () => {
+    pollPad();
     game.frame();
     requestAnimationFrame(loop);
   };

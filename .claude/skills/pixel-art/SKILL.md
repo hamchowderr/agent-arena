@@ -11,6 +11,7 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 
 ## 1. Enemies
 
+- **Each world has its own enemy set** in `src/art/world-enemies.ts` (`enemySprite(world, kind)`), drawn from the tables in `enemy-roster.md`. World 1 uses the office set in `arena-sprites.ts`. `world-enemies.test.ts` fails if a world reuses an office sprite for one of its slots.
 - **Make each enemy a recognizable thing from its world's theme.** Pick a SaaS or office object that a player can name at a glance: an invoice, a usage meter, a chat bubble, a sticky note, a loading spinner, a paywall. Don't draw a generic robot with a different hat.
 - **Give each enemy its own palette. [checked: hue spread]** Within a world, no two enemies may share a main hue (they must be at least 30° apart). The world's accent color belongs in the ground, props, effects and boss, never as a tint over every enemy.
 - **Size by tier. [checked: span]** Measure the longer side of the drawn area, at the size it is shown:
@@ -27,11 +28,12 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 - **Pop off the ground. [checked: contrast]** The body's average brightness must have a contrast of at least 1.6 against every world's base ground tile.
 - **Side view, light from the top.** Most enemies are wider than they are tall and face the way they move. Light falls from the top-left, so tops get the light step and the bottom and right edges get the shadow step (`shade()` in `src/art/shade.ts` does this for you).
 - **Dark tinted outlines, never flat black everywhere.** `shade()` turns the outer `k` pixels into the ramp's dark line color. Keep pure black for eyes and small accents.
-- **Elites:** the same enemy at twice the size, with a thick gold outline and a crown or similar mark. Draw it at that size rather than scaling it.
+- **Elites:** the same enemy at twice the size, with a thick gold outline and a crown (`eliteSprite()` adds both). Draw it at that size rather than scaling it.
 
 ## 2. Bosses
 
-- 3 to 5 times the size of fodder. A boss is the world's mascot: a recognizable object with a face.
+- 3 to 5 times the size of fodder. A boss is the world's mascot: a recognizable object with a face. Each world has its own boss in `src/art/bosses.ts` (rocket, binder, meter, clipboard, light bulb), drawn at native size with the shape helpers in `src/art/raster.ts` (rect, ellipse, ring, line, polygon), then outlined.
+- A boss drawing takes a `BossLook` (`flicker` for little moving parts like a flame or needle, `angry` for the attack face). `bossClips()` in `src/art/clips.ts` turns it into idle (4 frames, breathing squash), windup (3, crouch, angry), impact (3, stretch up), hurt (2) and a death puff. The renderer plays windup during the 0.8 s before an attack and impact right after it.
 - Every attack has its own windup pose, impact pose and effect.
 - Each attack shows a ground mark that is the exact shape and size of what it will hit (a lane, a ring, a cone).
 
@@ -47,7 +49,15 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 | boss windup | 3–4 | 8 | Add a 2-frame windup effect |
 | boss impact | 3 | 10 | Add a 3-frame impact effect |
 | boss death | 3 | 6 | |
-| pickup bob | 4 | 5 | Pickups are 8–9 px |
+| pickup bob | 4 | 5 | Pickups are 8–9 px. XP tokens are gold coins with a T stamp [checked] |
+
+Regular enemies and elites get their walk, hurt and death clips from `src/art/animate.ts`, built from the one sprite you draw, so you don't draw frames by hand:
+
+- **walk:** the bottom rows that are much narrower than the body count as legs. With two or more legs the feet swing in opposite directions on frames 1 and 3 and the body lifts 1 px on frames 2 and 4. Without legs the body just bobs. Draw legs as separate narrow columns under the body if you want a stride. Speed per enemy is `WALK_FPS` in `src/art/clips.ts`.
+- **hurt:** the walk frame mixed toward `HURT_TINT` (pale cool blue), strong then weaker. The renderer shows it for `HIT_FLASH_TICKS`.
+- **death:** a squash flash, then the body breaks into 2 or 3 px chunks of its own colors that fly out and fall, inside a puff cloud of its lightest color that thins out by ordered dither.
+- Enemies face the player. Draw every enemy facing right; the renderer mirrors it.
+- `npm run art-sheet` also writes `art-sheet/animations.png`: every enemy's walk, hurt and death frames in a row. `src/art/animate.test.ts` checks the frame counts and that each clip moves, lightens or breaks apart.
 
 ## 4. Attacks and effects
 

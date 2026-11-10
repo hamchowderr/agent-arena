@@ -1,6 +1,6 @@
 import { CanvasTexture, NearestFilter, RepeatWrapping, SRGBColorSpace } from "three";
 import { PALETTE } from "../art/palette";
-import { shade } from "../art/shade";
+import { shade, type ColorGrid } from "../art/shade";
 import type { Sprite } from "../art/sprites";
 
 export interface SpriteImage {
@@ -28,6 +28,34 @@ export function spriteImage(layers: readonly Sprite[], faction: string = PALETTE
     }),
   );
   return { canvas, width, height };
+}
+
+export interface AtlasImage extends SpriteImage {
+  readonly frames: number;
+}
+
+export function atlasImage(frames: readonly ColorGrid[]): AtlasImage {
+  const width = Math.max(...frames.map((frame) => Math.max(...frame.map((row) => row.length))));
+  const height = Math.max(...frames.map((frame) => frame.length));
+  const canvas = document.createElement("canvas");
+  canvas.width = width * frames.length;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (context) {
+    frames.forEach((frame, index) => {
+      const left = index * width + Math.floor((width - (frame[0]?.length ?? 0)) / 2);
+      const top = height - frame.length;
+      frame.forEach((row, y) =>
+        row.forEach((color, x) => {
+          if (color) {
+            context.fillStyle = color;
+            context.fillRect(left + x, top + y, 1, 1);
+          }
+        }),
+      );
+    });
+  }
+  return { canvas, width, height, frames: frames.length };
 }
 
 export function pixelTexture(image: HTMLCanvasElement): CanvasTexture {
