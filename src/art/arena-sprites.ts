@@ -225,30 +225,32 @@ export const HAZARD: Sprite = [
 ];
 
 export const GEM: Sprite = [
-  "...bbb...",
-  "..bcccb..",
-  ".bcmmmcb.",
-  "bcmBBBmcb",
-  "bcmwBmmcb",
-  "bcmmBmmcb",
-  ".bcmmmcb.",
-  "..bcccb..",
-  "...bbb...",
-]
+  "...kkk...",
+  "..kCCCk..",
+  ".kCyyyCk.",
+  "kCywCCCyk",
+  "kCyyCyyCk",
+  "kCyyCyyCk",
+  ".kCyCyCk.",
+  "..kCCCk..",
+  "...kkk...",
+];
 
 export const BIG_GEM: Sprite = [
-  "....ppp....",
-  "..ppoooop..",
-  ".poyyyyyop.",
-  ".poyrrryop.",
-  "poywyryyyop",
-  "poyyyryyyop",
-  "poyyyryyyop",
-  ".poyyyyyop.",
-  ".pooyyyoop.",
-  "..ppoooop..",
-  "....ppp....",
-]
+  ".....w.......",
+  "....kwk......",
+  "..kkCCCkk....",
+  ".kCCyyyyCCk..",
+  ".kCywwyyyyCk.",
+  "kCywCCCCCyyCk",
+  "kCyyyyCyyyyCk",
+  "kCyyyyCyyyyCk",
+  "kCyyyyCyyyyCk",
+  ".kCCyyCyyCCk.",
+  ".kCCCCyCCCCk.",
+  "..kkCCCCCkk..",
+  "....kkkkk....",
+];
 
 export const BOLT: Sprite = [
   ".kkkkkk.",

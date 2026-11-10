@@ -99,7 +99,7 @@ describe("death puff", () => {
 describe("enemy clips", () => {
   it.each(REGULAR_KINDS)("%s packs walk then hurt frames, for regular and elite", (kind) => {
     for (const elite of [false, true]) {
-      const clips = enemyClips(kind, FACTION, elite);
+      const clips = enemyClips("hustlr", kind, FACTION, elite);
       expect(clips.moving).toHaveLength(WALK_FRAMES + HURT_FRAMES);
       expect(clips.death.frames).toHaveLength(DEATH_FRAMES);
     }

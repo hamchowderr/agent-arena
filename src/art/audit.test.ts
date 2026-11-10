@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { WORLDS, type EnemyKind, type World, type WorldId } from "../sim/arena/content";
 import { seconds } from "../sim/arena/math";
 import { CHARGE_WINDUP, FUSE_TICKS, TELEGRAPH_TICKS } from "../sim/arena/sim";
-import { ENEMY_SPRITES } from "./arena-sprites";
+import { enemySprite } from "./world-enemies";
 import { bossSprite } from "./bosses";
 import {
   ENEMY_ART_TIER,
@@ -40,7 +40,7 @@ function look(tier: number) {
 }
 
 function art(kind: EnemyKind, scene: WorldLook, world: World): ColorGrid {
-  return kind === "boss" ? shade([bossSprite(world.id)], scene.faction) : shade([ENEMY_SPRITES[kind]], scene.faction);
+  return kind === "boss" ? shade([bossSprite(world.id)], scene.faction) : shade([enemySprite(world.id, kind)], scene.faction);
 }
 
 function shownSpan(kind: EnemyKind, grid: ColorGrid): number {
