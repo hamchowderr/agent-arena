@@ -1,4 +1,5 @@
-import { WORLDS, type EnemyKind } from "../sim/arena/content";
+import { REGULAR_KINDS, WORLDS, type EnemyKind } from "../sim/arena/content";
+import { deathFrames, hurtFrames, walkFrames } from "./animate";
 import { BOSS_OUTLINED, ENEMY_SPRITES, eliteSprite } from "./arena-sprites";
 import { ENEMY_ART_TIER, RENDER_SCALE, type ArtTier } from "./art-rules";
 import { rgbOf } from "./audit";
@@ -148,6 +149,36 @@ export function enemySheet(): Picture {
       const size = sizeOf(entry);
       canvas.draw(entry.grid, left, top + rowHeight - GAP - size.height, entry.scale * ZOOM);
       left += size.width + GAP;
+    }
+    top += rowHeight;
+  });
+  return { width, height, rgba: canvas.rgba };
+}
+
+const ANIMATION_ZOOM = 4;
+
+export function animationSheet(): Picture {
+  const look = WORLD_LOOKS[1];
+  const rows = REGULAR_KINDS.map((kind) => {
+    const walk = walkFrames(ENEMY_SPRITES[kind]).map((frame) => shade([frame], look.faction));
+    const hurt = hurtFrames(walk[0] ?? []);
+    const death = deathFrames(shade([ENEMY_SPRITES[kind]], look.faction)).frames;
+    return [...walk, ...hurt, ...death];
+  });
+  const widthOf = (grid: ColorGrid) => (grid[0]?.length ?? 0) * ANIMATION_ZOOM;
+  const heightOf = (grid: ColorGrid) => grid.length * ANIMATION_ZOOM;
+  const rowHeights = rows.map((row) => Math.max(...row.map(heightOf)) + GAP * 2);
+  const width = Math.max(...rows.map((row) => row.reduce((sum, grid) => sum + widthOf(grid) + GAP, GAP)));
+  const height = rowHeights.reduce((sum, value) => sum + value, 0);
+  const canvas = new Canvas(width, height);
+  let top = 0;
+  rows.forEach((row, index) => {
+    const rowHeight = rowHeights[index] ?? 0;
+    canvas.fill(0, top, width, rowHeight, index % 2 === 0 ? look.ground[0] : look.ground[2]);
+    let left = GAP;
+    for (const grid of row) {
+      canvas.draw(grid, left, top + rowHeight - GAP - heightOf(grid), ANIMATION_ZOOM);
+      left += widthOf(grid) + GAP;
     }
     top += rowHeight;
   });

@@ -561,7 +561,6 @@ export class ArenaGame {
   }
 
   private handle(events: readonly ArenaEvent[]): void {
-    let kills = 0;
     for (const event of events) {
       switch (event.kind) {
         case "damage":
@@ -584,10 +583,7 @@ export class ArenaGame {
           }
           break;
         case "kill":
-          kills += 1;
-          if (event.enemy !== "grunt" || kills % 4 === 1) {
-            this.effects.spawn("poof", event.x, event.y);
-          }
+          this.renderer.die(event.x, event.y, event.enemy, event.elite, this.state.player.x);
           if (event.enemy === "brute" || event.enemy === "heavy" || event.enemy === "lootRunner") {
             this.hitStop = Math.max(this.hitStop, 2);
             this.renderer.shake = Math.max(this.renderer.shake, 0.3);

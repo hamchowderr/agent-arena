@@ -188,9 +188,11 @@ export interface Slam {
   ticksLeft: number;
 }
 
+export const HIT_FLASH_TICKS = 12;
+
 export type ArenaEvent =
   | { readonly kind: "damage"; readonly x: number; readonly y: number; readonly amount: number; readonly crit: boolean; readonly boss: boolean }
-  | { readonly kind: "kill"; readonly x: number; readonly y: number; readonly enemy: EnemyKind }
+  | { readonly kind: "kill"; readonly x: number; readonly y: number; readonly enemy: EnemyKind; readonly elite: boolean }
   | { readonly kind: "hurt"; readonly amount: number; readonly source: EnemyKind }
   | { readonly kind: "hallucinated"; readonly x: number; readonly y: number }
   | { readonly kind: "pulse"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
@@ -932,7 +934,7 @@ function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: Weap
       advanceBossPhase(state, fight);
     }
   }
-  enemy.hitFlash = 6;
+  enemy.hitFlash = HIT_FLASH_TICKS;
   const push = enemy.kind === "boss" ? BOSS_KNOCKBACK : Math.trunc(((crit ? KNOCKBACK * 2 : KNOCKBACK) * (100 - enemy.mass)) / 100);
   const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, push);
   enemy.knockX += away.x;
@@ -950,7 +952,7 @@ function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: Weap
 
 function defeatEnemy(state: ArenaState, enemy: Enemy): void {
   state.kills += 1;
-  state.events.push({ kind: "kill", x: enemy.x, y: enemy.y, enemy: enemy.kind });
+  state.events.push({ kind: "kill", x: enemy.x, y: enemy.y, enemy: enemy.kind, elite: enemy.elite });
   if (enemy.elite) {
     state.gems.push({ x: enemy.x, y: enemy.y, value: 0, pulled: false, chest: true });
   }

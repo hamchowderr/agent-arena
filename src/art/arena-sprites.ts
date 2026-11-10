@@ -351,8 +351,18 @@ export function outlined(sprite: Sprite, key: string): Sprite {
 
 export const BOSS_OUTLINED: Sprite = outlined(BOSS, "w");
 
+const CROWN: Sprite = ["y..y..y", "yy.y.yy", "yyyyyyy", "ooooooo"];
+
+export function crowned(sprite: Sprite): Sprite {
+  const width = sprite[0]?.length ?? 0;
+  const crownWidth = CROWN[0]?.length ?? 0;
+  const left = Math.max(0, Math.floor((width - crownWidth) / 2));
+  const pad = (row: string) => (".".repeat(left) + row + ".".repeat(width)).slice(0, width);
+  return [...CROWN.map(pad), ...sprite];
+}
+
 export function eliteSprite(sprite: Sprite): Sprite {
-  return outlined(outlined(sprite, "w"), "r");
+  return crowned(outlined(outlined(sprite, "y"), "o"));
 }
 
 export const ENEMY_SPRITES: Readonly<Record<RegularKind, Sprite>> = {

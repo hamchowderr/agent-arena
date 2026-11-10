@@ -2,6 +2,7 @@ import {
   AdditiveBlending,
   Color,
   Fog,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   Mesh,
@@ -28,24 +29,24 @@ import {
   BOSS_OUTLINED,
   CHEST,
   CODE_BLOCK,
-  eliteSprite,
   ENEMY_SHOT,
-  ENEMY_SPRITES,
   GEM,
   HALLUCINATION,
   HAZARD,
   PROPS,
   SEEKER,
 } from "../art/arena-sprites";
+import { DEATH_FPS, DEATH_FRAMES, WALK_FRAMES } from "../art/animate";
 import { RENDER_SCALE } from "../art/art-rules";
+import { enemyClips, WALK_FPS } from "../art/clips";
 import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import { agentSprite, type Sprite } from "../art/sprites";
 import { REGULAR_KINDS, WEAPONS, type EnemyKind, type RegularKind } from "../sim/arena/content";
-import { px, SUB } from "../sim/arena/math";
-import { orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
+import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
+import { HIT_FLASH_TICKS, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
-import { circleTexture, glowTexture, groundTexture, GROUND_TILE, pixelTexture, spriteImage } from "./textures";
+import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, pixelTexture, spriteImage, type AtlasImage } from "./textures";
 
 export const RENDER_WIDTH = 480;
 export const RENDER_HEIGHT = 270;
@@ -69,6 +70,10 @@ const ENEMY_CAPACITY: Readonly<Record<RegularKind, number>> = {
   lootRunner: 2,
 };
 const ELITE_CAPACITY = 2;
+const DEATH_CAPACITY = 48;
+const MAX_DYING = 160;
+const FACING_DEADZONE = px(3);
+const DEATH_TICKS_PER_FRAME = TICKS_PER_SECOND / DEATH_FPS;
 const MAX_HAZARD_SPRITES = 40;
 const HAZARD_PIXELS = 13;
 const BIG_HAZARD_SCALE = 18 / 13;
@@ -77,20 +82,48 @@ const FLASH_COLOR = new Color(4, 4, 4);
 const PLAIN_COLOR = new Color(1, 1, 1);
 
 
+function animate(material: MeshBasicMaterial, frames: number): void {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float aFrame;\nattribute float aFlip;")
+      .replace("#include <uv_vertex>", `#include <uv_vertex>\nvMapUv = vec2((aFrame + mix(uv.x, 1.0 - uv.x, aFlip)) / ${frames.toFixed(1)}, uv.y);`);
+  };
+  material.customProgramCacheKey = () => `frames-${frames}`;
+}
+
+interface BatchShape {
+  readonly frames: number;
+  readonly sink: number;
+}
+
+const STILL: BatchShape = { frames: 1, sink: 0 };
+
 class SpriteBatch {
   readonly mesh: InstancedMesh;
   private count = 0;
   private readonly matrix = new Matrix4();
+  private readonly frame: InstancedBufferAttribute | null;
+  private readonly flip: InstancedBufferAttribute | null;
 
-  constructor(scene: Scene, texture: Texture, width: number, height: number, capacity: number, flat: boolean) {
+  constructor(scene: Scene, texture: Texture, width: number, height: number, capacity: number, flat: boolean, shape: BatchShape = STILL) {
     const geometry = new PlaneGeometry(width, height);
     if (flat) {
       geometry.rotateX(-Math.PI / 2);
     } else {
-      geometry.translate(0, height / 2, 0);
+      geometry.translate(0, height / 2 - shape.sink, 0);
       geometry.rotateX(-(Math.PI / 2 - PITCH) * 0.5);
     }
     const material = new MeshBasicMaterial({ map: texture, alphaTest: 0.5, toneMapped: false });
+    if (shape.frames > 1) {
+      this.frame = new InstancedBufferAttribute(new Float32Array(capacity), 1);
+      this.flip = new InstancedBufferAttribute(new Float32Array(capacity), 1);
+      geometry.setAttribute("aFrame", this.frame);
+      geometry.setAttribute("aFlip", this.flip);
+      animate(material, shape.frames);
+    } else {
+      this.frame = null;
+      this.flip = null;
+    }
     this.mesh = new InstancedMesh(geometry, material, capacity);
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
@@ -104,7 +137,7 @@ class SpriteBatch {
     this.count = 0;
   }
 
-  add(x: number, y: number, z: number, flash = false, rotation: Quaternion | null = null): void {
+  add(x: number, y: number, z: number, flash = false, rotation: Quaternion | null = null, frame = 0, flip = false): void {
     if (this.count >= this.mesh.instanceMatrix.count) {
       return;
     }
@@ -116,6 +149,8 @@ class SpriteBatch {
     }
     this.mesh.setMatrixAt(this.count, this.matrix);
     this.mesh.setColorAt(this.count, flash ? FLASH_COLOR : PLAIN_COLOR);
+    this.frame?.setX(this.count, frame);
+    this.flip?.setX(this.count, flip ? 1 : 0);
     this.count += 1;
   }
 
@@ -125,6 +160,10 @@ class SpriteBatch {
     if (this.mesh.instanceColor) {
       this.mesh.instanceColor.needsUpdate = true;
     }
+    if (this.frame && this.flip) {
+      this.frame.needsUpdate = true;
+      this.flip.needsUpdate = true;
+    }
   }
 
   dispose(scene: Scene): void {
@@ -133,6 +172,15 @@ class SpriteBatch {
     (this.mesh.material as MeshBasicMaterial).map?.dispose();
     (this.mesh.material as MeshBasicMaterial).dispose();
   }
+}
+
+interface Dying {
+  readonly x: number;
+  readonly z: number;
+  readonly kind: RegularKind;
+  readonly elite: boolean;
+  readonly flip: boolean;
+  readonly start: number;
 }
 
 class ShadowBatch {
@@ -237,6 +285,11 @@ export class ArenaRenderer {
   private readonly shadows: ShadowBatch;
   private enemies: Record<EnemyKind, SpriteBatch>;
   private elites: Record<RegularKind, SpriteBatch>;
+  private deaths: Record<RegularKind, SpriteBatch>;
+  private eliteDeaths: Record<RegularKind, SpriteBatch>;
+  private readonly dying: Dying[] = [];
+  private readonly facing = new Map<number, boolean>();
+  private tick = 0;
   private readonly chests: SpriteBatch;
   private readonly agent: SpriteBatch[];
   private readonly ghosts: SpriteBatch[];
@@ -325,6 +378,8 @@ export class ArenaRenderer {
     this.shadows = new ShadowBatch(this.scene, 1400);
     this.enemies = this.enemyBatches(WORLD_LOOKS[1]);
     this.elites = this.eliteBatches(WORLD_LOOKS[1]);
+    this.deaths = this.deathBatches(WORLD_LOOKS[1], false);
+    this.eliteDeaths = this.deathBatches(WORLD_LOOKS[1], true);
     this.chests = this.batch([CHEST], 2, 4, false);
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
       const batch = this.batch(agentSprite(tier), 1, 1, false);
@@ -378,10 +433,14 @@ export class ArenaRenderer {
     return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
   }
 
+  private atlasBatch(image: AtlasImage, scale: number, capacity: number, sink: number): SpriteBatch {
+    return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, false, { frames: image.frames, sink: sink * scale });
+  }
+
   private enemyBatches(look: WorldLook): Record<EnemyKind, SpriteBatch> {
     const batches = { boss: this.bossBatch(look.boss) } as Record<EnemyKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.batch([ENEMY_SPRITES[kind]], RENDER_SCALE.regular, ENEMY_CAPACITY[kind], false, look.faction);
+      batches[kind] = this.atlasBatch(atlasImage(enemyClips(kind, look.faction, false).moving), RENDER_SCALE.regular, ENEMY_CAPACITY[kind], 0);
     }
     return batches;
   }
@@ -389,9 +448,26 @@ export class ArenaRenderer {
   private eliteBatches(look: WorldLook): Record<RegularKind, SpriteBatch> {
     const batches = {} as Record<RegularKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.batch([eliteSprite(ENEMY_SPRITES[kind])], RENDER_SCALE.elite, ELITE_CAPACITY, false, look.faction);
+      batches[kind] = this.atlasBatch(atlasImage(enemyClips(kind, look.faction, true).moving), RENDER_SCALE.elite, ELITE_CAPACITY, 0);
     }
     return batches;
+  }
+
+  private deathBatches(look: WorldLook, elite: boolean): Record<RegularKind, SpriteBatch> {
+    const batches = {} as Record<RegularKind, SpriteBatch>;
+    for (const kind of REGULAR_KINDS) {
+      const death = enemyClips(kind, look.faction, elite).death;
+      const scale = elite ? RENDER_SCALE.elite : RENDER_SCALE.regular;
+      batches[kind] = this.atlasBatch(atlasImage(death.frames), scale, elite ? ELITE_CAPACITY : DEATH_CAPACITY, death.below);
+    }
+    return batches;
+  }
+
+  die(x: number, y: number, kind: EnemyKind, elite: boolean, playerX: number): void {
+    if (kind === "boss" || this.dying.length >= MAX_DYING) {
+      return;
+    }
+    this.dying.push({ x: x / SUB, z: y / SUB, kind, elite, flip: playerX < x, start: this.tick });
   }
 
   private hazardBatch(scale: number): SpriteBatch {
@@ -423,12 +499,64 @@ export class ArenaRenderer {
     map.repeat.set(40, 40);
     material.map = map;
     material.needsUpdate = true;
-    for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites)]) {
+    for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths)]) {
       batch.dispose(this.scene);
     }
     this.enemies = this.enemyBatches(look);
     this.elites = this.eliteBatches(look);
+    this.deaths = this.deathBatches(look, false);
+    this.eliteDeaths = this.deathBatches(look, true);
+    this.dying.length = 0;
+    this.facing.clear();
     this.propChunkX = Number.NaN;
+  }
+
+  private walkFrame(kind: RegularKind, id: number, tick: number): number {
+    return Math.floor(((tick + id * 17) * WALK_FPS[kind]) / TICKS_PER_SECOND) % WALK_FRAMES;
+  }
+
+  private syncEnemies(state: ArenaState): void {
+    const batches = [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths)];
+    for (const batch of batches) {
+      batch.begin();
+    }
+    if (this.facing.size > state.enemies.length * 2 + 64) {
+      this.facing.clear();
+    }
+    for (const enemy of state.enemies) {
+      const x = enemy.x / SUB;
+      const z = enemy.y / SUB;
+      const telegraph = enemy.mode === "telegraph";
+      const dx = state.player.x - enemy.x;
+      if (Math.abs(dx) > FACING_DEADZONE) {
+        this.facing.set(enemy.id, dx < 0);
+      }
+      const flip = this.facing.get(enemy.id) ?? false;
+      this.shadows.add(x, z, enemy.radius / SUB / 0.55);
+      if (enemy.kind === "boss") {
+        this.enemies.boss.add(x, 0, z, enemy.hitFlash > 0 || (telegraph && Math.floor(state.tick / 3) % 2 === 0));
+        continue;
+      }
+      const hurt = enemy.hitFlash > 0;
+      const frame = hurt ? WALK_FRAMES + (enemy.hitFlash > HIT_FLASH_TICKS / 2 ? 0 : 1) : telegraph ? 0 : this.walkFrame(enemy.kind, enemy.id, state.tick);
+      const batch = enemy.elite ? this.elites[enemy.kind] : this.enemies[enemy.kind];
+      batch.add(x, 0, z, telegraph && Math.floor(state.tick / 3) % 2 === 0, null, frame, flip);
+    }
+    for (let index = this.dying.length - 1; index >= 0; index -= 1) {
+      const body = this.dying[index];
+      if (!body) {
+        continue;
+      }
+      const frame = Math.floor((state.tick - body.start) / DEATH_TICKS_PER_FRAME);
+      if (frame >= DEATH_FRAMES || frame < 0) {
+        this.dying.splice(index, 1);
+        continue;
+      }
+      (body.elite ? this.eliteDeaths : this.deaths)[body.kind].add(body.x, 0, body.z, false, null, frame, body.flip);
+    }
+    for (const batch of batches) {
+      batch.commit();
+    }
   }
 
   pulse(x: number, y: number, radius: number, color: string): void {
@@ -493,21 +621,8 @@ export class ArenaRenderer {
     this.placeProps(playerX, playerZ);
 
     this.shadows.begin();
-    const enemyBatches = [...Object.values(this.enemies), ...Object.values(this.elites)];
-    for (const batch of enemyBatches) {
-      batch.begin();
-    }
-    for (const enemy of state.enemies) {
-      const x = enemy.x / SUB;
-      const z = enemy.y / SUB;
-      const telegraph = enemy.mode === "telegraph" && Math.floor(state.tick / 3) % 2 === 0;
-      const batch = enemy.elite && enemy.kind !== "boss" ? this.elites[enemy.kind] : this.enemies[enemy.kind];
-      batch.add(x, 0, z, enemy.hitFlash > 0 || telegraph);
-      this.shadows.add(x, z, enemy.radius / SUB / 0.55);
-    }
-    for (const batch of enemyBatches) {
-      batch.commit();
-    }
+    this.tick = state.tick;
+    this.syncEnemies(state);
 
     for (const batch of this.agent) {
       batch.begin();
