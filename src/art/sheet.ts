@@ -1,8 +1,8 @@
-import { REGULAR_KINDS, WORLDS, type EnemyKind } from "../sim/arena/content";
-import { deathFrames, hurtFrames, walkFrames } from "./animate";
-import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, ENEMY_SHOT, ENEMY_SPRITES, eliteSprite, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
+import { WORLDS, type EnemyKind, type RegularKind } from "../sim/arena/content";
+import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, ENEMY_SHOT, eliteSprite, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
+import { enemySprite } from "./world-enemies";
 import { bossSprite } from "./bosses";
-import { agentClips } from "./clips";
+import { agentClips, enemyClips } from "./clips";
 import { WEAPON_STAGES, weaponSprite } from "./weapon-art";
 import { bossClips } from "./clips";
 import { ENEMY_ART_TIER, RENDER_SCALE, type ArtTier } from "./art-rules";
@@ -142,9 +142,9 @@ function worldEntries(tier: number): Entry[] {
     return [];
   }
   const kinds = [...new Set<EnemyKind>([...world.slots, "lootRunner"])].sort((a, b) => TIER_ORDER.indexOf(ENEMY_ART_TIER[a]) - TIER_ORDER.indexOf(ENEMY_ART_TIER[b]));
-  const regular = kinds.flatMap((kind) => (kind === "boss" ? [] : [{ grid: shade([ENEMY_SPRITES[kind]], look.faction), scale: RENDER_SCALE.regular }]));
+  const regular = kinds.flatMap((kind) => (kind === "boss" ? [] : [{ grid: shade([enemySprite(world.id, kind)], look.faction), scale: RENDER_SCALE.regular }]));
   const eliteKind = world.slots[3];
-  const elite = eliteKind ? [{ grid: shade([eliteSprite(ENEMY_SPRITES[eliteKind])], look.faction), scale: RENDER_SCALE.elite }] : [];
+  const elite = eliteKind ? [{ grid: shade([eliteSprite(enemySprite(world.id, eliteKind))], look.faction), scale: RENDER_SCALE.elite }] : [];
   return [...regular, ...elite, { grid: shade([bossSprite(world.id)], look.faction), scale: RENDER_SCALE.boss }];
 }
 
@@ -174,15 +174,17 @@ export function enemySheet(): Picture {
 const ANIMATION_ZOOM = 4;
 
 export function animationSheet(): Picture {
-  const look = WORLD_LOOKS[1];
+  const rows = WORLDS.flatMap((world) => {
+    const look = WORLD_LOOKS[world.tier];
+    const kinds = [...new Set<RegularKind>([...world.slots, "lootRunner"])];
+    return kinds.map((kind) => {
+      const clips = enemyClips(world.id, kind, look.faction, false);
+      return { grid: [...clips.moving, ...clips.death.frames], ground: look.ground[0] };
+    });
+  });
   return framesSheet(
-    REGULAR_KINDS.map((kind) => {
-    const walk = walkFrames(ENEMY_SPRITES[kind]).map((frame) => shade([frame], look.faction));
-    const hurt = hurtFrames(walk[0] ?? []);
-    const death = deathFrames(shade([ENEMY_SPRITES[kind]], look.faction)).frames;
-    return [...walk, ...hurt, ...death];
-    }),
-    [look.ground[0], look.ground[2]],
+    rows.map((row) => row.grid),
+    rows.map((row) => row.ground),
     ANIMATION_ZOOM,
   );
 }

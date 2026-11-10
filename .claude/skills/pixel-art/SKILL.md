@@ -11,6 +11,7 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 
 ## 1. Enemies
 
+- **Each world has its own enemy set** in `src/art/world-enemies.ts` (`enemySprite(world, kind)`), drawn from the tables in `enemy-roster.md`. World 1 uses the office set in `arena-sprites.ts`. `world-enemies.test.ts` fails if a world reuses an office sprite for one of its slots.
 - **Make each enemy a recognizable thing from its world's theme.** Pick a SaaS or office object that a player can name at a glance: an invoice, a usage meter, a chat bubble, a sticky note, a loading spinner, a paywall. Don't draw a generic robot with a different hat.
 - **Give each enemy its own palette. [checked: hue spread]** Within a world, no two enemies may share a main hue (they must be at least 30° apart). The world's accent color belongs in the ground, props, effects and boss, never as a tint over every enemy.
 - **Size by tier. [checked: span]** Measure the longer side of the drawn area, at the size it is shown:
@@ -48,7 +49,7 @@ Rules marked **[checked]** are enforced by `src/art/audit.test.ts`, using the li
 | boss windup | 3–4 | 8 | Add a 2-frame windup effect |
 | boss impact | 3 | 10 | Add a 3-frame impact effect |
 | boss death | 3 | 6 | |
-| pickup bob | 4 | 5 | Pickups are 8–9 px |
+| pickup bob | 4 | 5 | Pickups are 8–9 px. XP tokens are gold coins with a T stamp [checked] |
 
 Regular enemies and elites get their walk, hurt and death clips from `src/art/animate.ts`, built from the one sprite you draw, so you don't draw frames by hand:
 

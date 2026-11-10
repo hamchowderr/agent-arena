@@ -395,9 +395,9 @@ export class ArenaRenderer {
 
     this.shadows = new ShadowBatch(this.scene, 1400);
     this.enemies = this.enemyBatches(WORLD_LOOKS[1], 1);
-    this.elites = this.eliteBatches(WORLD_LOOKS[1]);
-    this.deaths = this.deathBatches(WORLD_LOOKS[1], false);
-    this.eliteDeaths = this.deathBatches(WORLD_LOOKS[1], true);
+    this.elites = this.eliteBatches(WORLD_LOOKS[1], 1);
+    this.deaths = this.deathBatches(WORLD_LOOKS[1], 1, false);
+    this.eliteDeaths = this.deathBatches(WORLD_LOOKS[1], 1, true);
     this.bossDeath = this.bossDeathBatch(1);
     this.chests = this.batch([CHEST], 2, 4, false);
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
@@ -419,8 +419,8 @@ export class ArenaRenderer {
     this.bigGems = this.batch([BIG_GEM], 1, 200, false);
     this.buildArms();
     this.glows = {
-      token: this.glowBatch(14, 10, "#73eff7", 0.4, 900),
-      bigToken: this.glowBatch(18, 12, "#ffcd75", 0.5, 200),
+      token: this.glowBatch(14, 10, "#ffcd75", 0.4, 900),
+      bigToken: this.glowBatch(22, 14, "#fff1a8", 0.55, 200),
     };
     this.hallucinations = this.batch([HALLUCINATION], 1, 100, true);
     this.shots = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
@@ -510,23 +510,23 @@ export class ArenaRenderer {
   private enemyBatches(look: WorldLook, tier: Tier): Record<EnemyKind, SpriteBatch> {
     const batches = { boss: this.bossBatch(worldOf(tier), look.faction) } as Record<EnemyKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.atlasBatch(atlasImage(enemyClips(kind, look.faction, false).moving), RENDER_SCALE.regular, ENEMY_CAPACITY[kind], 0);
+      batches[kind] = this.atlasBatch(atlasImage(enemyClips(worldOf(tier), kind, look.faction, false).moving), RENDER_SCALE.regular, ENEMY_CAPACITY[kind], 0);
     }
     return batches;
   }
 
-  private eliteBatches(look: WorldLook): Record<RegularKind, SpriteBatch> {
+  private eliteBatches(look: WorldLook, tier: Tier): Record<RegularKind, SpriteBatch> {
     const batches = {} as Record<RegularKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      batches[kind] = this.atlasBatch(atlasImage(enemyClips(kind, look.faction, true).moving), RENDER_SCALE.elite, ELITE_CAPACITY, 0);
+      batches[kind] = this.atlasBatch(atlasImage(enemyClips(worldOf(tier), kind, look.faction, true).moving), RENDER_SCALE.elite, ELITE_CAPACITY, 0);
     }
     return batches;
   }
 
-  private deathBatches(look: WorldLook, elite: boolean): Record<RegularKind, SpriteBatch> {
+  private deathBatches(look: WorldLook, tier: Tier, elite: boolean): Record<RegularKind, SpriteBatch> {
     const batches = {} as Record<RegularKind, SpriteBatch>;
     for (const kind of REGULAR_KINDS) {
-      const death = enemyClips(kind, look.faction, elite).death;
+      const death = enemyClips(worldOf(tier), kind, look.faction, elite).death;
       const scale = elite ? RENDER_SCALE.elite : RENDER_SCALE.regular;
       batches[kind] = this.atlasBatch(atlasImage(death.frames), scale, elite ? ELITE_CAPACITY : DEATH_CAPACITY, death.below);
     }
@@ -581,9 +581,9 @@ export class ArenaRenderer {
       batch.dispose(this.scene);
     }
     this.enemies = this.enemyBatches(look, tier);
-    this.elites = this.eliteBatches(look);
-    this.deaths = this.deathBatches(look, false);
-    this.eliteDeaths = this.deathBatches(look, true);
+    this.elites = this.eliteBatches(look, tier);
+    this.deaths = this.deathBatches(look, tier, false);
+    this.eliteDeaths = this.deathBatches(look, tier, true);
     this.bossDeath.dispose(this.scene);
     this.bossDeath = this.bossDeathBatch(tier);
     this.dying.length = 0;

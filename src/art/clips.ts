@@ -1,7 +1,8 @@
 import type { RegularKind, WorldId } from "../sim/arena/content";
 import type { Tier } from "../sim/tiers";
 import { deathFrames, hurtFrames, squash, walkFrames, type DeathSheet } from "./animate";
-import { eliteSprite, ENEMY_SPRITES } from "./arena-sprites";
+import { eliteSprite } from "./arena-sprites";
+import { enemySprite } from "./world-enemies";
 import { agentBody } from "./agent";
 import { bossSprite } from "./bosses";
 import { shade, type ColorGrid } from "./shade";
@@ -23,10 +24,11 @@ export const WALK_FPS: Readonly<Record<RegularKind, number>> = {
   lootRunner: 12,
 };
 
-export function enemyClips(kind: RegularKind, faction: string, elite: boolean): EnemyClips {
-  const frames = walkFrames(ENEMY_SPRITES[kind]).map((frame) => (elite ? eliteSprite(frame) : frame));
+export function enemyClips(world: WorldId, kind: RegularKind, faction: string, elite: boolean): EnemyClips {
+  const sprite = enemySprite(world, kind);
+  const frames = walkFrames(sprite).map((frame) => (elite ? eliteSprite(frame) : frame));
   const walk = frames.map((frame) => shade([frame], faction));
-  const rest = elite ? eliteSprite(ENEMY_SPRITES[kind]) : ENEMY_SPRITES[kind];
+  const rest = elite ? eliteSprite(sprite) : sprite;
   return { moving: [...walk, ...hurtFrames(walk[0] ?? [])], death: deathFrames(shade([rest], faction)) };
 }
 
