@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "agent_arena",
+  "project_id": "0bd73b8a-61f8-4b5a-8f98-362c0d0e4e76"
+}
