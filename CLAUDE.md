@@ -12,6 +12,7 @@ A free, open-source (AGPL-3.0-or-later) browser autobattler. Players grow an age
 - **Deterministic sim.** Code in `src/sim/` takes a seed and inputs, and returns the same result every time. Lint bans `Math.random`, `Date`, `performance`, timers and the DOM there. Use `createRng(seed)` and integer math. Every sim change keeps the "same seed, same result" test green.
 - **No comments.** The `local/no-comments` lint rule bans them. If something needs explaining, rename it or write a test.
 - **Size budget.** The initial download (the entry chunk and everything it imports statically) stays under 124 KB gzipped, and each lazy chunk stays under 200 KB (`scripts/check-size.mjs`). The game, with three.js and pixelfx, loads as a lazy chunk after the page shell. Strudel loads as its own lazy chunk whose file name starts with `strudel` and has no budget.
+- **Run loop statechart.** `RUN_LOOP` in `src/sim/arena/run-loop.ts` is the only way the run's status changes, and the sim throws on any move it doesn't list. `run-loop.test.ts` model-checks every reachable state (no dead ends, every run can end, no boss skipped) and replays bot runs against it. If you change the table, regenerate the diagram in `docs/run-loop.md`; a test fails if they disagree.
 - **Vendored code.** `vendor/pixelfx` is a copy of pixelfx (MIT). Don't edit it; re-copy from upstream at the commit in `vendor/pixelfx/VERSION`. Lint skips `vendor/`.
 
 ## How to fix things (in order of value)
