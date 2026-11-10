@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { playBotRun } from "./bot";
 import { offerCards } from "./cards";
 import { MAX_PASSIVES, MAX_WEAPONS, WEAPONS } from "./content";
-import { distanceSquared, seconds, SUB } from "./math";
-import { BOSS_ENTRY_DISTANCE, choose, createArena, IDLE, maxHealth, step, xpToNext } from "./sim";
+import { distanceSquared, px, seconds, SUB } from "./math";
+import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, IDLE, maxHealth, step, xpToNext } from "./sim";
 
 describe("arena sim", () => {
   it("replays the same run from the same seed", () => {
@@ -90,5 +90,25 @@ describe("arena sim", () => {
     for (let level = 1; level < 60; level += 1) {
       expect(xpToNext(level + 1)).toBeGreaterThan(xpToNext(level));
     }
+  });
+});
+
+describe("knockback", () => {
+  it("pushes a hit enemy away from the agent, then settles", () => {
+    const state = createArena(11);
+    state.weapons.length = 0;
+    state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
+    state.nextBossTick = Number.MAX_SAFE_INTEGER;
+    const at = state.player;
+    state.enemies.push({ id: 7001, kind: "brute", x: at.x + px(30), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, speed: 0, damage: 1, radius: px(9), xp: 1 });
+    const brute = state.enemies[state.enemies.length - 1];
+    const startX = brute?.x ?? 0;
+    step(state, IDLE);
+    expect(brute?.knockX ?? 0).toBeGreaterThan(0);
+    for (let tick = 0; tick < 20; tick += 1) {
+      step(state, IDLE);
+    }
+    expect((brute?.x ?? 0) - startX).toBeGreaterThan(SUB * 2);
+    expect(Math.abs(brute?.knockX ?? 99)).toBeLessThan(KNOCKBACK);
   });
 });

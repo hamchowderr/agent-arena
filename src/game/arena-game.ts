@@ -51,6 +51,7 @@ export class ArenaGame {
   private readonly effects = new Effects();
   private readonly held = new Set<string>();
   private dashQueued = false;
+  private hitStop = 0;
   private accumulator = 0;
   private last = 0;
   private frameCount = 0;
@@ -212,7 +213,9 @@ export class ArenaGame {
     const elapsed = this.last === 0 ? STEP_MS : Math.min(250, now - this.last);
     this.last = now;
     this.frameCount += 1;
-    if (this.screen === "run" && this.state.status === "playing") {
+    if (this.hitStop > 0 && this.screen === "run") {
+      this.hitStop -= 1;
+    } else if (this.screen === "run" && this.state.status === "playing") {
       this.accumulator += elapsed;
       let steps = 0;
       while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && this.state.status === "playing") {
@@ -235,6 +238,7 @@ export class ArenaGame {
       this.renderer.setWorld(this.state.tier, this.state.seed);
     }
     this.renderer.hurt = Math.max(0, this.renderer.hurt - 0.06);
+    this.renderer.shake = this.renderer.shake < 0.02 ? 0 : this.renderer.shake * 0.86;
     const bossAlive = this.state.bossId !== null;
     this.renderer.letterbox += ((bossAlive ? 0.06 : 0) - this.renderer.letterbox) * 0.1;
     this.renderer.sync(this.state);
@@ -260,15 +264,25 @@ export class ArenaGame {
           if (event.crit) {
             this.effects.spawn("spark", event.x, event.y);
           }
+          if (event.boss && event.crit) {
+            this.hitStop = Math.max(this.hitStop, 2);
+            this.renderer.shake = Math.max(this.renderer.shake, 0.35);
+          }
           break;
         case "kill":
           kills += 1;
           if (event.enemy !== "grunt" || kills % 4 === 1) {
             this.effects.spawn("poof", event.x, event.y);
           }
+          if (event.enemy === "brute") {
+            this.hitStop = Math.max(this.hitStop, 2);
+            this.renderer.shake = Math.max(this.renderer.shake, 0.3);
+          }
           break;
         case "hurt":
           this.renderer.hurt = 1;
+          this.renderer.shake = Math.max(this.renderer.shake, 0.7);
+          this.hitStop = Math.max(this.hitStop, 3);
           this.floats.push({ text: `-${event.amount}`, x: this.state.player.x, y: this.state.player.y, color: "#ff6b6b", size: 24, age: 0 });
           break;
         case "hallucinated":
@@ -291,6 +305,8 @@ export class ArenaGame {
           break;
         }
         case "bossDown":
+          this.renderer.shake = 1.6;
+          this.hitStop = Math.max(this.hitStop, 14);
           this.effects.spawn("pow", event.x, event.y);
           this.effects.spawn("burst", event.x, event.y);
           this.banner = { title: "World cleared", subtitle: `${WORLDS[event.world]?.rival ?? ""} couldn't rent you anything`, age: 0, life: 170 };
@@ -302,6 +318,7 @@ export class ArenaGame {
           }
           break;
         case "slam":
+          this.renderer.shake = Math.max(this.renderer.shake, 1.1);
           this.effects.spawn("slam", event.x, event.y);
           break;
         case "dash":

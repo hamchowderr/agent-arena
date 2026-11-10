@@ -34,6 +34,9 @@ export const HURT_INVULNERABLE = 30;
 export const SPAWN_DISTANCE = px(250);
 export const DESPAWN_DISTANCE = px(460);
 export const BOSS_ENTRY_DISTANCE = px(85);
+export const KNOCKBACK = 24;
+const BOSS_KNOCKBACK = 3;
+const KNOCKBACK_KEEP_PERCENT = 60;
 const SCREEN_TOP_ANGLE = (ANGLE_STEPS * 3) / 4;
 const BOSS_ENTRY_SPREAD = ANGLE_STEPS / 8;
 export const MAX_ENEMIES = 420;
@@ -52,6 +55,8 @@ export interface Enemy {
   health: number;
   readonly maxHealth: number;
   hitFlash: number;
+  knockX: number;
+  knockY: number;
   readonly speed: number;
   readonly damage: number;
   readonly radius: number;
@@ -94,7 +99,7 @@ export interface Slam {
 }
 
 export type ArenaEvent =
-  | { readonly kind: "damage"; readonly x: number; readonly y: number; readonly amount: number; readonly crit: boolean }
+  | { readonly kind: "damage"; readonly x: number; readonly y: number; readonly amount: number; readonly crit: boolean; readonly boss: boolean }
   | { readonly kind: "kill"; readonly x: number; readonly y: number; readonly enemy: EnemyKind }
   | { readonly kind: "hurt"; readonly amount: number }
   | { readonly kind: "hallucinated"; readonly x: number; readonly y: number }
@@ -394,6 +399,8 @@ function spawnEnemy(state: ArenaState, kind: EnemyKind, angle: number, distance:
     health,
     maxHealth: health,
     hitFlash: 0,
+    knockX: 0,
+    knockY: 0,
     speed: definition.speed,
     damage: definition.damage + state.bossesDown * 3 + Math.trunc(state.tick / (TICKS_PER_SECOND * 60)),
     radius: px(definition.radius),
@@ -445,8 +452,10 @@ function moveEnemies(state: ArenaState): void {
       pushY += Math.trunc((dy * overlap) / (reach * 3));
     });
     const limit = enemy.kind === "boss" ? 2 : 10;
-    enemy.x += toward.x + Math.max(-limit, Math.min(limit, pushX));
-    enemy.y += toward.y + Math.max(-limit, Math.min(limit, pushY));
+    enemy.x += toward.x + Math.max(-limit, Math.min(limit, pushX)) + enemy.knockX;
+    enemy.y += toward.y + Math.max(-limit, Math.min(limit, pushY)) + enemy.knockY;
+    enemy.knockX = Math.trunc((enemy.knockX * KNOCKBACK_KEEP_PERCENT) / 100);
+    enemy.knockY = Math.trunc((enemy.knockY * KNOCKBACK_KEEP_PERCENT) / 100);
   }
   state.grid.rebuild(state.enemies);
 }
@@ -613,8 +622,11 @@ function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: Weap
   const amount = crit ? base * 2 : base;
   enemy.health -= amount;
   enemy.hitFlash = 6;
+  const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, enemy.kind === "boss" ? BOSS_KNOCKBACK : crit ? KNOCKBACK * 2 : KNOCKBACK);
+  enemy.knockX += away.x;
+  enemy.knockY += away.y;
   state.damageByWeapon.set(weapon, (state.damageByWeapon.get(weapon) ?? 0) + amount);
-  state.events.push({ kind: "damage", x: enemy.x, y: enemy.y, amount, crit });
+  state.events.push({ kind: "damage", x: enemy.x, y: enemy.y, amount, crit, boss: enemy.kind === "boss" });
   if (enemy.health > 0) {
     return;
   }
