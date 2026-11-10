@@ -348,7 +348,7 @@ export const TUFT: Sprite = ["l.l.l.", ".lglg.", "gGgGgg"];
 
 export const CABLE: Sprite = ["..dddd..", ".dSSSSd.", "dS.dd.Sd", "dS.dd.Sd", ".dSSSSd.", "..dddd.."];
 
-function beamSprite(length: number, height: number, [outer, inner, core]: readonly [string, string, string]): Sprite {
+export function beamSprite(length: number, height: number, [outer, inner, core]: readonly [string, string, string]): Sprite {
   const middle = Math.floor(height / 2);
   return Array.from({ length: height }, (_, y) =>
     Array.from({ length: length }, (_, x) => {
@@ -369,7 +369,7 @@ function beamSprite(length: number, height: number, [outer, inner, core]: readon
   );
 }
 
-export const RAG_BEAM: Sprite = beamSprite(52, 7, ["g", "l", "w"]);
+export const RAG_BEAM: Sprite = beamSprite(64, 9, ["y", "l", "w"]);
 
 export const PROPS: readonly Sprite[] = [BUSH, ROCK, SERVER, CRATE, FLOWER, TUFT, TUFT, FLOWER, CABLE];
 

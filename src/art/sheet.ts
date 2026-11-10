@@ -2,6 +2,8 @@ import { REGULAR_KINDS, WORLDS, type EnemyKind } from "../sim/arena/content";
 import { deathFrames, hurtFrames, walkFrames } from "./animate";
 import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, ENEMY_SHOT, ENEMY_SPRITES, eliteSprite, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
 import { bossSprite } from "./bosses";
+import { agentClips } from "./clips";
+import { WEAPON_STAGES, weaponSprite } from "./weapon-art";
 import { bossClips } from "./clips";
 import { ENEMY_ART_TIER, RENDER_SCALE, type ArtTier } from "./art-rules";
 import { rgbOf } from "./audit";
@@ -203,6 +205,20 @@ export function pickupSheet(): Picture {
     WORLDS.map((world) => WORLD_LOOKS[world.tier].ground[0]),
     6,
   );
+}
+
+export function evolutionSheet(): Picture {
+  const faction = WORLD_LOOKS[1].faction;
+  const paint = (sprite: readonly string[]) => shade([sprite], faction);
+  const agents = ([1, 2, 3, 4, 5] as const).map((tier) => agentClips(tier)[0] ?? []);
+  const rows = [
+    agents,
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("prompt", stage)))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("webSearch", stage))), paint(weaponSprite("ragSearch", 0))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("codeExec", stage))), paint(weaponSprite("codeInterpreter", 0))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("subagents", stage)))],
+  ];
+  return framesSheet(rows, [WORLD_LOOKS[1].ground[0], WORLD_LOOKS[1].ground[2]], 6);
 }
 
 function framesSheet(rows: readonly (readonly ColorGrid[])[], grounds: readonly string[], zoom: number): Picture {

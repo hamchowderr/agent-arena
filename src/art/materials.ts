@@ -12,6 +12,8 @@ export const MATERIALS = {
   A: "#e8e6dc",
   C: "#e6b04a",
   D: "#4a4e5e",
+  P: "#4fd6f2",
+  Q: "#eef1f8",
 } as const;
 
 export type MaterialKey = keyof typeof MATERIALS;

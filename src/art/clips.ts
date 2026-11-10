@@ -1,6 +1,8 @@
 import type { RegularKind, WorldId } from "../sim/arena/content";
+import type { Tier } from "../sim/tiers";
 import { deathFrames, hurtFrames, squash, walkFrames, type DeathSheet } from "./animate";
 import { eliteSprite, ENEMY_SPRITES } from "./arena-sprites";
+import { agentBody } from "./agent";
 import { bossSprite } from "./bosses";
 import { shade, type ColorGrid } from "./shade";
 
@@ -40,4 +42,8 @@ export function bossClips(world: WorldId, faction: string): EnemyClips {
   const windup = WINDUP_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 4 + frame, angry: true }), rows)));
   const impact = IMPACT_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 6 - frame * 2, angry: true }), rows)));
   return { moving: [...idle, ...windup, ...impact, ...hurtFrames(idle[0] ?? [])], death: deathFrames(paint(bossSprite(world))) };
+}
+
+export function agentClips(tier: Tier): ColorGrid[] {
+  return walkFrames(agentBody(tier)).map((frame) => shade([frame], "#ffffff"));
 }
