@@ -24,6 +24,7 @@ import {
   type WorldId,
   type PassiveId,
   type PassiveStat,
+  type WeaponDefinition,
   type WeaponId,
   type WeaponKind,
   type World,
@@ -37,7 +38,8 @@ export const PLAYER_RADIUS = px(5);
 export const BASE_HEALTH = 100;
 export const HEALTH_PER_TIER = 25;
 export const BASE_CRIT = 5;
-export const BASE_HALLUCINATION = 30;
+export const BASE_HALLUCINATION = 20;
+export const HALLUCINATION_VEER = 40;
 export const HALLUCINATION_PER_TIER = 5;
 export const BASE_PICKUP = px(32);
 export const DASH_TICKS = 8;
@@ -140,6 +142,8 @@ export interface Gem {
   y: number;
   readonly value: number;
   readonly chest: boolean;
+  readonly prizes: number;
+  settle: number;
   pulled: boolean;
 }
 
@@ -189,6 +193,10 @@ export interface Slam {
 }
 
 export const HIT_FLASH_TICKS = 12;
+export const GEM_SETTLE_TICKS = 30;
+export const ELITE_CHEST_PRIZES = 1;
+export const BOSS_CHEST_PRIZES = 3;
+const GEM_SCATTER = px(10);
 
 export type ArenaEvent =
   | { readonly kind: "damage"; readonly x: number; readonly y: number; readonly amount: number; readonly crit: boolean; readonly boss: boolean }
@@ -207,7 +215,7 @@ export type ArenaEvent =
   | { readonly kind: "acquired" }
   | { readonly kind: "blast"; readonly x: number; readonly y: number; readonly radius: number }
   | { readonly kind: "eliteArrives"; readonly x: number; readonly y: number }
-  | { readonly kind: "chest"; readonly x: number; readonly y: number }
+  | { readonly kind: "chest"; readonly x: number; readonly y: number; readonly prize: Card | null; readonly reel: readonly Card[] }
   | { readonly kind: "lootEscaped" };
 
 export type Status = SimPhase;
@@ -800,7 +808,7 @@ function fireWeapons(state: ArenaState): void {
       const spread = (shot - Math.trunc(stats.count / 2)) * 10;
       const speed = px(definition.speed);
       const aim = scaleToLength(target.x - state.player.x, target.y - state.player.y, speed);
-      const turn = hallucinated ? state.rng.intBelow(ANGLE_STEPS) : spread;
+      const turn = hallucinated ? spread + state.rng.intBelow(HALLUCINATION_VEER * 2 + 1) - HALLUCINATION_VEER : spread;
       state.projectiles.push({
         weapon: owned.id,
         kind: definition.kind,
@@ -935,14 +943,16 @@ function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: Weap
     }
   }
   enemy.hitFlash = HIT_FLASH_TICKS;
-  const push = enemy.kind === "boss" ? BOSS_KNOCKBACK : Math.trunc(((crit ? KNOCKBACK * 2 : KNOCKBACK) * (100 - enemy.mass)) / 100);
+  const definition: WeaponDefinition = WEAPONS[weapon];
+  const shove = definition.knockback ?? KNOCKBACK;
+  const push = enemy.kind === "boss" ? BOSS_KNOCKBACK : Math.trunc(((crit ? shove * 2 : shove) * (100 - enemy.mass)) / 100);
   const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, push);
   enemy.knockX += away.x;
   enemy.knockY += away.y;
   state.damageByWeapon.set(weapon, (state.damageByWeapon.get(weapon) ?? 0) + amount);
   state.events.push({ kind: "damage", x: enemy.x, y: enemy.y, amount, crit, boss: enemy.kind === "boss" });
   if (enemy.kind === "lootRunner") {
-    state.gems.push({ x: enemy.x, y: enemy.y, value: LOOT_GEM_EVERY_HIT, pulled: false, chest: false });
+    dropGem(state, enemy, LOOT_GEM_EVERY_HIT, 0);
   }
   if (enemy.health > 0) {
     return;
@@ -953,12 +963,13 @@ function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: Weap
 function defeatEnemy(state: ArenaState, enemy: Enemy): void {
   state.kills += 1;
   state.events.push({ kind: "kill", x: enemy.x, y: enemy.y, enemy: enemy.kind, elite: enemy.elite });
-  if (enemy.elite) {
-    state.gems.push({ x: enemy.x, y: enemy.y, value: 0, pulled: false, chest: true });
+  const prizes = enemy.id === state.bossId ? BOSS_CHEST_PRIZES : enemy.elite ? ELITE_CHEST_PRIZES : 0;
+  if (prizes > 0) {
+    dropGem(state, enemy, 0, prizes);
   }
   const value = enemy.kind === "lootRunner" ? LOOT_PAYOUT : enemy.xp;
   if (value > 0) {
-    state.gems.push({ x: enemy.x, y: enemy.y, value, pulled: false, chest: false });
+    dropGem(state, enemy, value, 0);
   }
   if (enemy.kind === "splitter") {
     const away = scaleToLength(enemy.x - state.player.x, enemy.y - state.player.y, KNOCKBACK);
@@ -972,6 +983,32 @@ function defeatEnemy(state: ArenaState, enemy: Enemy): void {
   if (enemy.id === state.bossId) {
     defeatBoss(state, enemy);
   }
+}
+
+function dropGem(state: ArenaState, enemy: Enemy, value: number, prizes: number): void {
+  const angle = (enemy.id * 37 + state.gems.length * 11 + state.tick) % ANGLE_STEPS;
+  const reach = prizes > 0 ? 0 : GEM_SCATTER;
+  const magnet = pickupRadius(state);
+  state.gems.push({
+    x: enemy.x + Math.trunc((cosStep(angle) * reach) / UNIT),
+    y: enemy.y + Math.trunc((sinStep(angle) * reach) / UNIT),
+    value,
+    chest: prizes > 0,
+    prizes,
+    settle: GEM_SETTLE_TICKS,
+    pulled: distanceSquared(enemy.x, enemy.y, state.player.x, state.player.y) <= magnet * magnet,
+  });
+}
+
+function openChest(state: ArenaState, x: number, y: number): void {
+  const reel = offerCards(state);
+  const prize = reel.length > 0 ? reel[state.rng.intBelow(reel.length)] ?? null : null;
+  if (prize) {
+    applyCard(state, prize);
+  } else {
+    state.player.health = Math.min(maxHealth(state), state.player.health + 20);
+  }
+  state.events.push({ kind: "chest", x, y, prize, reel });
 }
 
 function defeatBoss(state: ArenaState, boss: Enemy): void {
@@ -1185,6 +1222,10 @@ function collectGems(state: ArenaState): void {
   const player = state.player;
   const radius = pickupRadius(state);
   for (const gem of state.gems) {
+    if (gem.settle > 0) {
+      gem.settle -= 1;
+      continue;
+    }
     const distance = distanceSquared(gem.x, gem.y, player.x, player.y);
     if (!gem.pulled && distance <= radius * radius) {
       gem.pulled = true;
@@ -1197,9 +1238,8 @@ function collectGems(state: ArenaState): void {
     gem.y += pull.y;
     if (distanceSquared(gem.x, gem.y, player.x, player.y) <= px(6) * px(6)) {
       gem.pulled = false;
-      if (gem.chest) {
-        state.pendingLevelUps += 1;
-        state.events.push({ kind: "chest", x: gem.x, y: gem.y });
+      for (let prize = 0; prize < gem.prizes; prize += 1) {
+        openChest(state, gem.x, gem.y);
       }
       gem.x = Number.NaN;
       gainXp(state, gem.value);
@@ -1254,8 +1294,15 @@ function hurtPlayer(state: ArenaState, base: number, source: EnemyKind, ignoreIn
 
 function removeDead(state: ArenaState): void {
   const player = state.player;
+  for (const enemy of state.enemies) {
+    if (enemy.elite && distanceSquared(enemy.x, enemy.y, player.x, player.y) >= DESPAWN_DISTANCE * DESPAWN_DISTANCE) {
+      const back = scaleToLength(enemy.x - player.x, enemy.y - player.y, SPAWN_DISTANCE);
+      enemy.x = player.x + back.x;
+      enemy.y = player.y + back.y;
+    }
+  }
   const keepEnemy = (enemy: Enemy) =>
-    enemy.health > 0 && (enemy.kind === "boss" || distanceSquared(enemy.x, enemy.y, player.x, player.y) < DESPAWN_DISTANCE * DESPAWN_DISTANCE);
+    enemy.health > 0 && (enemy.kind === "boss" || enemy.elite || distanceSquared(enemy.x, enemy.y, player.x, player.y) < DESPAWN_DISTANCE * DESPAWN_DISTANCE);
   filterInPlace(state.enemies, keepEnemy);
   filterInPlace(state.projectiles, (projectile) => projectile.life > 0);
   filterInPlace(state.gems, (gem) => !Number.isNaN(gem.x));

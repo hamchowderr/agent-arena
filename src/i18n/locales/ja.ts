@@ -112,6 +112,8 @@ export const ja = {
   "elite.arrives": "レンタルエージェントが現れた",
   "elite.subtitle": "{rival}の精鋭だ。倒すと宝箱を落とす。",
   "chest.open": "宝箱！無料アップグレード",
+  "chest.title": "宝箱！",
+  "chest.hint": "運しだい。選べない、回すだけ。",
 
   "tier.1.name": "素のLLM",
   "tier.1.stage": "プレシード",

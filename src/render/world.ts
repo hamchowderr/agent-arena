@@ -43,7 +43,7 @@ import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import { agentSprite, type Sprite } from "../art/sprites";
 import { REGULAR_KINDS, WEAPONS, type EnemyKind, type RegularKind } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { HIT_FLASH_TICKS, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
+import { GEM_SETTLE_TICKS, HIT_FLASH_TICKS, orbitPosition, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
 import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, pixelTexture, spriteImage, type AtlasImage } from "./textures";
@@ -658,7 +658,8 @@ export class ArenaRenderer {
     this.bigGems.begin();
     this.chests.begin();
     for (const gem of state.gems) {
-      const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5;
+      const hop = gem.settle > 0 ? Math.sin((gem.settle / GEM_SETTLE_TICKS) * Math.PI) * 9 : 0;
+      const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5 + hop;
       (gem.chest ? this.chests : gem.value > 1 ? this.bigGems : this.gems).add(gem.x / SUB, bob, gem.y / SUB);
     }
     this.gems.commit();

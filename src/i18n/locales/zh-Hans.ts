@@ -112,6 +112,8 @@ export const zhHans = {
   "elite.arrives": "租来的智能体出现了",
   "elite.subtitle": "{rival}派出了精英。击败它会掉落宝箱。",
   "chest.open": "宝箱！免费升级",
+  "chest.title": "宝箱！",
+  "chest.hint": "全凭运气。不能挑选，只管转。",
 
   "tier.1.name": "原始 LLM",
   "tier.1.stage": "种子前",

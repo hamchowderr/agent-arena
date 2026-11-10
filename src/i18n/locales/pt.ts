@@ -112,6 +112,8 @@ export const pt = {
   "elite.arrives": "Chega um agente alugado",
   "elite.subtitle": "{rival} mandou o seu melhor. Ele deixa um baú.",
   "chest.open": "Baú! Melhoria grátis",
+  "chest.title": "Baú!",
+  "chest.hint": "Sorte pura. Sem escolher, só girar.",
 
   "tier.1.name": "LLM cru",
   "tier.1.stage": "Pré-seed",

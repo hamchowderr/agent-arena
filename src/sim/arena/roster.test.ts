@@ -3,7 +3,10 @@ import { kitingBot, pickRecommended } from "./bot";
 import { ELITE_SECOND, ENEMIES, LOOT_RUNNER_ESCAPE_SECONDS, SPLIT_COUNT, SPLIT_INTO, WAVES, WORLDS, type EnemyKind } from "./content";
 import { distanceSquared, px, seconds } from "./math";
 import {
+  BOSS_CHEST_PRIZES,
+  ELITE_CHEST_PRIZES,
   FUSE_TICKS,
+  GEM_SETTLE_TICKS,
   IDLE,
   KNOCKBACK,
   TELEGRAPH_TICKS,
@@ -195,7 +198,7 @@ describe("enemy behaviors", () => {
     expect(events.some((event) => event.kind === "kill")).toBe(false);
   });
 
-  it("drops a chest from the elite that opens a level-up", () => {
+  it("drops a chest from the elite that spins one random upgrade with no picking", () => {
     const state = createArena(36);
     state.weapons.length = 0;
     state.nextBossTick = Number.MAX_SAFE_INTEGER;
@@ -216,20 +219,55 @@ describe("enemy behaviors", () => {
     pulseWith(state);
     step(state, IDLE);
     const chest = state.gems.find((gem) => gem.chest);
-    expect(chest).toBeDefined();
+    expect(chest?.prizes).toBe(ELITE_CHEST_PRIZES);
+    expect(state.gems.some((gem) => !gem.chest && gem.value === elite.xp)).toBe(true);
     state.weapons.length = 0;
-    let opened = false;
-    for (let tick = 0; tick < 120 && !opened; tick += 1) {
-      if (chest) {
-        chest.pulled = true;
-      }
+    const opened: ArenaEvent[] = [];
+    for (let tick = 0; tick < 120 && opened.length === 0; tick += 1) {
       state.enemies.length = 0;
       step(state, IDLE);
-      opened = state.events.some((event) => event.kind === "chest");
-      if (state.status === "levelUp") {
-        opened = true;
-      }
+      opened.push(...state.events.filter((event) => event.kind === "chest"));
+      expect(state.status).toBe("playing");
     }
-    expect(opened).toBe(true);
+    expect(opened).toHaveLength(1);
+    const event = opened[0];
+    if (event?.kind !== "chest" || !event.prize) {
+      throw new Error("chest opened without a prize");
+    }
+    expect(event.reel).toContainEqual(event.prize);
+    expect(state.cards).toEqual([]);
+  });
+
+  it("drops a three-prize chest and a big gem when the boss dies", () => {
+    const state = quietArena(41);
+    const boss = place(state, "boss", 20, 0, 1);
+    state.bossId = boss.id;
+    pulseWith(state);
+    step(state, IDLE);
+    expect(state.gems.find((gem) => gem.chest)?.prizes).toBe(BOSS_CHEST_PRIZES);
+    expect(state.gems.some((gem) => !gem.chest && gem.value === boss.xp)).toBe(true);
+  });
+
+  it("keeps the elite in play when the agent runs far away", () => {
+    const state = quietArena(43);
+    const elite = place(state, "brute", 470, 0);
+    Object.assign(elite, { elite: true });
+    step(state, IDLE);
+    expect(state.enemies).toContain(elite);
+    expect(distanceSquared(elite.x, elite.y, state.player.x, state.player.y)).toBeLessThan(px(300) * px(300));
+  });
+
+  it("leaves drops on the floor long enough to see them before they fly to the agent", () => {
+    const state = quietArena(44);
+    place(state, "grunt", 4, 0, 1);
+    pulseWith(state);
+    step(state, IDLE);
+    const gem = state.gems[0];
+    expect(gem).toBeDefined();
+    for (let tick = 1; tick < GEM_SETTLE_TICKS; tick += 1) {
+      state.weapons.length = 0;
+      step(state, IDLE);
+      expect(state.gems).toContain(gem);
+    }
   });
 });

@@ -112,6 +112,8 @@ export const ko = {
   "elite.arrives": "임대 에이전트가 나타났다",
   "elite.subtitle": "{rival}의 정예 에이전트. 쓰러뜨리면 상자를 떨군다.",
   "chest.open": "상자! 무료 업그레이드",
+  "chest.title": "상자!",
+  "chest.hint": "운에 맡겨라. 고를 수 없다, 돌릴 뿐.",
 
   "tier.1.name": "날것의 LLM",
   "tier.1.stage": "프리시드",

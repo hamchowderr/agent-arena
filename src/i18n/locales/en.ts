@@ -110,6 +110,8 @@ export const en = {
   "elite.arrives": "A rented agent shows up",
   "elite.subtitle": "{rival} sent its best. It drops a chest.",
   "chest.open": "Chest! Free upgrade",
+  "chest.title": "Chest!",
+  "chest.hint": "Luck of the draw. No picks, just spin.",
 
   "tier.1.name": "Raw LLM",
   "tier.1.stage": "Pre-seed",

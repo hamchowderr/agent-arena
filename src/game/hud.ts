@@ -71,6 +71,17 @@ export interface Banner {
   readonly life: number;
 }
 
+export interface ChestSpin {
+  readonly prize: Card;
+  readonly reel: readonly Card[];
+  age: number;
+}
+
+export const CHEST_SPIN_FRAMES = 84;
+export const CHEST_HOLD_FRAMES = 54;
+const REEL_SLOTS = 18;
+const REEL_SLOT_HEIGHT = 132;
+
 const iconCache = new Map<string, HTMLCanvasElement>();
 
 function cachedIcon(key: string, sprite: Sprite): HTMLCanvasElement {
@@ -344,6 +355,70 @@ export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState
   });
   drawButton(context, REROLL_RECT, t("levelUp.reroll", { count: state.rerolls }), state.rerolls > 0);
   drawButton(context, SKIP_RECT, t("levelUp.skip", { count: state.skips }), state.skips > 0);
+}
+
+function reelCard(spin: ChestSpin, slot: number): Card {
+  return slot >= REEL_SLOTS - 1 ? spin.prize : (spin.reel[slot % Math.max(1, spin.reel.length)] ?? spin.prize);
+}
+
+function cardIcon(card: Card): HTMLCanvasElement {
+  return card.kind === "passive" ? passiveIcon(card.id) : weaponIcon(card.id);
+}
+
+export function drawChestSpin(context: CanvasRenderingContext2D, spin: ChestSpin, frame: number): void {
+  context.fillStyle = "rgba(8, 10, 18, 0.62)";
+  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+  const landed = spin.age >= CHEST_SPIN_FRAMES;
+  const progress = Math.min(1, spin.age / CHEST_SPIN_FRAMES);
+  const eased = 1 - (1 - progress) ** 3;
+  const position = eased * (REEL_SLOTS - 1);
+  text(context, t("chest.title"), HUD_WIDTH / 2, 70, 60, GOLD, "center");
+  text(context, t("chest.hint"), HUD_WIDTH / 2, 142, 20, "#9fb0d0", "center");
+  const machine = { x: HUD_WIDTH / 2 - 190, y: 186, w: 380, h: 420 };
+  context.fillStyle = SHADOW;
+  context.fillRect(machine.x - 8, machine.y - 8, machine.w + 16, machine.h + 16);
+  context.fillStyle = landed && Math.floor(frame / 6) % 2 === 0 ? GOLD : "#b86f50";
+  context.fillRect(machine.x - 4, machine.y - 4, machine.w + 8, machine.h + 8);
+  context.fillStyle = "#3e2731";
+  context.fillRect(machine.x, machine.y, machine.w, machine.h);
+  for (let bulb = 0; bulb < 10; bulb += 1) {
+    const lit = (bulb + Math.floor(frame / (landed ? 4 : 2))) % 2 === 0;
+    context.fillStyle = lit ? GOLD : "#6b4a3a";
+    const bx = machine.x + 22 + bulb * ((machine.w - 44) / 9);
+    context.fillRect(bx - 5, machine.y + 10, 10, 10);
+    context.fillRect(bx - 5, machine.y + machine.h - 20, 10, 10);
+  }
+  const reelWindow = { x: machine.x + 40, y: machine.y + 40, w: machine.w - 80, h: machine.h - 80 };
+  context.fillStyle = CARD_INSET;
+  context.fillRect(reelWindow.x, reelWindow.y, reelWindow.w, reelWindow.h);
+  const centerY = reelWindow.y + reelWindow.h / 2;
+  context.save();
+  context.beginPath();
+  context.rect(reelWindow.x, reelWindow.y, reelWindow.w, reelWindow.h);
+  context.clip();
+  const first = Math.max(0, Math.floor(position) - 2);
+  for (let slot = first; slot <= Math.min(REEL_SLOTS - 1, first + 4); slot += 1) {
+    const y = centerY + (slot - position) * REEL_SLOT_HEIGHT;
+    const card = reelCard(spin, slot);
+    const tile = { x: reelWindow.x + reelWindow.w / 2 - 56, y: y - 56, w: 112, h: 112 };
+    context.globalAlpha = Math.max(0.25, 1 - Math.abs(slot - position) * 0.55);
+    iconTile(context, tile, cardAccent(card));
+    drawIcon(context, cardIcon(card), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 96);
+  }
+  context.globalAlpha = 1;
+  context.restore();
+  context.fillStyle = landed ? GOLD : "#f4f1e8";
+  context.fillRect(reelWindow.x - 4, centerY - 70, 14, 6);
+  context.fillRect(reelWindow.x - 4, centerY + 64, 14, 6);
+  context.fillRect(reelWindow.x + reelWindow.w - 10, centerY - 70, 14, 6);
+  context.fillRect(reelWindow.x + reelWindow.w - 10, centerY + 64, 14, 6);
+  if (landed) {
+    const card = spin.prize;
+    const name = cardName(card);
+    text(context, name, HUD_WIDTH / 2, 640, fitSize(context, name, 900, 40), INK, "center");
+    const badge = card.kind === "evolve" ? t("card.evolve") : card.toLevel === 1 ? t("card.new") : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
+    text(context, badge, HUD_WIDTH / 2, 698, 24, cardAccent(card), "center");
+  }
 }
 
 function drawButton(context: CanvasRenderingContext2D, rect: Rect, label: string, enabled: boolean): void {

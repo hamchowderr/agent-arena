@@ -112,6 +112,8 @@ export const es = {
   "elite.arrives": "Llega un agente alquilado",
   "elite.subtitle": "{rival} envió a su mejor agente. Suelta un cofre.",
   "chest.open": "¡Cofre! Mejora gratis",
+  "chest.title": "¡Cofre!",
+  "chest.hint": "Pura suerte. Sin elegir, solo girar.",
 
   "tier.1.name": "LLM en bruto",
   "tier.1.stage": "Pre-semilla",

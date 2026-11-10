@@ -14,7 +14,10 @@ import { bossName, bossPitch, clock, passiveName, rivalName, tierStage } from ".
 import { replayCode } from "./replay-link";
 import {
   cardRects,
+  CHEST_HOLD_FRAMES,
+  CHEST_SPIN_FRAMES,
   drawBanner,
+  drawChestSpin,
   drawBossMarker,
   drawDialogue,
   drawFloats,
@@ -34,6 +37,7 @@ import {
   SKIP_RECT,
   WATCH_RECT,
   type Banner,
+  type ChestSpin,
   type Dialogue,
   type FloatText,
 } from "./hud";
@@ -90,6 +94,7 @@ export class ArenaGame {
   private padDirection: Direction = STILL;
   private touch: Stick | null = null;
   private hitStop = 0;
+  private spins: ChestSpin[] = [];
   private accumulator = 0;
   private last = 0;
   private frameCount = 0;
@@ -165,6 +170,7 @@ export class ArenaGame {
     this.renderer.setWorld(1, seed);
     this.renderedTier = 1;
     this.floats = [];
+    this.spins = [];
     this.effects.clear();
     const firstWorld = WORLDS[0];
     this.banner = firstWorld ? { title: rivalName(firstWorld), subtitle: t("story.worldBanner", { world: 1, stage: tierStage(firstWorld.tier) }), age: 0, life: 150 } : null;
@@ -477,14 +483,20 @@ export class ArenaGame {
     const elapsed = this.last === 0 ? STEP_MS : Math.min(250, now - this.last);
     this.last = now;
     this.frameCount += 1;
-    if (this.hitStop > 0 && this.screen === "run") {
+    const spin = this.spins[0];
+    if (spin && this.screen === "run") {
+      spin.age += this.playback ? this.playback.speed : 1;
+      if (spin.age >= CHEST_SPIN_FRAMES + CHEST_HOLD_FRAMES) {
+        this.spins.shift();
+      }
+    } else if (this.hitStop > 0 && this.screen === "run") {
       this.hitStop -= this.playback ? this.playback.speed : 1;
     } else if (this.screen === "run" && this.playback) {
       this.advancePlayback(this.playback, elapsed);
     } else if (this.screen === "run" && this.state.status === "playing") {
       this.accumulator += elapsed;
       let steps = 0;
-      while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && this.state.status === "playing") {
+      while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && this.state.status === "playing" && this.spins.length === 0) {
         this.act({ kind: "step", input: this.input() });
         this.handle(this.state.events);
         this.accumulator -= STEP_MS;
@@ -540,7 +552,7 @@ export class ArenaGame {
     this.accumulator += elapsed * playback.speed;
     const limit = MAX_STEPS_PER_FRAME * playback.speed;
     let steps = 0;
-    while (this.accumulator >= STEP_MS && steps < limit && this.state.status === "playing") {
+    while (this.accumulator >= STEP_MS && steps < limit && this.state.status === "playing" && this.spins.length === 0) {
       const next = actions[playback.index];
       if (!next) {
         this.finishRun();
@@ -664,8 +676,10 @@ export class ArenaGame {
           this.banner = { title: t("elite.arrives"), subtitle: t("elite.subtitle", { rival: rivalName(currentWorld(this.state).id) }), age: 0, life: 150 };
           break;
         case "chest":
-          this.hitStop = Math.max(this.hitStop, 4);
           this.effects.spawn("pow", event.x, event.y);
+          if (event.prize) {
+            this.spins.push({ prize: event.prize, reel: event.reel, age: 0 });
+          }
           if (this.floats.length < MAX_FLOATS) {
             this.floats.push({ text: t("chest.open"), x: event.x, y: event.y, color: "#ffcd75", size: 22, age: 0 });
           }
@@ -692,7 +706,7 @@ export class ArenaGame {
       this.drawNotice();
       return;
     }
-    const paused = this.screen !== "run" || this.state.status !== "playing";
+    const paused = this.screen !== "run" || this.state.status !== "playing" || this.spins.length > 0;
     this.effects.draw(context, paused ? 0 : seconds, project, HUD_PER_RENDER);
     for (const float of this.floats) {
       float.age += paused ? 0 : 1;
@@ -705,7 +719,7 @@ export class ArenaGame {
     if (boss && !paused) {
       drawBossMarker(context, this.projectToHud(boss.x, boss.y), this.frameCount);
     }
-    if (this.dialogue) {
+    if (this.dialogue && this.spins.length === 0) {
       this.dialogue.age += paused ? 0 : 1;
       drawDialogue(context, this.dialogue);
       if (this.dialogue.age > this.dialogue.life) {
@@ -721,6 +735,10 @@ export class ArenaGame {
     }
     if (this.screen === "run" && this.state.status === "levelUp") {
       drawLevelUp(context, this.state, this.hover);
+    }
+    const spinning = this.spins[0];
+    if (this.screen === "run" && spinning) {
+      drawChestSpin(context, spinning, this.frameCount);
     }
     if (this.playback && this.screen !== "results") {
       drawReplayHud(context, this.playback.speed);

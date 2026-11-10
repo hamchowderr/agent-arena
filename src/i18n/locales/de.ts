@@ -112,6 +112,8 @@ export const de = {
   "elite.arrives": "Ein gemieteter Agent taucht auf",
   "elite.subtitle": "{rival} schickt seinen besten Agenten. Er lässt eine Truhe fallen.",
   "chest.open": "Truhe! Gratis-Upgrade",
+  "chest.title": "Truhe!",
+  "chest.hint": "Reines Glück. Keine Wahl, nur drehen.",
 
   "tier.1.name": "Rohes LLM",
   "tier.1.stage": "Pre-Seed",
