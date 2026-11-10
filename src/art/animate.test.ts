@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { REGULAR_KINDS } from "../sim/arena/content";
-import { DEATH_FRAMES, deathFrames, HURT_FRAMES, HURT_TINT, hurtFrames, legRowCount, WALK_FRAMES, walkFrames } from "./animate";
+import { REGULAR_KINDS, WORLDS } from "../sim/arena/content";
+import { BOSS_IDLE_FRAMES, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FRAMES, deathFrames, squash, HURT_FRAMES, HURT_TINT, hurtFrames, legRowCount, WALK_FRAMES, walkFrames } from "./animate";
 import { ENEMY_SPRITES } from "./arena-sprites";
-import { averageLuminance, rgbOf } from "./audit";
-import { enemyClips } from "./clips";
+import { MAX_SILHOUETTE_OVERLAP } from "./art-rules";
+import { averageLuminance, rgbOf, silhouetteOverlap } from "./audit";
+import { bossSprite } from "./bosses";
+import { BOSS_CLIP_START, bossClips, enemyClips } from "./clips";
 import { shade, type ColorGrid } from "./shade";
 import { WORLD_LOOKS } from "./world-looks";
 
@@ -100,6 +102,34 @@ describe("enemy clips", () => {
       const clips = enemyClips(kind, FACTION, elite);
       expect(clips.moving).toHaveLength(WALK_FRAMES + HURT_FRAMES);
       expect(clips.death.frames).toHaveLength(DEATH_FRAMES);
+    }
+  });
+});
+
+describe("boss clips", () => {
+  it("squashes from the bottom and stretches upward", () => {
+    const sprite = ["ab", "cd", "ef", "gh"];
+    expect(squash(sprite, 0)).toEqual(sprite);
+    expect(squash(sprite, 1)).toHaveLength(4);
+    expect(squash(sprite, 1)[0]).toBe("...");
+    expect(squash(sprite, -2)).toHaveLength(6);
+  });
+
+  it.each(WORLDS.map((world) => world.id))("%s has idle, windup, impact and hurt frames that differ", (world) => {
+    const clips = bossClips(world, FACTION);
+    expect(clips.moving).toHaveLength(BOSS_IDLE_FRAMES + BOSS_WINDUP_FRAMES + BOSS_IMPACT_FRAMES + HURT_FRAMES);
+    expect(BOSS_CLIP_START.hurt).toBe(BOSS_IDLE_FRAMES + BOSS_WINDUP_FRAMES + BOSS_IMPACT_FRAMES);
+    const keys = clips.moving.map((frame) => JSON.stringify(frame));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(clips.death.frames).toHaveLength(DEATH_FRAMES);
+  });
+
+  it("gives every world's boss its own silhouette", () => {
+    const grids = WORLDS.map((world) => [world.id, shade([bossSprite(world.id)], FACTION)] as const);
+    for (const [index, [id, grid]] of grids.entries()) {
+      for (const [other, otherGrid] of grids.slice(index + 1)) {
+        expect(silhouetteOverlap(grid, otherGrid), `${id} and ${other} look alike`).toBeLessThan(MAX_SILHOUETTE_OVERLAP);
+      }
     }
   });
 });
