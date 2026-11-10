@@ -49,6 +49,8 @@ export const RENDER_HEIGHT = 270;
 const PITCH = (48 * Math.PI) / 180;
 const CAMERA_DISTANCE = 380;
 const BOSS_SCALE = 2;
+const TRAIL_LENGTH = 10;
+const SHAKE_UNITS = 6;
 const BOSS_RING_RADIUS = 30;
 const CHUNK = 192;
 const PROPS_PER_CHUNK = 26;
@@ -230,6 +232,8 @@ export class ArenaRenderer {
   private readonly shadows: ShadowBatch;
   private readonly enemies: Record<EnemyKind, SpriteBatch>;
   private readonly agent: SpriteBatch[];
+  private readonly ghosts: SpriteBatch[];
+  private readonly trail: { x: number; z: number }[] = [];
   private readonly gems: SpriteBatch;
   private readonly bigGems: SpriteBatch;
   private readonly bolts: SpriteBatch;
@@ -248,6 +252,7 @@ export class ArenaRenderer {
   private seed = 0;
   hurt = 0;
   letterbox = 0;
+  shake = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "high-performance" });
@@ -313,7 +318,21 @@ export class ArenaRenderer {
       brute: this.batch([BRUTE], 1, 120, false),
       boss: this.bossBatch(WORLD_LOOKS[1].boss),
     };
-    this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => this.batch(agentSprite(tier), 1, 1, false));
+    this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
+      const batch = this.batch(agentSprite(tier), 1, 1, false);
+      batch.mesh.renderOrder = 11;
+      (batch.mesh.material as MeshBasicMaterial).depthTest = false;
+      return batch;
+    });
+    this.ghosts = ([1, 2, 3, 4, 5] as const).map((tier) => {
+      const batch = this.batch(agentSprite(tier), 1, TRAIL_LENGTH, false);
+      const material = batch.mesh.material as MeshBasicMaterial;
+      material.transparent = true;
+      material.opacity = 0.4;
+      material.color.set("#73eff7");
+      material.depthWrite = false;
+      return batch;
+    });
     this.gems = this.batch([GEM], 1, 900, false);
     this.bigGems = this.batch([BIG_GEM], 1, 200, false);
     this.bolts = this.batch([BOLT], 1, 200, true);
@@ -421,8 +440,10 @@ export class ArenaRenderer {
   sync(state: ArenaState): void {
     const playerX = state.player.x / SUB;
     const playerZ = state.player.y / SUB;
-    this.camera.position.set(playerX, Math.sin(PITCH) * CAMERA_DISTANCE, playerZ + Math.cos(PITCH) * CAMERA_DISTANCE);
-    this.camera.lookAt(playerX, 0, playerZ);
+    const shakeX = (Math.random() - 0.5) * this.shake * SHAKE_UNITS;
+    const shakeZ = (Math.random() - 0.5) * this.shake * SHAKE_UNITS;
+    this.camera.position.set(playerX + shakeX, Math.sin(PITCH) * CAMERA_DISTANCE, playerZ + shakeZ + Math.cos(PITCH) * CAMERA_DISTANCE);
+    this.camera.lookAt(playerX + shakeX, 0, playerZ + shakeZ);
     this.ground.position.set(Math.round(playerX / GROUND_TILE) * GROUND_TILE, 0, Math.round(playerZ / GROUND_TILE) * GROUND_TILE);
     this.glow.position.x = playerX;
     this.glow.position.z = playerZ;
@@ -447,6 +468,26 @@ export class ArenaRenderer {
     }
     const blink = state.player.invulnerable > 0 && Math.floor(state.player.invulnerable / 3) % 2 === 0;
     this.agent[state.tier - 1]?.add(playerX, state.player.dashTicks > 0 ? 3 : 0, playerZ, blink);
+    if (state.player.dashTicks > 0) {
+      this.trail.push({ x: playerX, z: playerZ });
+      if (this.trail.length > TRAIL_LENGTH) {
+        this.trail.shift();
+      }
+    } else {
+      this.trail.shift();
+    }
+    for (const batch of this.ghosts) {
+      batch.begin();
+    }
+    const ghosts = this.ghosts[state.tier - 1];
+    this.trail.forEach((point, index) => {
+      if (index % 2 === 0) {
+        ghosts?.add(point.x, 2, point.z);
+      }
+    });
+    for (const batch of this.ghosts) {
+      batch.commit();
+    }
     this.shadows.add(playerX, playerZ, 13);
     for (const batch of this.agent) {
       batch.commit();
