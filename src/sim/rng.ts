@@ -26,3 +26,7 @@ export function createRng(seed: number): Rng {
 
   return { nextUint32, intBelow, chancePercent };
 }
+
+export function mixSeed(seed: number, salt: number): number {
+  return (Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) + Math.imul(salt + 1, 0xc2b2ae35)) >>> 0;
+}
