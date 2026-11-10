@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 const STRUDEL_PACKAGES = /node_modules\/(@strudel|@kabelsalat|superdough|fraction\.js|nanostores|supradough)\//;
 
 export default defineConfig({
+  base: "./",
   resolve: {
     alias: {
       "pixelfx/core": new URL("./vendor/pixelfx/src/core/index.js", import.meta.url).pathname,

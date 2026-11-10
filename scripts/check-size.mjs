@@ -8,6 +8,12 @@ const UNBUDGETED_LAZY_PREFIXES = ["strudel"];
 const dist = join(process.cwd(), "dist");
 const manifest = JSON.parse(readFileSync(join(dist, ".vite", "manifest.json"), "utf8"));
 
+const rootPaths = readFileSync(join(dist, "index.html"), "utf8").match(/(?:src|href)="\/(?!\/)[^"]*"/g) ?? [];
+if (rootPaths.length > 0) {
+  console.error(`dist/index.html links from the site root, which breaks GitHub Pages under /agent-arena/: ${rootPaths.join(", ")}`);
+  process.exit(1);
+}
+
 const gzipped = (file) => gzipSync(readFileSync(join(dist, file))).length;
 const kb = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
 
