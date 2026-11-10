@@ -28,6 +28,7 @@ function loadPixelCjkFont(): void {
   link.rel = "stylesheet";
   link.href = "https://fonts.googleapis.com/css2?family=DotGothic16&display=swap";
   link.dataset["font"] = "cjk";
+  link.addEventListener("load", () => void document.fonts.load('16px "DotGothic16"', "日本語"));
   document.head.append(link);
 }
 
