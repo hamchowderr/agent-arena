@@ -16,3 +16,14 @@ describe("arena sprites", () => {
     }
   });
 });
+
+describe("outlined", () => {
+  it("rings every filled pixel with the outline key and keeps the inside", () => {
+    expect(sprites.outlined(["k"], "w")).toEqual([".w.", "wkw", ".w."]);
+  });
+
+  it("makes the boss two pixels wider and taller", () => {
+    expect(sprites.BOSS_OUTLINED).toHaveLength(sprites.BOSS.length + 2);
+    expect(sprites.BOSS_OUTLINED[0]).toHaveLength((sprites.BOSS[0]?.length ?? 0) + 2);
+  });
+});

@@ -32,6 +32,9 @@ export const DASH_RECHARGE = seconds(3);
 export const HURT_INVULNERABLE = 30;
 export const SPAWN_DISTANCE = px(250);
 export const DESPAWN_DISTANCE = px(460);
+export const BOSS_ENTRY_DISTANCE = px(85);
+const SCREEN_TOP_ANGLE = (ANGLE_STEPS * 3) / 4;
+const BOSS_ENTRY_SPREAD = ANGLE_STEPS / 8;
 export const MAX_ENEMIES = 420;
 export const RUN_REROLLS = 2;
 export const RUN_SKIPS = 2;
@@ -392,7 +395,8 @@ function spawnBoss(state: ArenaState): void {
   if (state.bossId !== null || state.tick < state.nextBossTick || state.bossesDown >= WORLDS.length) {
     return;
   }
-  const boss = spawnEnemy(state, "boss", state.rng.intBelow(ANGLE_STEPS), px(200));
+  const angle = SCREEN_TOP_ANGLE - BOSS_ENTRY_SPREAD / 2 + state.rng.intBelow(BOSS_ENTRY_SPREAD);
+  const boss = spawnEnemy(state, "boss", angle, BOSS_ENTRY_DISTANCE);
   state.bossId = boss.id;
   state.slamTimer = SLAM_EVERY;
   state.events.push({ kind: "bossArrives", world: state.bossesDown });
