@@ -36,6 +36,13 @@ export interface WorldBeats {
 const guide = (key: MessageKey, face: Face = "smile", values?: Params): StoryLine => (values ? { voice: "guide", key, face, values } : { voice: "guide", key, face });
 const you = (key: MessageKey): StoryLine => ({ voice: "you", key });
 const rival = (key: MessageKey): StoryLine => ({ voice: "rival", key });
+const boss = (key: MessageKey): StoryLine => ({ voice: "boss", key });
+
+export type BossMoment = "bossTaunt" | "bossCheck" | "bossAcquire" | "bossDefeat";
+
+export function bossLine(world: WorldId, moment: BossMoment): StoryLine {
+  return boss(`story.${world}.${moment}`);
+}
 
 export const GUIDE_COLOR = "#d6b88c";
 export const YOU_COLOR = "#73eff7";
@@ -108,13 +115,13 @@ export function eliteScene(world: WorldId): Scene {
 }
 
 export function bossScene(world: WorldId): Scene {
-  const pitch: StoryLine = { voice: "boss", key: `world.${world}.pitch` };
-  return { id: `boss.${world}`, mode: "hold", world, lines: [pitch, WORLD_BEATS[world].boss], repeat: "brief", brief: [pitch] };
+  const pitch = boss(`world.${world}.pitch`);
+  return { id: `boss.${world}`, mode: "hold", world, lines: [pitch, bossLine(world, "bossTaunt"), WORLD_BEATS[world].boss], repeat: "brief", brief: [pitch] };
 }
 
 export function payoffScene(world: WorldId): Scene {
-  const keep = you("story.keepMine");
-  return { id: `payoff.${world}`, mode: "hold", world, lines: [keep, WORLD_BEATS[world].lesson], repeat: "brief", brief: [keep] };
+  const defeat = bossLine(world, "bossDefeat");
+  return { id: `payoff.${world}`, mode: "hold", world, lines: [defeat, you("story.keepMine"), WORLD_BEATS[world].lesson], repeat: "brief", brief: [defeat] };
 }
 
 export function endingScene(world: WorldId): Scene {
@@ -127,11 +134,11 @@ export function tierScene(world: WorldId, tier: Tier): Scene | null {
 
 export function checkScene(world: WorldId, passed: boolean, part: string): Scene {
   const line = passed ? guide("story.check.passed", "grin", { part }) : guide("story.check.failed", "shocked", { part });
-  return { id: `check.${world}`, mode: "auto", world, lines: [line], repeat: "always" };
+  return { id: `check.${world}`, mode: "auto", world, lines: [bossLine(world, "bossCheck"), line], repeat: "always" };
 }
 
 export function acquisitionScene(world: WorldId): Scene {
-  return { id: `acquire.${world}`, mode: "auto", world, lines: [guide("story.acquisition", "shocked")], repeat: "always" };
+  return { id: `acquire.${world}`, mode: "auto", world, lines: [bossLine(world, "bossAcquire"), guide("story.acquisition", "shocked")], repeat: "always" };
 }
 
 export function tipScene(world: WorldId, tip: "lowHealth" | "firstChest" | "firstPick"): Scene {

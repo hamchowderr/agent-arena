@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { guidePortrait, PORTRAIT_FACES, PORTRAIT_SIZE } from "../art/portraits";
 import { LOADERS, LOCALES, t, usesSpaces, type MessageKey } from "../i18n";
-import { WORLDS } from "../sim/arena/content";
+import { EVOLUTIONS, PASSIVES, WEAPONS, WORLDS, type PassiveId, type WeaponId } from "../sim/arena/content";
+import { partGuide, passiveName, weaponName } from "./format";
 import {
+  acquisitionScene,
   arrivalScene,
+  checkScene,
   bossScene,
   ENDING,
   endingScene,
@@ -77,6 +80,52 @@ describe("story script", () => {
     for (const { code } of LOCALES) {
       const messages = await LOADERS[code]();
       expect(messages["story.intro.name"]).toContain(messages["story.guideName"]);
+    }
+  });
+});
+
+describe("boss voices", () => {
+  it("lets every boss speak at its arrival, both phase changes and its defeat", () => {
+    for (const world of WORLDS) {
+      const scenes = [bossScene(world.id), checkScene(world.id, true, "x"), acquisitionScene(world.id), payoffScene(world.id)];
+      for (const scene of scenes) {
+        expect(scene.lines.filter((line) => line.voice === "boss").length, scene.id).toBeGreaterThan(0);
+      }
+      expect(bossScene(world.id).lines.filter((line) => line.voice === "boss").length).toBe(2);
+      expect(payoffScene(world.id).lines[0]?.voice).toBe("boss");
+    }
+  });
+
+  it("gives each boss its own lines", () => {
+    const texts = WORLDS.flatMap((world) => [bossScene(world.id), payoffScene(world.id)].flatMap((scene) => scene.lines.filter((line) => line.voice === "boss").map((line) => t(line.key))));
+    expect(new Set(texts).size).toBe(texts.length);
+  });
+});
+
+describe("part guide", () => {
+  const weaponIds = Object.keys(WEAPONS) as WeaponId[];
+  const passiveIds = Object.keys(PASSIVES) as PassiveId[];
+
+  it("explains every weapon and passive in every language, short enough for the strip", async () => {
+    for (const { code } of LOCALES) {
+      const messages = await LOADERS[code]();
+      const limit = usesSpaces(code) ? 230 : 95;
+      const keys: MessageKey[] = [...weaponIds.map((id): MessageKey => `weapon.${id}.guide`), ...passiveIds.map((id): MessageKey => `passive.${id}.guide`), "card.restore.guide"];
+      const bad = keys.filter((key) => messages[key].trim() === "" || [...messages[key]].length > limit);
+      expect(bad, code).toEqual([]);
+    }
+  });
+
+  it("tells you how every evolution is made, from all three sides", () => {
+    for (const evolution of EVOLUTIONS) {
+      const weapon = partGuide({ kind: "weapon", id: evolution.weapon, toLevel: 1, recommended: false, changes: [] });
+      const passive = partGuide({ kind: "passive", id: evolution.passive, toLevel: 1, recommended: false, changes: [] });
+      const result = partGuide({ kind: "evolve", id: evolution.result, toLevel: 1, recommended: false, changes: [] });
+      expect(weapon).toContain(passiveName(evolution.passive));
+      expect(weapon).toContain(weaponName(evolution.result));
+      expect(passive).toContain(weaponName(evolution.weapon));
+      expect(result).toContain(weaponName(evolution.weapon));
+      expect(result).toContain(passiveName(evolution.passive));
     }
   });
 });
@@ -163,6 +212,7 @@ describe("story player", () => {
     story.play(payoffScene("hustlr"));
     story.frame(20);
     expect(story.speech?.index).toBe(1);
+    story.frame(20);
     story.frame(20);
     expect(story.busy).toBe(false);
   });
