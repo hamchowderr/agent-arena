@@ -1,5 +1,5 @@
 import { agentBody } from "../art/agent";
-import { bossSprite } from "../art/bosses";
+import { bossPortrait, type BossLook } from "../art/bosses";
 import { guidePortrait, type PortraitLook } from "../art/portraits";
 import type { ColorGrid } from "../art/shade";
 import { spriteImage } from "../render/textures";
@@ -41,6 +41,6 @@ export function agentCanvas(tier: Tier): HTMLCanvasElement {
   return cached(`agent.${tier}`, () => spriteImage([agentBody(tier)]).canvas);
 }
 
-export function bossCanvas(world: WorldId): HTMLCanvasElement {
-  return cached(`boss.${world}`, () => spriteImage([bossSprite(world)]).canvas);
+export function bossCanvas(world: WorldId, look: BossLook = { flicker: 0, angry: false }): HTMLCanvasElement {
+  return cached(`boss.${world}.${look.flicker}.${look.angry}.${look.talking ?? false}.${look.dead ?? false}`, () => spriteImage([bossPortrait(world, look)]).canvas);
 }
