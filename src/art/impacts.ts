@@ -25,7 +25,7 @@ export const SPARK_BY_WEAPON: Readonly<Record<WeaponKind, SparkStyle>> = {
 const SPARK_SIZE = 15;
 const CENTER = (SPARK_SIZE - 1) / 2;
 
-const SPARK_COLORS: Readonly<Record<SparkStyle, readonly [string, string, string, string]>> = {
+export const SPARK_COLORS: Readonly<Record<SparkStyle, readonly [string, string, string, string]>> = {
   hot: ["#ffffff", "#fff1a8", "#ffcd75", "#ef7d57"],
   zap: ["#ffffff", "#c8fff8", "#73eff7", "#41a6f6"],
   ember: ["#fff1a8", "#ffcd75", "#ef7d57", "#b13e53"],
