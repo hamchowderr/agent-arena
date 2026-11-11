@@ -33,5 +33,6 @@ export const MIN_ENEMY_COLORS = 10;
 export const MAX_SPRITE_COLORS = 24;
 export const MIN_HUE_GAP_IN_WORLD = 30;
 export const MAX_SILHOUETTE_OVERLAP = 0.8;
-export const MIN_GROUND_CONTRAST = 1.6;
+export const MIN_GROUND_CONTRAST = 1.9;
+export const MIN_BOSS_GROUND_CONTRAST = 1.6;
 export const MIN_TELEGRAPH_SECONDS = 0.8;
