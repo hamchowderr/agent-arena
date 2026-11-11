@@ -5,7 +5,8 @@ import type { Sprite } from "./sprites";
 
 export const WALK_FRAMES = 4;
 export const HURT_FRAMES = 2;
-export const DEATH_FRAMES = 5;
+export const WINDUP_FRAMES = 2;
+export const DEATH_FRAMES = 6;
 export const HURT_FPS = 10;
 export const DEATH_FPS = 10;
 export const BOSS_IDLE_FRAMES = 4;
@@ -274,11 +275,13 @@ export function deathFrames(grid: ColorGrid): DeathSheet {
   const puffShadow = mix(brightest(grid), "#6a7898", 0.4);
   const centerX = margin + width / 2;
   const centerY = margin + height * 0.6;
+  const knocked = empty();
+  grid.forEach((row, y) => row.forEach((color, x) => put(knocked, margin + x, margin + y - 2, color)));
   const first = empty();
   squashed(grid, first, margin);
-  const frames: ColorGrid[] = [first];
+  const frames: ColorGrid[] = [knocked, first];
   const reach = longest * 0.13;
-  for (let step = 1; step < DEATH_FRAMES; step += 1) {
+  for (let step = 1; step < DEATH_FRAMES - 1; step += 1) {
     const frame = empty();
     const thin = [0, 0, 0.35, 0.62, 0.86][step] ?? 1;
     const grow = longest * (0.2 + step * 0.07);

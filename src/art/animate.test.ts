@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REGULAR_KINDS, WORLDS } from "../sim/arena/content";
-import { BOSS_IDLE_FRAMES, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FRAMES, deathFrames, squash, HURT_FRAMES, HURT_TINT, hurtFrames, legRowCount, WALK_FRAMES, walkFrames } from "./animate";
+import { BOSS_IDLE_FRAMES, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FRAMES, deathFrames, squash, HURT_FRAMES, HURT_TINT, hurtFrames, legRowCount, WALK_FRAMES, walkFrames, WINDUP_FRAMES } from "./animate";
 import { ENEMY_SPRITES } from "./arena-sprites";
 import { MAX_SILHOUETTE_OVERLAP } from "./art-rules";
 import { averageLuminance, rgbOf, silhouetteOverlap } from "./audit";
@@ -97,10 +97,10 @@ describe("death puff", () => {
 });
 
 describe("enemy clips", () => {
-  it.each(REGULAR_KINDS)("%s packs walk then hurt frames, for regular and elite", (kind) => {
+  it.each(REGULAR_KINDS)("%s packs walk, hurt and windup frames, for regular and elite", (kind) => {
     for (const elite of [false, true]) {
       const clips = enemyClips("hustlr", kind, FACTION, elite);
-      expect(clips.moving).toHaveLength(WALK_FRAMES + HURT_FRAMES);
+      expect(clips.moving).toHaveLength(WALK_FRAMES + HURT_FRAMES + WINDUP_FRAMES);
       expect(clips.death.frames).toHaveLength(DEATH_FRAMES);
     }
   });

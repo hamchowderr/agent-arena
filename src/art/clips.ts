@@ -1,8 +1,9 @@
 import type { RegularKind, WorldId } from "../sim/arena/content";
 import type { Tier } from "../sim/tiers";
 import { deathFrames, hurtFrames, squash, walkFrames, type DeathSheet } from "./animate";
+import type { Sprite } from "./sprites";
 import { eliteSprite } from "./arena-sprites";
-import { enemyPoses, enemySprite, wallSprite } from "./world-enemies";
+import { enemyActs, enemyPoses, enemySprite, wallSprite } from "./world-enemies";
 import { agentBody } from "./agent";
 import { bossSprite } from "./bosses";
 import { shade, type ColorGrid } from "./shade";
@@ -24,12 +25,21 @@ export const WALK_FPS: Readonly<Record<RegularKind, number>> = {
   lootRunner: 12,
 };
 
+const WINDUP_CROUCH: readonly number[] = [1, 2];
+
+function bellyUp(sprite: Sprite): Sprite {
+  return [...sprite].reverse();
+}
+
 export function enemyClips(world: WorldId, kind: RegularKind, faction: string, elite: boolean): EnemyClips {
   const sprite = enemySprite(world, kind);
-  const frames = (enemyPoses(world, kind) ?? walkFrames(sprite)).map((frame) => (elite ? eliteSprite(frame) : frame));
-  const walk = frames.map((frame) => shade([frame], faction));
-  const rest = elite ? eliteSprite(sprite) : sprite;
-  return { moving: [...walk, ...hurtFrames(walk[0] ?? [])], death: deathFrames(shade([rest], faction)) };
+  const acts = enemyActs(world, kind);
+  const dress = (frame: Sprite) => (elite ? eliteSprite(frame) : frame);
+  const paint = (frame: Sprite) => shade([dress(frame)], faction);
+  const walk = (enemyPoses(world, kind) ?? walkFrames(sprite)).map(paint);
+  const windup = WINDUP_CROUCH.map((rows, frame) => paint(squash(acts?.windup[frame] ?? sprite, rows)));
+  const corpse = acts ? bellyUp(acts.dead) : sprite;
+  return { moving: [...walk, ...hurtFrames(walk[0] ?? []), ...windup], death: deathFrames(paint(corpse)) };
 }
 
 export function wallClips(world: WorldId, faction: string): ColorGrid[] {

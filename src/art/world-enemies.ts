@@ -20,7 +20,17 @@ const POSES: Readonly<Partial<Record<WorldId, Partial<Record<RegularKind, Pose>>
 
 export function enemyPoses(world: WorldId, kind: RegularKind): Sprite[] | undefined {
   const pose = POSES[world]?.[kind];
-  return pose ? [0, 1, 2, 3].map(pose) : undefined;
+  return pose ? [0, 1, 2, 3].map((frame) => pose(frame)) : undefined;
+}
+
+export interface EnemyActs {
+  readonly windup: readonly Sprite[];
+  readonly dead: Sprite;
+}
+
+export function enemyActs(world: WorldId, kind: RegularKind): EnemyActs | undefined {
+  const pose = POSES[world]?.[kind];
+  return pose ? { windup: [pose(0, "windup"), pose(1, "windup")], dead: pose(0, "dead") } : undefined;
 }
 
 export function enemySprite(world: WorldId, kind: RegularKind): Sprite {

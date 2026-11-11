@@ -119,9 +119,19 @@ export function leg(r: Raster, x: number, top: number, bottom: number, foot: num
   r.rect(x + foot, bottom, 2, 1, charcoal.shadow);
 }
 
-export type Mood = "eager" | "shocked" | "smug" | "angry" | "worried" | "fake" | "bright";
+export type Mood = "eager" | "shocked" | "smug" | "angry" | "worried" | "fake" | "bright" | "dead" | "furious";
+
+export type Act = "walk" | "windup" | "dead";
+
+export function moodFor(act: Act, mood: Mood): Mood {
+  return act === "dead" ? "dead" : act === "windup" ? "furious" : mood;
+}
 
 export function eye(r: Raster, at: number, y: number, mood: Mood): void {
+  if (mood === "dead") {
+    r.set(at - 1, y - 1, "k").set(at + 1, y - 1, "k").set(at, y, "k").set(at - 1, y + 1, "k").set(at + 1, y + 1, "k");
+    return;
+  }
   if (mood === "shocked" || mood === "bright") {
     r.rect(at, y - 1, 2, 3, "w").set(at + 1, y, "k");
   } else if (mood === "smug") {
@@ -132,7 +142,10 @@ export function eye(r: Raster, at: number, y: number, mood: Mood): void {
     const tall = mood === "eager" ? 1 : 0;
     r.rect(at, y - tall, 2, 2 + tall, "k").set(at, y - tall, "w");
   }
-  if (mood === "angry") {
+  if (mood === "furious") {
+    r.set(at, y, "r");
+  }
+  if (mood === "angry" || mood === "furious") {
     r.set(at - 1, y - 2, "k").set(at, y - 1, "k").set(at + 1, y - 1, "k");
   }
   if (mood === "worried") {
