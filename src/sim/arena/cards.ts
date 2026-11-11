@@ -55,10 +55,12 @@ function weaponChanges(id: WeaponId, fromLevel: number, toLevel: number): CardCh
     add("every", before?.cooldown, after.cooldown, "ticks");
   }
   add(WEAPONS[id].kind === "orbit" ? "blocks" : "shots", before?.count, after.count);
-  if (WEAPONS[id].kind === "beam" || WEAPONS[id].kind === "seeker") {
+  const definition: WeaponDefinition = WEAPONS[id];
+  const kind = definition.kind;
+  if (kind === "beam" || kind === "seeker" || kind === "homing" || kind === "brick") {
     add("pierce", before?.pierce, after.pierce);
   }
-  if (WEAPONS[id].kind === "pulse" || WEAPONS[id].kind === "orbit") {
+  if (kind === "pulse" || kind === "orbit" || kind === "bomb") {
     add("radius", before?.radius, after.radius);
   }
   return changes;

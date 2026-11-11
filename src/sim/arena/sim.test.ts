@@ -100,7 +100,7 @@ describe("knockback", () => {
   it("pushes a hit enemy away from the agent, then settles", () => {
     const state = createArena(11);
     state.weapons.length = 0;
-    state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
+    state.weapons.push({ id: "voice", level: 1, cooldown: 0, orbitHits: new Map() });
     state.nextBossTick = Number.MAX_SAFE_INTEGER;
     const at = state.player;
     state.enemies.push({ id: 7001, kind: "brute", x: at.x + px(30), y: at.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(9), xp: 1, ...freeOrder(0, 0) });
@@ -135,15 +135,15 @@ describe("knockback", () => {
     });
   });
 
-  it("lets orbiting code blocks shove fodder clear instead of grinding in place", () => {
+  it("lets orbiting browser cursors shove fodder clear instead of grinding in place", () => {
     const shoved = () => {
       const state = createArena(12);
       state.weapons.length = 0;
-      state.weapons.push({ id: "codeExec", level: 1, cooldown: 0, orbitHits: new Map() });
+      state.weapons.push({ id: "browser", level: 1, cooldown: 0, orbitHits: new Map() });
       state.nextBossTick = Number.MAX_SAFE_INTEGER;
       state.eliteSpawned = true;
       state.lootSpawned = true;
-      const blade = orbitPosition(state, { id: "codeExec", level: 1, cooldown: 0, orbitHits: new Map() }, 0);
+      const blade = orbitPosition(state, { id: "browser", level: 1, cooldown: 0, orbitHits: new Map() }, 0);
       state.enemies.push({ id: 7002, kind: "grunt", x: blade.x, y: blade.y, health: 9999, maxHealth: 9999, hitFlash: 0, knockX: 0, knockY: 0, elite: false, mass: 0, mode: "move", timer: 0, dashX: 0, dashY: 0, speed: 0, damage: 1, radius: px(6), xp: 1, ...freeOrder(0, 0) });
       step(state, IDLE);
       return Math.hypot(state.enemies[0]?.knockX ?? 0, state.enemies[0]?.knockY ?? 0);
