@@ -129,7 +129,7 @@ export function text(
   context.fillText(value, x, y);
 }
 
-function panel(context: CanvasRenderingContext2D, rect: Rect, edge = PANEL_EDGE): void {
+export function panel(context: CanvasRenderingContext2D, rect: Rect, edge = PANEL_EDGE): void {
   context.fillStyle = PANEL;
   context.fillRect(rect.x, rect.y, rect.w, rect.h);
   context.strokeStyle = edge;
@@ -146,12 +146,12 @@ function bar(context: CanvasRenderingContext2D, rect: Rect, fraction: number, fi
   context.fillRect(rect.x, rect.y, Math.round(rect.w * Math.max(0, Math.min(1, fraction))), rect.h);
 }
 
-function measure(context: CanvasRenderingContext2D, value: string, size: number): number {
+export function measure(context: CanvasRenderingContext2D, value: string, size: number): number {
   context.font = `${size}px ${FONT}`;
   return context.measureText(value).width;
 }
 
-function fitSize(context: CanvasRenderingContext2D, value: string, width: number, size: number): number {
+export function fitSize(context: CanvasRenderingContext2D, value: string, width: number, size: number): number {
   let fitted = size;
   while (fitted > 10 && measure(context, value, fitted) > width) {
     fitted -= 1;
@@ -275,6 +275,7 @@ export interface SpeakerView {
   readonly age: number;
   readonly first: boolean;
   readonly frame: number;
+  readonly rect?: Rect;
 }
 
 export const SPEAKER_RECT: Rect = { x: HUD_WIDTH / 2 - 470, y: HUD_HEIGHT - 196, w: 940, h: 150 };
@@ -298,7 +299,8 @@ function pill(context: CanvasRenderingContext2D, label: string, right: number, y
 
 export function drawSpeaker(context: CanvasRenderingContext2D, view: SpeakerView): void {
   const enter = view.first ? Math.min(1, view.age / 0.16) : 1;
-  const rect = { ...SPEAKER_RECT, y: SPEAKER_RECT.y + Math.round((1 - enter) * 24) };
+  const at = view.rect ?? SPEAKER_RECT;
+  const rect = { ...at, y: at.y + Math.round((1 - enter) * 24) };
   context.save();
   context.globalAlpha = enter * (view.hold ? 1 : 0.94);
   context.fillStyle = SHADOW;
@@ -745,6 +747,7 @@ export function drawTitle(context: CanvasRenderingContext2D, pulse: number): voi
   text(context, t("title.controls"), HUD_WIDTH / 2, 520, 18, "#9fb0d0", "center");
   text(context, t("title.howTo"), HUD_WIDTH / 2, 556, 18, "#9fb0d0", "center");
   text(context, t("title.language", { language: localeName(currentLocale()) }), HUD_WIDTH / 2, 620, 20, GOLD, "center");
+  text(context, t("title.tutorial"), HUD_WIDTH / 2, 656, 20, GOLD, "center");
   text(context, t("mastra.link"), HUD_WIDTH / 2, 730, 16, "#9fb0d0", "center");
 }
 
