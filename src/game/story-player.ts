@@ -37,11 +37,13 @@ export interface TextSource {
 }
 
 const MAX_QUEUED = 6;
+export const SCENE_GAP_SECONDS = 2.5;
 
 export class StoryPlayer {
   autoAdvance = false;
   private readonly queue: { readonly scene: Scene; readonly watching: boolean }[] = [];
   private playing: Playing | null = null;
+  private rest = 0;
 
   constructor(
     private readonly memory: StoryMemory,
@@ -49,11 +51,14 @@ export class StoryPlayer {
   ) {}
 
   play(scene: Scene, watching = false): void {
+    if (scenePlays(scene, this.memory.has(scene.id)).length === 0) {
+      return;
+    }
     if (this.queue.length >= MAX_QUEUED || this.queue.some((entry) => entry.scene.id === scene.id) || this.playing?.scene.id === scene.id) {
       return;
     }
     this.queue.push({ scene, watching });
-    if (!this.playing) {
+    if (!this.playing && this.rest <= 0) {
       this.next();
     }
   }
@@ -77,6 +82,7 @@ export class StoryPlayer {
   clear(): void {
     this.queue.length = 0;
     this.playing = null;
+    this.rest = 0;
   }
 
   get holding(): boolean {
@@ -84,7 +90,11 @@ export class StoryPlayer {
   }
 
   get busy(): boolean {
-    return this.playing !== null;
+    return this.playing !== null || this.queue.length > 0;
+  }
+
+  get resting(): boolean {
+    return this.playing === null && this.rest > 0;
   }
 
   get speech(): Speech | null {
@@ -104,6 +114,10 @@ export class StoryPlayer {
   frame(seconds: number): void {
     const playing = this.playing;
     if (!playing) {
+      this.rest = Math.max(0, this.rest - seconds);
+      if (this.rest <= 0 && this.queue.length > 0) {
+        this.next();
+      }
       return;
     }
     playing.age += seconds;
@@ -148,12 +162,14 @@ export class StoryPlayer {
     playing.index += 1;
     playing.age = 0;
     if (playing.index >= playing.lines.length) {
-      this.next();
+      this.playing = null;
+      this.rest = SCENE_GAP_SECONDS;
     }
   }
 
   private next(): void {
     this.playing = null;
+    this.rest = 0;
     for (let entry = this.queue.shift(); entry; entry = this.queue.shift()) {
       const seen = this.memory.has(entry.scene.id);
       const lines = scenePlays(entry.scene, seen);
