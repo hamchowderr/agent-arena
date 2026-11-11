@@ -20,6 +20,7 @@ const RAMP_COLORS = {
   magenta: ["#ffe0f8", "#ffa8ec", "#f070d8", "#b0409c", "#4a1444"],
   fur: ["#f4ece4", "#ccc0b4", "#a0948a", "#6c605c", "#2a2224"],
   coral: ["#ffe0d0", "#ffaa98", "#f57a68", "#b84a4a", "#4a1420"],
+  tan: ["#fff0d8", "#f0c890", "#d09a60", "#9a6440", "#3a2018"],
 } as const;
 
 export type RampName = keyof typeof RAMP_COLORS;
