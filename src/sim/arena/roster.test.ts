@@ -190,7 +190,7 @@ describe("enemy behaviors", () => {
     const heavy = place(state, "heavy", -px(20), 0);
     step(state, IDLE);
     expect(Math.abs(grunt.knockX)).toBeGreaterThan(Math.abs(heavy.knockX) * 3);
-    expect(Math.abs(grunt.knockX)).toBeLessThanOrEqual(KNOCKBACK * 2);
+    expect(Math.abs(grunt.knockX)).toBeLessThanOrEqual((WEAPONS.shell.knockback ?? KNOCKBACK) * 2);
   });
 
   it("makes the loot runner flee, drop tokens on every hit, and escape in time", () => {

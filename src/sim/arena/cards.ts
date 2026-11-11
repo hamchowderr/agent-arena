@@ -34,7 +34,6 @@ function restoreCard(state: ArenaState): Card {
 type Candidate = (
   | { readonly kind: "weapon"; readonly id: WeaponId; readonly toLevel: number }
   | { readonly kind: "passive"; readonly id: PassiveId; readonly toLevel: number }
-  | { readonly kind: "evolve"; readonly id: WeaponId; readonly toLevel: 1 }
 ) & { readonly weight: number; readonly priority: number };
 
 function weaponChanges(id: WeaponId, fromLevel: number, toLevel: number): CardChange[] {
@@ -88,15 +87,19 @@ function evolvedFrom(state: ArenaState, id: WeaponId): boolean {
   return EVOLUTIONS.some((evolution) => evolution.weapon === id && state.weapons.some((weapon) => weapon.id === evolution.result));
 }
 
-function candidates(state: ArenaState): Candidate[] {
-  const list: Candidate[] = [];
+export function readyEvolution(state: ArenaState): Card | null {
   for (const evolution of EVOLUTIONS) {
     const owned = state.weapons.find((weapon) => weapon.id === evolution.weapon);
     const alreadyEvolved = state.weapons.some((weapon) => weapon.id === evolution.result);
     if (!alreadyEvolved && owned && owned.level >= WEAPONS[evolution.weapon].levels.length && (state.passives.get(evolution.passive) ?? 0) > 0) {
-      list.push({ kind: "evolve", id: evolution.result, toLevel: 1, weight: 1000, priority: 100 });
+      return { kind: "evolve", id: evolution.result, toLevel: 1, recommended: true, changes: weaponChanges(evolution.result, 0, 1) };
     }
   }
+  return null;
+}
+
+function candidates(state: ArenaState): Candidate[] {
+  const list: Candidate[] = [];
   for (const id of Object.keys(WEAPONS) as WeaponId[]) {
     const definition: WeaponDefinition = WEAPONS[id];
     if (definition.evolved || definition.tier > state.tier || state.banished.has(id) || evolvedFrom(state, id)) {
@@ -153,9 +156,6 @@ export function offerCards(state: ArenaState): Card[] {
     const recommended = index === best;
     if (candidate.kind === "passive") {
       return { kind: "passive", id: candidate.id, toLevel: candidate.toLevel, recommended, changes: passiveChanges(state, candidate.id, candidate.toLevel - 1) };
-    }
-    if (candidate.kind === "evolve") {
-      return { kind: "evolve", id: candidate.id, toLevel: 1, recommended, changes: weaponChanges(candidate.id, 0, 1) };
     }
     return { kind: "weapon", id: candidate.id, toLevel: candidate.toLevel, recommended, changes: weaponChanges(candidate.id, candidate.toLevel - 1, candidate.toLevel) };
   });
