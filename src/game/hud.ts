@@ -431,6 +431,7 @@ export const SPEAKER_RECT: Rect = {
 };
 const PORTRAIT_BOX = 126;
 const SPEAKER_SIZES = [25, 22, 20, 18] as const;
+const PLATE_SIZES = [18, 16, 14, 12] as const;
 
 function pill(
   context: CanvasRenderingContext2D,
@@ -522,12 +523,14 @@ export function drawSpeaker(
   );
 
   const textX = frameX + PORTRAIT_BOX + 24;
-  const plateWidth = Math.min(380, measure(context, view.name, 18) + 28);
+  const plateMax = rect.w - (textX - rect.x) - 24;
+  const plateSize = PLATE_SIZES.find((size) => measure(context, view.name, size) + 28 <= plateMax) ?? 12;
+  const plateWidth = Math.min(plateMax, measure(context, view.name, plateSize) + 28);
   context.fillStyle = SHADOW;
   context.fillRect(textX - 2, rect.y - 20, plateWidth + 4, 36);
   context.fillStyle = view.color;
   context.fillRect(textX, rect.y - 18, plateWidth, 32);
-  text(context, view.name, textX + 14, rect.y - 11, 18, SHADOW);
+  text(context, view.name, textX + 14, rect.y - 2 - Math.round(plateSize / 2), plateSize, SHADOW);
 
   const textWidth = rect.x + rect.w - textX - 28;
   const size =

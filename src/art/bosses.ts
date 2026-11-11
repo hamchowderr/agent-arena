@@ -10,6 +10,7 @@ export interface BossLook {
   readonly angry: boolean;
   readonly talking?: boolean;
   readonly dead?: boolean;
+  readonly pose?: BossPose;
 }
 
 const CALM: BossLook = { flicker: 0, angry: false };
@@ -144,12 +145,15 @@ function growthHacker(look: BossLook): Sprite {
   arm(r, [CENTER - 12, 36], [CENTER - 5, 45], charcoal, skin);
   r.rect(CENTER - 8, 40, 6, 9, "k").rect(CENTER - 7, 41, 4, 7, green.light);
   r.line(CENTER - 5, 47, CENTER - 5, 42, "k").set(CENTER - 6, 43, "k").set(CENTER - 4, 43, "k");
+  const pose = look.pose ?? "idle";
   const reach = look.angry ? 3 : 0;
-  arm(r, [CENTER + 12, 36], [CENTER + 18 + reach, 24 - reach], charcoal, skin);
-  const [rx, ry] = [CENTER + 19 + reach, 14 - reach];
+  const hand: Point = pose === "windup" ? [CENTER + 14, 14] : pose === "impact" ? [CENTER + 22, 33] : [CENTER + 18 + reach, 24 - reach];
+  arm(r, [CENTER + 12, 36], hand, charcoal, skin);
+  const [rx, ry] = pose === "windup" ? [CENTER + 15, 6] : pose === "impact" ? [CENTER + 23, 7] : [CENTER + 19 + reach, 14 - reach];
   r.polygon([[rx - 2, ry + 6], [rx - 2, ry - 2], [rx, ry - 6], [rx + 2, ry - 2], [rx + 2, ry + 6]], paper.light);
   r.rect(rx - 1, ry - 1, 2, 2, blue.light).polygon([[rx - 2, ry + 3], [rx - 4, ry + 7], [rx - 2, ry + 6]], red.base).polygon([[rx + 2, ry + 3], [rx + 4, ry + 7], [rx + 2, ry + 6]], red.base);
-  r.rect(rx - 1, ry + 7, 2, 2 + climb, yellow.base).set(rx, ry + 9 + climb, red.base);
+  const flame = pose === "impact" ? 16 : pose === "windup" ? 1 : 2 + climb;
+  r.rect(rx - 1, ry + 7, 2, flame, yellow.base).set(rx, ry + 7 + flame, red.base);
   headShape(r, skin);
   r.polygon([[CENTER - 11, 18], [CENTER - 11, 11], [CENTER - 6, 6], [CENTER + 4, 5], [CENTER + 11, 9], [CENTER + 12, 17], [CENTER + 8, 12], [CENTER - 2, 11], [CENTER - 8, 13]], yellow.base);
   r.polygon([[CENTER + 1, 6], [CENTER + 10, climb], [CENTER + 8, 8]], yellow.base);
@@ -171,13 +175,19 @@ function archivist(look: BossLook): Sprite {
   const swing = [-1, 0, 1, 0][look.flicker % 4] ?? 0;
   r.line(CENTER - 11, 54, CENTER - 12 + swing, 59, steel.base).ring(CENTER - 12 + swing, 61, 2.5, 2.5, 1, steel.base);
   r.rect(CENTER - 14 + swing, 63, 1, 4, steel.base).rect(CENTER - 10 + swing, 63, 1, 3, steel.base);
-  const lift = look.angry ? 4 : 0;
-  r.rect(CENTER - 11, 40 - lift, 22, 14, red.base);
-  light(r, red);
-  r.rect(CENTER - 11, 52 - lift, 22, 2, paper.light).rect(CENTER - 1, 40 - lift, 2, 12, red.shadow);
-  r.ring(CENTER, 45 - lift, 2.5, 2.5, 1, steel.base).rect(CENTER - 3, 46 - lift, 7, 5, yellow.base).rect(CENTER, 48 - lift, 1, 2, "k");
-  arm(r, [CENTER - 12, 36], [CENTER - 10, 47 - lift], purple, peach);
-  arm(r, [CENTER + 12, 36], [CENTER + 10, 47 - lift], purple, peach);
+  const pose = look.pose ?? "idle";
+  const top = pose === "windup" ? 0 : pose === "impact" ? 52 : look.angry ? 36 : 40;
+  const book = () => {
+    r.rect(CENTER - 11, top, 22, 14, red.base);
+    light(r, red);
+    r.rect(CENTER - 11, top + 12, 22, 2, paper.light).rect(CENTER - 1, top, 2, 12, red.shadow);
+    r.ring(CENTER, top + 5, 2.5, 2.5, 1, steel.base).rect(CENTER - 3, top + 6, 7, 5, yellow.base).rect(CENTER, top + 8, 1, 2, "k");
+  };
+  if (pose !== "windup") {
+    book();
+  }
+  arm(r, [CENTER - 12, 36], [CENTER - 10, top + 7], purple, peach);
+  arm(r, [CENTER + 12, 36], [CENTER + 10, top + 7], purple, peach);
   headShape(r, peach);
   r.ellipse(CENTER, 5, 6, 4.5, fur.base);
   r.polygon([[CENTER - 11, 20], [CENTER - 11, 12], [CENTER - 5, 7], [CENTER + 5, 7], [CENTER + 11, 12], [CENTER + 11, 20], [CENTER + 8, 13], [CENTER, 11], [CENTER - 8, 13]], fur.base);
@@ -190,6 +200,9 @@ function archivist(look: BossLook): Sprite {
   }
   r.line(CENTER - 3, EYE_Y + 1, CENTER + 2, EYE_Y + 1, "k");
   r.line(CENTER - 8, EYE_Y + 2, CENTER - 10, EYE_Y + 10, yellow.base).line(CENTER + 7, EYE_Y + 2, CENTER + 9, EYE_Y + 10, yellow.base);
+  if (pose === "windup") {
+    book();
+  }
   return inked(r);
 }
 
@@ -212,12 +225,16 @@ function throttler(look: BossLook): Sprite {
   for (let y = 54; y < 52 + ticket; y += 2) {
     r.rect(CENTER - 18, y, 3, 1, paper.shadow);
   }
+  const pose = look.pose ?? "idle";
   const raise = look.angry ? 3 : 0;
-  arm(r, [CENTER + 12, 36], [CENTER + 17, 28 - raise], charcoal, umber);
-  r.rect(CENTER + 17, 14 - raise, 2, 13, steel.base);
-  r.polygon([[CENTER + 15, 1 - raise], [CENTER + 21, 1 - raise], [CENTER + 25, 5 - raise], [CENTER + 25, 11 - raise], [CENTER + 21, 15 - raise], [CENTER + 15, 15 - raise], [CENTER + 11, 11 - raise], [CENTER + 11, 5 - raise]], red.base);
+  const grip: Point = pose === "windup" ? [CENTER + 18, 34] : pose === "impact" ? [CENTER + 14, 46] : [CENTER + 17, 28 - raise];
+  const sign: Point = pose === "windup" ? [CENTER + 20, 18] : pose === "impact" ? [CENTER + 20, 59] : [CENTER + 18, 8 - raise];
+  arm(r, [CENTER + 12, 36], grip, charcoal, umber);
+  r.line(grip[0], grip[1], sign[0], sign[1], steel.base).line(grip[0] + 1, grip[1], sign[0] + 1, sign[1], steel.base);
+  const [px, py] = sign;
+  r.polygon([[px - 3, py - 7], [px + 3, py - 7], [px + 7, py - 3], [px + 7, py + 3], [px + 3, py + 7], [px - 3, py + 7], [px - 7, py + 3], [px - 7, py - 3]], red.base);
   light(r, red);
-  r.rect(CENTER + 13, 7 - raise, 11, 2, "w");
+  r.rect(px - 5, py - 1, 11, 2, "w");
   headShape(r, umber);
   r.polygon([[CENTER - 11, 15], [CENTER - 10, 8], [CENTER - 4, 4], [CENTER + 4, 4], [CENTER + 10, 8], [CENTER + 11, 15]], red.base);
   light(r, red);
@@ -249,6 +266,17 @@ function processOwner(look: BossLook): Sprite {
   }
   arm(r, [CENTER + 12, 36], [CENTER + 11, 46 + board], paper, umber);
   r.line(CENTER - 15, 47, CENTER - 11, 41, "k");
+  const pose = look.pose ?? "idle";
+  if (pose !== "idle") {
+    const [hx, hy]: Point = pose === "windup" ? [CENTER - 18, 16] : [CENTER - 18, 56];
+    arm(r, [CENTER - 12, 36], [hx, hy], paper, umber);
+    const base = pose === "windup" ? hy - 10 : hy + 6;
+    r.rect(hx - 2, pose === "windup" ? base + 4 : hy - 4, 4, 6, wood.base).ellipse(hx, pose === "windup" ? base + 4 : hy - 5, 3, 2, wood.base);
+    r.rect(hx - 6, base, 12, 4, red.base).rect(hx - 6, base + 3, 12, 1, red.shadow);
+    if (pose === "impact") {
+      r.ellipse(hx, 70, 9, 1.5, red.base);
+    }
+  }
   headShape(r, umber);
   r.rect(CENTER - 11, 13, 3, 7, charcoal.base).rect(CENTER + 9, 13, 3, 7, charcoal.base);
   r.ellipse(CENTER, 10, 12, 7, yellow.base).rect(CENTER - 15, 13, 30, 2, yellow.base);
@@ -269,10 +297,17 @@ function confidentExpert(look: BossLook): Sprite {
   torso(r, charcoal, 0);
   vest(r, magenta, 4);
   r.line(CENTER - 4, 33, CENTER - 7, 42, magenta.shadow).line(CENTER + 4, 33, CENTER + 7, 42, magenta.shadow);
+  const pose = look.pose ?? "idle";
   const raise = look.angry ? 4 : 0;
-  arm(r, [CENTER - 12, 36], [CENTER - 21, 27 - raise], magenta, skin);
-  arm(r, [CENTER + 12, 36], [CENTER + 21, 27 - raise], magenta, skin);
-  const [sx, sy] = [CENTER + 20, 15 - raise - (look.flicker % 2)];
+  const hands: readonly [Point, Point] =
+    pose === "windup"
+      ? [[CENTER - 21, 30], [CENTER - 17, 34]]
+      : pose === "impact"
+        ? [[CENTER + 20, 38], [CENTER + 23, 34]]
+        : [[CENTER - 21, 27 - raise], [CENTER + 21, 27 - raise]];
+  arm(r, [CENTER - 12, 36], hands[0], magenta, skin);
+  arm(r, [CENTER + 12, 36], hands[1], magenta, skin);
+  const [sx, sy] = pose === "windup" ? [CENTER - 20, 18] : pose === "impact" ? [CENTER + 20, 22] : [CENTER + 20, 15 - raise - (look.flicker % 2)];
   const halo = look.angry ? red : yellow;
   for (let ray = 0; ray < 8; ray += 1) {
     const angle = (ray * Math.PI) / 4 + glow * 0.2;

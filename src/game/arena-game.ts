@@ -208,6 +208,7 @@ const LOW_HEALTH_PERCENT = 35;
 const BLINK_EVERY = 3.4;
 const BLINK_SECONDS = 0.12;
 const MOUTH_SECONDS = 0.09;
+const ANGRY_LINE = /\.(bossTaunt|bossCheck|bossAcquire)$/;
 
 function runOver(state: ArenaState): boolean {
   return state.status === "dead" || state.status === "won";
@@ -1422,8 +1423,17 @@ export class ArenaGame {
       case "you":
         return agentCanvas(this.state.tier);
       case "rival":
-      case "boss":
-        return bossCanvas(speech.scene.world);
+      case "boss": {
+        const blink =
+          (speech.age + (this.state.seed % 5)) % BLINK_EVERY < BLINK_SECONDS;
+        const talking =
+          speech.typing && Math.floor(speech.age / MOUTH_SECONDS) % 2 === 0;
+        return bossCanvas(speech.scene.world, {
+          flicker: blink ? 3 : 0,
+          angry: speech.line.voice === "boss" && ANGRY_LINE.test(speech.line.key),
+          talking,
+        });
+      }
     }
   }
 

@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run art-sheet
+      - run: npm run design-bible
       - uses: actions/upload-artifact@v4
         with:
           name: art-sheet
