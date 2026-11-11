@@ -1,4 +1,5 @@
 import { PAD, readPad } from "./game/controls";
+import { startFrameLoop } from "./game/frame-loop";
 const worldCanvas = document.querySelector<HTMLCanvasElement>("#world");
 const hudCanvas = document.querySelector<HTMLCanvasElement>("#hud");
 const loadingNote = document.querySelector<HTMLElement>("#status");
@@ -210,12 +211,19 @@ async function boot(): Promise<void> {
       }
     }
   };
-  const loop = () => {
-    pollPad();
-    game.frame();
-    requestAnimationFrame(loop);
-  };
-  loop();
+  startFrameLoop({
+    tick: () => {
+      pollPad();
+      game.frame();
+    },
+    schedule: (next) => requestAnimationFrame(next),
+    onError: (error, failures) => {
+      if (failures === 1) {
+        console.error(error);
+      }
+      game.recoverFromFrameError(failures);
+    },
+  });
   Object.assign(window, { arena: game });
 }
 

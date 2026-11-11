@@ -88,6 +88,7 @@ export const es = {
   "replay.hint": "[F] Velocidad    [P] Pausa",
   "replay.mismatch": "Grabada en una versión anterior del juego, así que no sale igual.",
   "replay.broken": "Ese enlace de repetición está roto.",
+  "error.recovered": "Algo falló un momento. El juego siguió.",
 
   "story.you": "Tú",
   "story.bossArrives": "{rival} quiere que alquiles su agente",

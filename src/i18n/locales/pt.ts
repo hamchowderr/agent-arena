@@ -88,6 +88,7 @@ export const pt = {
   "replay.hint": "[F] Velocidade    [P] Pausa",
   "replay.mismatch": "Gravado numa versão antiga do jogo, então acontece diferente.",
   "replay.broken": "Esse link de replay está quebrado.",
+  "error.recovered": "Algo quebrou por um instante. O jogo continuou.",
 
   "story.you": "Você",
   "story.bossArrives": "{rival} quer que você alugue o agente deles",

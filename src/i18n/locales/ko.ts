@@ -88,6 +88,7 @@ export const ko = {
   "replay.hint": "[F] 속도    [P] 일시정지",
   "replay.mismatch": "이전 버전에서 녹화되어 다르게 진행돼요.",
   "replay.broken": "이 리플레이 링크는 깨졌어요.",
+  "error.recovered": "잠깐 오류가 났어요. 게임은 계속돼요.",
 
   "story.you": "나",
   "story.bossArrives": "{rival}이(가) 자기 에이전트를 빌려 쓰라고 합니다",
