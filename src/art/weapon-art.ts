@@ -1,6 +1,7 @@
 import type { WeaponId } from "../sim/arena/content";
 import { beamSprite, BOLT, CODE_BLOCK, outlined, SEEKER } from "./arena-sprites";
 import type { Sprite } from "./sprites";
+import { CODE_MISSILE, NETWORK_MISSILE, TEAM_MISSILE } from "./tool-art";
 
 export type WeaponStage = 0 | 1 | 2;
 export const WEAPON_STAGES: readonly WeaponStage[] = [0, 1, 2];
@@ -87,6 +88,12 @@ export function weaponSprite(weapon: WeaponId, stage: WeaponStage): Sprite {
       return staged(CODE_BLOCK, stage);
     case "codeInterpreter":
       return outlined(INTERPRETER, "y");
+    case "coderSubagent":
+      return staged(CODE_MISSILE, stage);
+    case "agentNetwork":
+      return NETWORK_MISSILE;
+    case "durableAgentTeam":
+      return outlined(TEAM_MISSILE, "y");
     case "browser":
       return staged(CURSOR, stage);
     case "computerUse":
@@ -96,6 +103,13 @@ export function weaponSprite(weapon: WeaponId, stage: WeaponStage): Sprite {
     case "ciPipeline":
       return outlined(outlined(BRICK, "y"), "o");
     case "voice":
+    case "realtimeVoice":
+    case "fileReader":
+    case "mapReduce":
+    case "apiCall":
+    case "mcpServer":
+    case "scheduledJob":
+    case "durableWorkflow":
       return [];
   }
 }

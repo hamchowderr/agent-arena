@@ -1,5 +1,5 @@
 import type { CardChange, Card } from "../sim/arena/cards";
-import { EVOLUTIONS, type PassiveId, type WeaponId, type World, type WorldId } from "../sim/arena/content";
+import { EVOLUTIONS, MERGES, type PassiveId, type WeaponId, type World, type WorldId } from "../sim/arena/content";
 import type { Killer } from "../sim/arena/sim";
 import type { Tier } from "../sim/tiers";
 import { t } from "../i18n";
@@ -98,15 +98,30 @@ function evolutionNote(card: Card): string | null {
     return null;
   }
   if (card.kind === "passive") {
-    const evolution = EVOLUTIONS.find((entry) => entry.passive === card.id);
-    return evolution ? t("story.part.passiveEvolves", { weapon: weaponName(evolution.weapon), result: weaponName(evolution.result) }) : null;
+    const notes = EVOLUTIONS.filter((entry) => entry.passive === card.id).map((evolution) =>
+      t("story.part.passiveEvolves", { weapon: weaponName(evolution.weapon), result: weaponName(evolution.result) }),
+    );
+    return notes.length > 0 ? notes.join(" ") : null;
+  }
+  const notes: string[] = [];
+  const from = EVOLUTIONS.find((entry) => entry.result === card.id);
+  if (from) {
+    notes.push(t("story.part.evolved", { weapon: weaponName(from.weapon), passive: passiveName(from.passive) }));
+  }
+  const merged = MERGES.find((entry) => entry.result === card.id);
+  if (merged) {
+    notes.push(t("story.part.merged", { first: weaponName(merged.weapons[0]), second: weaponName(merged.weapons[1]) }));
   }
   const into = EVOLUTIONS.find((entry) => entry.weapon === card.id);
   if (into) {
-    return t("story.part.weaponEvolves", { passive: passiveName(into.passive), result: weaponName(into.result) });
+    notes.push(t("story.part.weaponEvolves", { passive: passiveName(into.passive), result: weaponName(into.result) }));
   }
-  const from = EVOLUTIONS.find((entry) => entry.result === card.id);
-  return from ? t("story.part.evolved", { weapon: weaponName(from.weapon), passive: passiveName(from.passive) }) : null;
+  const merge = MERGES.find((entry) => entry.weapons.includes(card.id));
+  const partner = merge?.weapons.find((id) => id !== card.id);
+  if (merge && partner) {
+    notes.push(t("story.part.weaponMerges", { partner: weaponName(partner), result: weaponName(merge.result) }));
+  }
+  return notes.length > 0 ? notes.join(" ") : null;
 }
 
 export function partGuide(card: Card): string {

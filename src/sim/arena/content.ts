@@ -1,6 +1,6 @@
 import type { Tier } from "../tiers";
 
-export type WeaponKind = "bolt" | "beam" | "orbit" | "pulse" | "seeker" | "homing" | "bomb" | "brick";
+export type WeaponKind = "bolt" | "beam" | "orbit" | "pulse" | "seeker" | "homing" | "bomb" | "brick" | "laser" | "chain" | "mine";
 
 export interface WeaponLevel {
   readonly damage: number;
@@ -17,6 +17,10 @@ export interface WeaponDefinition {
   readonly levels: readonly WeaponLevel[];
   readonly evolved?: true;
   readonly knockback?: number;
+  readonly length?: number;
+  readonly splash?: number;
+  readonly reduce?: number;
+  readonly interrupts?: true;
 }
 
 const level = (damage: number, cooldown: number, count: number, pierce: number, radius: number): WeaponLevel => ({
@@ -95,6 +99,15 @@ export const WEAPONS = {
     knockback: 140,
     levels: [level(24, 10, 6, 99, 40)],
   },
+  realtimeVoice: {
+    kind: "pulse",
+    tier: 2,
+    speed: 0,
+    evolved: true,
+    interrupts: true,
+    knockback: 120,
+    levels: [level(36, 44, 1, 99, 66)],
+  },
   ciPipeline: {
     kind: "brick",
     tier: 2,
@@ -102,6 +115,75 @@ export const WEAPONS = {
     evolved: true,
     knockback: 180,
     levels: [level(60, 50, 3, 99, 10)],
+  },
+  fileReader: {
+    kind: "laser",
+    tier: 2,
+    speed: 0,
+    length: 170,
+    levels: [level(7, 110, 1, 1, 4), level(9, 104, 1, 1, 4), level(11, 98, 2, 1, 5), level(13, 92, 2, 1, 5), level(16, 84, 3, 1, 6)],
+  },
+  apiCall: {
+    kind: "chain",
+    tier: 3,
+    speed: 0,
+    knockback: 8,
+    levels: [level(14, 80, 1, 3, 60), level(17, 76, 1, 4, 64), level(20, 72, 1, 5, 68), level(23, 66, 2, 5, 72), level(27, 60, 2, 7, 80)],
+  },
+  scheduledJob: {
+    kind: "mine",
+    tier: 3,
+    speed: 0,
+    knockback: 90,
+    levels: [level(22, 150, 3, 1, 22), level(26, 144, 3, 1, 24), level(30, 138, 4, 1, 26), level(35, 130, 4, 1, 28), level(40, 120, 5, 1, 30)],
+  },
+  coderSubagent: {
+    kind: "seeker",
+    tier: 3,
+    speed: 2,
+    splash: 18,
+    levels: [level(16, 96, 1, 1, 4), level(19, 90, 1, 1, 4), level(22, 84, 2, 1, 4), level(26, 78, 2, 1, 5), level(30, 70, 3, 1, 5)],
+  },
+  mapReduce: {
+    kind: "laser",
+    tier: 2,
+    speed: 0,
+    length: 230,
+    reduce: 34,
+    evolved: true,
+    levels: [level(22, 70, 5, 1, 7)],
+  },
+  mcpServer: {
+    kind: "chain",
+    tier: 3,
+    speed: 0,
+    knockback: 12,
+    evolved: true,
+    levels: [level(36, 40, 3, 9, 84)],
+  },
+  durableWorkflow: {
+    kind: "mine",
+    tier: 3,
+    speed: 0,
+    knockback: 120,
+    evolved: true,
+    levels: [level(48, 100, 6, 3, 34)],
+  },
+  agentNetwork: {
+    kind: "seeker",
+    tier: 3,
+    speed: 3,
+    splash: 22,
+    evolved: true,
+    levels: [level(30, 46, 6, 2, 4)],
+  },
+  durableAgentTeam: {
+    kind: "seeker",
+    tier: 3,
+    speed: 4,
+    splash: 28,
+    evolved: true,
+    levels: [level(40, 36, 8, 3, 5)],
   },
 } as const satisfies Readonly<Record<string, WeaponDefinition>>;
 
@@ -184,7 +266,19 @@ export const EVOLUTIONS: readonly Evolution[] = [
   { weapon: "codeExec", passive: "sandbox", result: "codeInterpreter" },
   { weapon: "browser", passive: "planner", result: "computerUse" },
   { weapon: "shell", passive: "autoTestHook", result: "ciPipeline" },
+  { weapon: "voice", passive: "conversationBuffer", result: "realtimeVoice" },
+  { weapon: "fileReader", passive: "compaction", result: "mapReduce" },
+  { weapon: "apiCall", passive: "mcpConnector", result: "mcpServer" },
+  { weapon: "scheduledJob", passive: "loopRunner", result: "durableWorkflow" },
+  { weapon: "agentNetwork", passive: "loopRunner", result: "durableAgentTeam" },
 ];
+
+export interface Merge {
+  readonly weapons: readonly [WeaponId, WeaponId];
+  readonly result: WeaponId;
+}
+
+export const MERGES: readonly Merge[] = [{ weapons: ["subagents", "coderSubagent"], result: "agentNetwork" }];
 
 export const REGULAR_KINDS = ["grunt", "runner", "charger", "shooter", "exploder", "splitter", "brute", "heavy", "lootRunner"] as const;
 export type RegularKind = (typeof REGULAR_KINDS)[number];
