@@ -21,6 +21,31 @@ function saveLocale(code: string): void {
   }
 }
 
+const STORY_KEY = "agent-arena.story.seen";
+
+function storyMemory(fresh: boolean): { has(id: string): boolean; add(id: string): void } {
+  const seen = new Set<string>();
+  try {
+    const saved: unknown = fresh ? [] : JSON.parse(window.localStorage.getItem(STORY_KEY) ?? "[]");
+    if (Array.isArray(saved)) {
+      saved.filter((id): id is string => typeof id === "string").forEach((id) => seen.add(id));
+    }
+  } catch {
+    seen.clear();
+  }
+  return {
+    has: (id) => seen.has(id),
+    add: (id) => {
+      seen.add(id);
+      try {
+        window.localStorage.setItem(STORY_KEY, JSON.stringify([...seen]));
+      } catch {
+        return;
+      }
+    },
+  };
+}
+
 function loadPixelCjkFont(): void {
   if (document.querySelector("link[data-font=cjk]")) {
     return;
@@ -47,6 +72,7 @@ async function boot(): Promise<void> {
   const game = new ArenaGame(worldCanvas, hud, {
     newSeed: () => (Number.isInteger(fixedSeed) && fixedSeed > 0 ? fixedSeed : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0),
     now: () => performance.now(),
+    storyMemory: storyMemory(query.get("story") === "fresh"),
     onLocale: (code) => {
       document.documentElement.lang = code;
       if (code === "ja" || code === "zh-Hans") {

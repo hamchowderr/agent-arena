@@ -5,14 +5,17 @@ import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
 import { WORLDS, type SignatureWave } from "../sim/arena/content";
 import type { StagedEvent } from "../sim/arena/formations";
 import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { createArena, currentWorld, elapsedSeconds, score, throttlePercent, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
+import { createArena, currentWorld, elapsedSeconds, maxHealth, score, throttlePercent, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
 import { act, decodeReplay, encodeReplay, replayMatches, startRecording, type Action, type Recording, type Replay } from "../sim/arena/replay";
 import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
-import { currentLocale, nextLocale, setLocale, t, type LocaleCode } from "../i18n";
+import { currentLocale, nextLocale, setLocale, t, usesSpaces, type LocaleCode } from "../i18n";
 import type { MessageKey } from "../i18n/locales/en";
 import { STICK_RADIUS, STILL, stickDirection, stickKnob, type Direction, type Stick } from "./controls";
-import { bossName, bossPitch, clock, passiveName, rivalName, tierStage } from "./format";
+import { bossName, clock, passiveName, rivalName, tierStage } from "./format";
+import { agentCanvas, bossCanvas, guideCanvas } from "./portraits";
+import { acquisitionScene, arrivalScene, bossScene, checkScene, eliteScene, endingScene, GUIDE_COLOR, introScene, payoffScene, RIVAL_COLOR, tierScene, tipScene, YOU_COLOR, type StoryLine } from "./story";
+import { memoryOf, StoryPlayer, type Speech, type StoryMemory } from "./story-player";
 import { replayCode } from "./replay-link";
 import {
   cardRects,
@@ -21,7 +24,6 @@ import {
   drawBanner,
   drawChestSpin,
   drawBossMarker,
-  drawDialogue,
   drawFloats,
   drawLevelUp,
   drawNotice,
@@ -29,6 +31,7 @@ import {
   drawReplayHud,
   drawResults,
   drawRunHud,
+  drawSpeaker,
   drawTitle,
   HUD_HEIGHT,
   HUD_WIDTH,
@@ -40,7 +43,6 @@ import {
   WATCH_RECT,
   type Banner,
   type ChestSpin,
-  type Dialogue,
   type FloatText,
 } from "./hud";
 
@@ -94,7 +96,13 @@ export interface GameHooks {
   readonly onLocale?: (code: LocaleCode) => void;
   readonly onReplayCode?: (seed: number, code: string) => void;
   readonly share?: (request: ShareRequest) => Promise<ShareOutcome>;
+  readonly storyMemory?: StoryMemory;
 }
+
+const LOW_HEALTH_PERCENT = 35;
+const BLINK_EVERY = 3.4;
+const BLINK_SECONDS = 0.12;
+const MOUTH_SECONDS = 0.09;
 
 function runOver(state: ArenaState): boolean {
   return state.status === "dead" || state.status === "won";
@@ -115,7 +123,8 @@ export class ArenaGame {
   private last = 0;
   private frameCount = 0;
   private floats: FloatText[] = [];
-  private dialogue: Dialogue | null = null;
+  private readonly story: StoryPlayer;
+  private ending = false;
   private banner: Banner | null = null;
   private hover = -1;
   private musicOn = false;
@@ -135,6 +144,7 @@ export class ArenaGame {
     private readonly hooks: GameHooks,
   ) {
     this.renderer = new ArenaRenderer(worldCanvas);
+    this.story = new StoryPlayer(hooks.storyMemory ?? memoryOf(), { text: (line) => this.lineText(line), spaced: () => usesSpaces(currentLocale()) });
     this.state = createArena(hooks.newSeed());
     this.renderer.setWorld(1, this.state.seed);
   }
@@ -143,7 +153,7 @@ export class ArenaGame {
     if (!this.allows("start")) {
       return;
     }
-    this.begin(seed);
+    this.begin(seed, false);
     this.recording = startRecording(seed);
     this.lastRecording = this.recording;
     this.lastWatched = null;
@@ -156,7 +166,7 @@ export class ArenaGame {
       return;
     }
     const speed = this.playback?.speed ?? 1;
-    this.begin(replay.seed);
+    this.begin(replay.seed, true);
     this.recording = null;
     this.lastWatched = replay;
     this.playback = { replay, index: 0, speed, hold: 0, desynced: false };
@@ -178,7 +188,7 @@ export class ArenaGame {
     this.notify(t("replay.broken"));
   }
 
-  private begin(seed: number): void {
+  private begin(seed: number, watching: boolean): void {
     this.playback = null;
     this.watched = null;
     this.hover = -1;
@@ -191,13 +201,28 @@ export class ArenaGame {
     this.effects.clear();
     const firstWorld = WORLDS[0];
     this.banner = firstWorld ? { title: rivalName(firstWorld), subtitle: t("story.worldBanner", { world: 1, stage: tierStage(firstWorld.tier) }), age: 0, life: 150 } : null;
-    this.dialogue = {
-      speaker: t("story.you"),
-      line: t("story.opening"),
-      color: "#73eff7",
-      age: 0,
-      life: 260,
-    };
+    this.ending = false;
+    this.story.clear();
+    if (firstWorld) {
+      this.story.play(introScene(firstWorld.id), watching);
+    }
+  }
+
+  get storyHolding(): boolean {
+    return this.screen === "run" && this.story.holding;
+  }
+
+  private lineText(line: StoryLine): string {
+    return t(line.key, line.values);
+  }
+
+  private endRun(): void {
+    if (this.state.status === "dead") {
+      this.story.clear();
+      this.finishRun();
+      return;
+    }
+    this.ending = true;
   }
 
   private act(action: Action): boolean {
@@ -308,6 +333,20 @@ export class ArenaGame {
       }
       return;
     }
+    if (this.screen === "run" && this.story.holding) {
+      if (lower === " " || lower === "enter") {
+        this.story.advance();
+        return;
+      }
+      if (lower === "escape") {
+        this.story.skip();
+        return;
+      }
+      if (lower === "t") {
+        this.story.toggleAuto();
+        return;
+      }
+    }
     if (lower === "p" || lower === "escape") {
       const event = this.screen === "paused" ? "resume" : "pause";
       if (this.allows(event)) {
@@ -367,6 +406,12 @@ export class ArenaGame {
       }
       return;
     }
+    if (this.screen === "run" && this.story.holding) {
+      if (pressed) {
+        this.story.advance();
+      }
+      return;
+    }
     if (this.screen !== "run" || this.state.status !== "levelUp") {
       this.hover = -1;
       return;
@@ -397,7 +442,7 @@ export class ArenaGame {
   }
 
   wantsStick(): boolean {
-    return this.screen === "run" && this.state.status === "playing" && !this.playback;
+    return this.screen === "run" && this.state.status === "playing" && !this.playback && !this.story.holding;
   }
 
   touchStart(id: number, x: number, y: number): boolean {
@@ -445,6 +490,10 @@ export class ArenaGame {
 
   confirm(): void {
     if (this.screen === "run" && this.playback) {
+      return;
+    }
+    if (this.screen === "run" && this.story.holding) {
+      this.story.advance();
       return;
     }
     if (this.screen === "run" && this.state.status === "levelUp") {
@@ -510,10 +559,10 @@ export class ArenaGame {
       this.hitStop -= this.playback ? this.playback.speed : 1;
     } else if (this.screen === "run" && this.playback) {
       this.advancePlayback(this.playback, elapsed);
-    } else if (this.screen === "run" && this.state.status === "playing") {
+    } else if (this.screen === "run" && this.state.status === "playing" && !this.story.holding) {
       this.accumulator += elapsed;
       let steps = 0;
-      while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && this.state.status === "playing" && this.spins.length === 0) {
+      while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && this.state.status === "playing" && this.spins.length === 0 && !this.story.holding) {
         this.act({ kind: "step", input: this.input() });
         this.handle(this.state.events);
         this.accumulator -= STEP_MS;
@@ -523,10 +572,17 @@ export class ArenaGame {
         this.accumulator = 0;
       }
       if (runOver(this.state)) {
-        this.finishRun();
+        this.endRun();
       }
     } else {
       this.accumulator = 0;
+    }
+    if (this.screen === "run" && this.spins.length === 0 && this.state.status !== "levelUp") {
+      this.story.frame((elapsed / 1000) * (this.playback?.speed ?? 1));
+    }
+    if (this.ending && this.screen === "run" && !this.story.busy) {
+      this.ending = false;
+      this.finishRun();
     }
     if (this.state.tier !== this.renderedTier) {
       this.renderedTier = this.state.tier;
@@ -585,7 +641,7 @@ export class ArenaGame {
       this.accumulator = 0;
     }
     if (runOver(this.state)) {
-      this.finishRun();
+      this.endRun();
     }
   }
 
@@ -623,6 +679,9 @@ export class ArenaGame {
           this.renderer.hurt = 1;
           this.renderer.shake = Math.max(this.renderer.shake, 0.7);
           this.hitStop = Math.max(this.hitStop, 3);
+          if (this.state.player.health * 100 < maxHealth(this.state) * LOW_HEALTH_PERCENT && this.state.player.health > 0) {
+            this.tell(tipScene(currentWorld(this.state).id, "lowHealth"));
+          }
           this.floats.push({ text: `-${event.amount}`, x: this.state.player.x, y: this.state.player.y, color: "#ff6b6b", size: 24, age: 0 });
           break;
         case "hallucinated":
@@ -638,12 +697,13 @@ export class ArenaGame {
           break;
         case "levelUp":
           this.effects.spawn("burst", this.state.player.x, this.state.player.y);
+          this.tell(tipScene(currentWorld(this.state).id, "firstPick"));
           break;
         case "bossArrives": {
           const world = WORLDS[event.world];
           if (world) {
             this.banner = { title: bossName(world), subtitle: t("story.bossArrives", { rival: rivalName(world) }), age: 0, life: 170 };
-            this.dialogue = { speaker: `${bossName(world)} · ${rivalName(world)}`, line: bossPitch(world), color: "#ff9b9b", age: 0, life: 300 };
+            this.tell(bossScene(world.id));
           }
           break;
         }
@@ -658,6 +718,8 @@ export class ArenaGame {
             event.phase === 2
               ? { title: t("boss.phase2"), subtitle: event.checkPassed ? t("boss.checkPassed", { part }) : t("boss.checkFailed", { part }), age: 0, life: 170 }
               : { title: t("boss.phase3"), subtitle: t("boss.phase3Line"), age: 0, life: 170 };
+          const worldId = currentWorld(this.state).id;
+          this.tell(event.phase === 2 ? checkScene(worldId, event.checkPassed, part) : acquisitionScene(worldId));
           break;
         }
         case "bossHealed":
@@ -676,7 +738,15 @@ export class ArenaGame {
           this.effects.spawn("burst", event.x, event.y);
           const cleared = WORLDS[event.world];
           this.banner = { title: t("story.worldCleared"), subtitle: cleared ? t("story.couldNotRent", { rival: rivalName(cleared) }) : "", age: 0, life: 170 };
-          this.dialogue = { speaker: t("story.you"), line: t("story.keepMine"), color: "#73eff7", age: 0, life: 220 };
+          if (cleared) {
+            this.tell(payoffScene(cleared.id));
+            const next = WORLDS[event.world + 1];
+            const tier = tierScene(cleared.id, this.state.tier);
+            if (tier) {
+              this.tell(tier);
+            }
+            this.tell(next ? arrivalScene(next.id) : endingScene(cleared.id));
+          }
           break;
         }
         case "tierUp":
@@ -697,11 +767,13 @@ export class ArenaGame {
         case "eliteArrives":
           this.renderer.shake = Math.max(this.renderer.shake, 0.5);
           this.banner = { title: t("elite.arrives"), subtitle: t("elite.subtitle", { rival: rivalName(currentWorld(this.state).id) }), age: 0, life: 150 };
+          this.tell(eliteScene(currentWorld(this.state).id));
           break;
         case "chest":
           this.effects.spawn("pow", event.x, event.y);
           if (event.prize) {
             this.spins.push({ prize: event.prize, reel: event.reel, age: 0 });
+            this.tell(tipScene(currentWorld(this.state).id, "firstChest"));
           }
           if (this.floats.length < MAX_FLOATS) {
             this.floats.push({ text: t("chest.open"), x: event.x, y: event.y, color: "#ffcd75", size: 22, age: 0 });
@@ -746,6 +818,60 @@ export class ArenaGame {
     this.syncMusic();
   }
 
+  private tell(scene: Parameters<StoryPlayer["play"]>[0]): void {
+    this.story.play(scene, this.playback !== null);
+  }
+
+  private speakerName(speech: Speech): string {
+    switch (speech.line.voice) {
+      case "guide":
+        return t("story.guideName");
+      case "you":
+        return t("story.you");
+      case "rival":
+        return rivalName(speech.scene.world);
+      case "boss":
+        return `${bossName(speech.scene.world)} · ${rivalName(speech.scene.world)}`;
+    }
+  }
+
+  private speakerPortrait(speech: Speech): HTMLCanvasElement {
+    switch (speech.line.voice) {
+      case "guide": {
+        const blink = (speech.age + this.state.seed % 7) % BLINK_EVERY < BLINK_SECONDS;
+        const talking = speech.typing && Math.floor(speech.age / MOUTH_SECONDS) % 2 === 0;
+        return guideCanvas({ face: speech.line.face ?? "smile", talking, blink });
+      }
+      case "you":
+        return agentCanvas(this.state.tier);
+      case "rival":
+      case "boss":
+        return bossCanvas(speech.scene.world);
+    }
+  }
+
+  private drawStory(): void {
+    const speech = this.story.speech;
+    if (!speech) {
+      return;
+    }
+    const voice = speech.line.voice;
+    drawSpeaker(this.hud, {
+      name: this.speakerName(speech),
+      color: voice === "guide" ? GUIDE_COLOR : voice === "you" ? YOU_COLOR : RIVAL_COLOR,
+      portrait: this.speakerPortrait(speech),
+      text: speech.text,
+      shown: speech.shown,
+      hold: speech.mode === "hold",
+      typing: speech.typing,
+      autoOn: this.story.autoAdvance,
+      autoFill: speech.autoFill,
+      age: speech.age,
+      first: speech.index === 0,
+      frame: this.frameCount,
+    });
+  }
+
   private twistFloat(key: MessageKey, x: number, y: number, color: string): void {
     if (this.floats.length >= MAX_FLOATS || this.frameCount < this.twistFloatAt) {
       return;
@@ -782,12 +908,8 @@ export class ArenaGame {
     if (boss && !paused) {
       drawBossMarker(context, this.projectToHud(boss.x, boss.y), this.frameCount);
     }
-    if (this.dialogue && this.spins.length === 0) {
-      this.dialogue.age += paused ? 0 : 1;
-      drawDialogue(context, this.dialogue);
-      if (this.dialogue.age > this.dialogue.life) {
-        this.dialogue = null;
-      }
+    if (this.spins.length === 0 && this.state.status !== "levelUp" && this.screen !== "results") {
+      this.drawStory();
     }
     if (this.banner) {
       this.banner.age += paused ? 0 : 1;

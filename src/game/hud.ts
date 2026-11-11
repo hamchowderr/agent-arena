@@ -57,14 +57,6 @@ export interface FloatText {
   age: number;
 }
 
-export interface Dialogue {
-  readonly speaker: string;
-  readonly line: string;
-  readonly color: string;
-  age: number;
-  readonly life: number;
-}
-
 export interface Banner {
   readonly title: string;
   readonly subtitle: string;
@@ -270,17 +262,125 @@ export function drawFloats(context: CanvasRenderingContext2D, floats: readonly F
   context.globalAlpha = 1;
 }
 
-export function drawDialogue(context: CanvasRenderingContext2D, dialogue: Dialogue): void {
-  const rect = { x: HUD_WIDTH / 2 - 420, y: HUD_HEIGHT - 210, w: 840, h: 110 };
-  const fade = Math.min(1, dialogue.age / 8, (dialogue.life - dialogue.age) / 12);
-  context.globalAlpha = Math.max(0, fade);
-  panel(context, rect, dialogue.color);
-  context.fillStyle = dialogue.color;
-  context.fillRect(rect.x + 20, rect.y - 18, Math.min(400, measure(context, dialogue.speaker, 18) + 30), 34);
-  text(context, dialogue.speaker, rect.x + 34, rect.y - 12, 18, SHADOW);
-  const shown = dialogue.line.slice(0, Math.floor(dialogue.age * 1.6));
-  wrap(context, shown, rect.w - 60, 22).forEach((line, index) => text(context, line, rect.x + 30, rect.y + 30 + index * 32, 22));
-  context.globalAlpha = 1;
+export interface SpeakerView {
+  readonly name: string;
+  readonly color: string;
+  readonly portrait: HTMLCanvasElement;
+  readonly text: string;
+  readonly shown: number;
+  readonly hold: boolean;
+  readonly typing: boolean;
+  readonly autoOn: boolean;
+  readonly autoFill: number;
+  readonly age: number;
+  readonly first: boolean;
+  readonly frame: number;
+}
+
+export const SPEAKER_RECT: Rect = { x: HUD_WIDTH / 2 - 470, y: HUD_HEIGHT - 196, w: 940, h: 150 };
+const PORTRAIT_BOX = 126;
+const SPEAKER_SIZES = [25, 22, 20, 18] as const;
+
+function pill(context: CanvasRenderingContext2D, label: string, right: number, y: number, active: boolean, fill: number, color: string): number {
+  const width = measure(context, label, 16) + 26;
+  const x = right - width;
+  context.fillStyle = SHADOW;
+  context.fillRect(x - 2, y - 2, width + 4, 34);
+  context.fillStyle = active ? color : CARD_FACE;
+  context.fillRect(x, y, width, 30);
+  if (fill > 0) {
+    context.fillStyle = active ? "rgba(16, 18, 30, 0.35)" : color;
+    context.fillRect(x, y + 26, Math.round(width * Math.min(1, fill)), 4);
+  }
+  text(context, label, x + 13, y + 7, 16, active ? SHADOW : INK);
+  return x;
+}
+
+export function drawSpeaker(context: CanvasRenderingContext2D, view: SpeakerView): void {
+  const enter = view.first ? Math.min(1, view.age / 0.16) : 1;
+  const rect = { ...SPEAKER_RECT, y: SPEAKER_RECT.y + Math.round((1 - enter) * 24) };
+  context.save();
+  context.globalAlpha = enter * (view.hold ? 1 : 0.94);
+  context.fillStyle = SHADOW;
+  context.fillRect(rect.x - 4, rect.y - 4, rect.w + 8, rect.h + 8);
+  context.fillStyle = "rgba(14, 16, 26, 0.94)";
+  context.fillRect(rect.x, rect.y, rect.w, rect.h);
+  context.strokeStyle = view.color;
+  context.lineWidth = 3;
+  context.strokeRect(rect.x + 1.5, rect.y + 1.5, rect.w - 3, rect.h - 3);
+  context.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  context.lineWidth = 2;
+  context.strokeRect(rect.x + 7, rect.y + 7, rect.w - 14, rect.h - 14);
+
+  const frameX = rect.x + 12;
+  const frameY = rect.y + 12;
+  context.fillStyle = "#232741";
+  context.fillRect(frameX, frameY, PORTRAIT_BOX, PORTRAIT_BOX);
+  context.fillStyle = "#2c3150";
+  context.fillRect(frameX, frameY + PORTRAIT_BOX * 0.62, PORTRAIT_BOX, PORTRAIT_BOX * 0.38);
+  const portrait = view.portrait;
+  const scale = Math.max(1, Math.floor(Math.min((PORTRAIT_BOX - 6) / portrait.width, (PORTRAIT_BOX - 6) / portrait.height)));
+  const pop = view.age < 0.12 ? Math.round((1 - view.age / 0.12) * 4) : 0;
+  const width = portrait.width * scale;
+  const height = portrait.height * scale;
+  context.imageSmoothingEnabled = false;
+  context.save();
+  context.beginPath();
+  context.rect(frameX, frameY, PORTRAIT_BOX, PORTRAIT_BOX);
+  context.clip();
+  context.drawImage(portrait, frameX + (PORTRAIT_BOX - width) / 2, frameY + PORTRAIT_BOX - height + pop, width, height);
+  context.restore();
+  context.strokeStyle = view.color;
+  context.lineWidth = 3;
+  context.strokeRect(frameX + 1.5, frameY + 1.5, PORTRAIT_BOX - 3, PORTRAIT_BOX - 3);
+
+  const textX = frameX + PORTRAIT_BOX + 24;
+  const plateWidth = Math.min(380, measure(context, view.name, 18) + 28);
+  context.fillStyle = SHADOW;
+  context.fillRect(textX - 2, rect.y - 20, plateWidth + 4, 36);
+  context.fillStyle = view.color;
+  context.fillRect(textX, rect.y - 18, plateWidth, 32);
+  text(context, view.name, textX + 14, rect.y - 11, 18, SHADOW);
+
+  const textWidth = rect.x + rect.w - textX - 28;
+  const size = SPEAKER_SIZES.find((candidate) => wrap(context, view.text, textWidth, candidate).length <= 3) ?? SPEAKER_SIZES[SPEAKER_SIZES.length - 1] ?? 18;
+  const lines = wrap(context, view.text, textWidth, size);
+  const joiner = usesSpaces(currentLocale()) ? 1 : 0;
+  const gap = Math.round(size * 1.42);
+  let left = view.shown;
+  lines.slice(0, 3).forEach((line, index) => {
+    const chars = [...line];
+    const visible = chars.slice(0, Math.max(0, left)).join("");
+    left -= chars.length + joiner;
+    if (visible) {
+      text(context, visible, textX, rect.y + 28 + index * gap, size);
+    }
+  });
+
+  if (!view.typing && view.hold) {
+    const bob = Math.floor(view.frame / 12) % 2 === 0 ? 0 : 4;
+    const ax = rect.x + rect.w - 34;
+    const ay = rect.y + rect.h - 34 + bob;
+    context.fillStyle = view.color;
+    context.beginPath();
+    context.moveTo(ax - 9, ay);
+    context.lineTo(ax + 9, ay);
+    context.lineTo(ax, ay + 10);
+    context.closePath();
+    context.fill();
+  }
+
+  if (view.hold) {
+    const y = rect.y + rect.h - 14;
+    const next = pill(context, t("story.next"), rect.x + rect.w - 18, y, false, 0, view.color);
+    pill(context, t("story.auto"), next - 12, y, view.autoOn, view.autoOn ? view.autoFill : 0, view.color);
+    const skipWidth = measure(context, t("story.skip"), 16) + 26;
+    pill(context, t("story.skip"), textX + skipWidth, y, false, 0, view.color);
+  } else {
+    context.fillStyle = view.color;
+    context.fillRect(rect.x + 3, rect.y + rect.h - 6, Math.round((rect.w - 6) * Math.min(1, view.autoFill)), 3);
+  }
+  context.restore();
 }
 
 export function drawBanner(context: CanvasRenderingContext2D, banner: Banner): void {
