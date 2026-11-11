@@ -16,7 +16,8 @@
     "balance": "vite-node scripts/balance.ts",
     "arena-balance": "vite-node scripts/arena-balance.ts",
     "music-doc": "vite-node scripts/music-doc.ts",
-    "art-sheet": "vite-node scripts/art-sheet.mjs"
+    "art-sheet": "vite-node scripts/art-sheet.mjs",
+    "design-bible": "vite-node scripts/design-bible.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
