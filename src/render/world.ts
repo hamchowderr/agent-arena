@@ -41,7 +41,7 @@ import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import type { Sprite } from "../art/sprites";
 import { agentClips } from "../art/clips";
 import { agentBody } from "../art/agent";
-import { REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
+import { isEvolvedWeapon, REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
 import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, seesThroughFakes, weaponStats, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
@@ -526,8 +526,12 @@ export class ArenaRenderer {
       { weapon: "webSearch", stages: WEAPON_STAGES, flat: true, capacity: 100, glow: "#41a6f6" },
       { weapon: "ragSearch", stages: [0], flat: true, capacity: 100, glow: "#a7f070" },
       { weapon: "subagents", stages: WEAPON_STAGES, flat: false, capacity: 100, glow: "#73eff7" },
-      { weapon: "codeExec", stages: WEAPON_STAGES, flat: false, capacity: 16, glow: "#ffcd75" },
-      { weapon: "codeInterpreter", stages: [0], flat: false, capacity: 16, glow: "#ffcd75" },
+      { weapon: "codeExec", stages: WEAPON_STAGES, flat: false, capacity: 40, glow: "#ef7d57" },
+      { weapon: "codeInterpreter", stages: [0], flat: false, capacity: 40, glow: "#ffcd75" },
+      { weapon: "browser", stages: WEAPON_STAGES, flat: false, capacity: 16, glow: "#73eff7" },
+      { weapon: "computerUse", stages: [0], flat: false, capacity: 16, glow: "#73eff7" },
+      { weapon: "shell", stages: WEAPON_STAGES, flat: false, capacity: 40, glow: "#94b0c2" },
+      { weapon: "ciPipeline", stages: [0], flat: false, capacity: 40, glow: "#ffcd75" },
     ];
     for (const look of looks) {
       for (const stage of look.stages) {
@@ -549,7 +553,7 @@ export class ArenaRenderer {
   }
 
   private arm(weapon: WeaponId): string {
-    const evolved = weapon === "ragSearch" || weapon === "codeInterpreter";
+    const evolved = isEvolvedWeapon(weapon);
     return `${weapon}:${evolved ? 0 : weaponStage(this.levels.get(weapon) ?? 1)}`;
   }
 
@@ -951,8 +955,9 @@ export class ArenaRenderer {
         continue;
       }
       const key = this.arm(projectile.weapon);
-      const flat = projectile.kind === "beam";
-      this.arms.get(key)?.add(x, flat ? 6 : 4, z, false, flat ? this.heading : null);
+      const flat = projectile.kind === "beam" || projectile.kind === "homing";
+      const lift = flat ? 6 : projectile.kind === "bomb" ? 4 + Math.min(projectile.life, 14) : 4;
+      this.arms.get(key)?.add(x, lift, z, false, flat ? this.heading : null);
       this.armGlows.get(key)?.add(x, 0.7, z, false, flat ? this.heading : null);
       this.shadows.add(x, z, 5);
     }

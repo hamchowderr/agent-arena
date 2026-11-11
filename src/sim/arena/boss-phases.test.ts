@@ -32,7 +32,7 @@ function pulseOnce(state: ArenaState): ArenaEvent[] {
     boss.y = state.player.y;
   }
   state.weapons.length = 0;
-  state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
+  state.weapons.push({ id: "voice", level: 1, cooldown: 0, orbitHits: new Map() });
   step(state, IDLE);
   state.weapons.length = 0;
   return state.events;

@@ -981,16 +981,8 @@ export class ArenaGame {
             event.x,
             event.y,
             event.radius,
-            event.weapon === "ciPipeline" ? "#ffcd75" : "#9ff6ff",
+            "#9ff6ff",
           );
-          if (event.weapon === "ciPipeline") {
-            this.renderer.pulse(
-              event.x,
-              event.y,
-              Math.trunc(event.radius * 0.6),
-              "#ffffff",
-            );
-          }
           break;
         case "levelUp":
           this.effects.spawn("burst", this.state.player.x, this.state.player.y);
@@ -1154,6 +1146,14 @@ export class ArenaGame {
           break;
         case "deflected":
           this.effects.spawn("spark", event.x, event.y);
+          break;
+        case "ignite":
+          this.renderer.pulse(event.x, event.y, event.radius, "#ef7d57");
+          this.effects.spawn("pow", event.x, event.y);
+          this.renderer.mark(event.x, event.y, event.weapon === "codeInterpreter" ? "large" : "crater");
+          break;
+        case "burn":
+          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "codeInterpreter" ? "#ffcd75" : "#b13e53");
           break;
         case "leeched":
           this.twistFloat(

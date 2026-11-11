@@ -220,6 +220,8 @@ export function evolutionSheet(): Picture {
     [...WEAPON_STAGES.map((stage) => paint(weaponSprite("webSearch", stage))), paint(weaponSprite("ragSearch", 0))],
     [...WEAPON_STAGES.map((stage) => paint(weaponSprite("codeExec", stage))), paint(weaponSprite("codeInterpreter", 0))],
     [...WEAPON_STAGES.map((stage) => paint(weaponSprite("subagents", stage)))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("browser", stage))), paint(weaponSprite("computerUse", 0))],
+    [...WEAPON_STAGES.map((stage) => paint(weaponSprite("shell", stage))), paint(weaponSprite("ciPipeline", 0))],
   ];
   return framesSheet(rows, [WORLD_LOOKS[1].ground[0], WORLD_LOOKS[1].ground[2]], 6);
 }
