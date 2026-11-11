@@ -81,6 +81,8 @@ import {
   type StoryMemory,
 } from "./story-player";
 import { replayCode } from "./replay-link";
+import { LESSON_ID, pickLesson, staleLesson, Tutorial, TUTORIAL_DONE, type Device, type LessonLine } from "./tutorial";
+import { drawObjective, drawSpotlight, LESSON_SPEAKER_RECT, spotRects, TUTORIAL_SKIP_RECT } from "./tutorial-hud";
 import {
   cardRects,
   CHEST_HOLD_FRAMES,
@@ -110,6 +112,7 @@ import {
   type ChestSpin,
   type FloatText,
   type LevelUpGuide,
+  type Rect,
 } from "./hud";
 
 export type Screen = "title" | "run" | "paused" | "results";
@@ -202,6 +205,11 @@ export class ArenaGame {
   private frameCount = 0;
   private floats: FloatText[] = [];
   private readonly story: StoryPlayer;
+  private readonly memory: StoryMemory;
+  private tutorial: Tutorial;
+  private lesson: readonly LessonLine[] = [];
+  private device: Device = "keys";
+  private teachNext = false;
   private ending = false;
   private banner: Banner | null = null;
   private hover = -1;
@@ -224,10 +232,9 @@ export class ArenaGame {
     private readonly hooks: GameHooks,
   ) {
     this.renderer = new ArenaRenderer(worldCanvas);
-    this.story = new StoryPlayer(hooks.storyMemory ?? memoryOf(), {
-      text: (line) => this.lineText(line),
-      spaced: () => usesSpaces(currentLocale()),
-    });
+    this.memory = hooks.storyMemory ?? memoryOf();
+    this.story = new StoryPlayer(this.memory, { text: (line) => this.lineText(line), spaced: () => usesSpaces(currentLocale()) });
+    this.tutorial = this.newTutorial(false);
     this.state = createArena(hooks.newSeed());
     this.renderer.setWorld(1, this.state.seed);
   }
@@ -271,6 +278,47 @@ export class ArenaGame {
     this.notify(t("replay.broken"));
   }
 
+  private newTutorial(active: boolean): Tutorial {
+    return new Tutorial(
+      active,
+      (scene) => {
+        this.story.forget(staleLesson);
+        this.tell(scene);
+      },
+      (scene) => this.story.cut(scene),
+      () => {
+        this.lesson = pickLesson({
+          weapon: t("card.weapon"),
+          passive: t("card.passive"),
+          fresh: t("card.new"),
+          level: t("card.levelChange", { from: 1, to: 2 }),
+          evolve: t("card.evolve"),
+          recommended: t("card.recommended"),
+        });
+        return this.lesson;
+      },
+    );
+  }
+
+  get tutorialGoal(): string | null {
+    return this.tutorial.goal;
+  }
+
+  skipTutorial(): boolean {
+    if (this.screen !== "run" || !this.tutorial.skip(this.state)) {
+      return false;
+    }
+    if (this.lessonShowing()) {
+      this.story.skip();
+    }
+    this.memory.add(TUTORIAL_DONE);
+    return true;
+  }
+
+  private lessonShowing(): boolean {
+    return this.story.speech?.scene.id === LESSON_ID;
+  }
+
   private begin(seed: number, watching: boolean): void {
     this.playback = null;
     this.watched = null;
@@ -296,8 +344,12 @@ export class ArenaGame {
       : null;
     this.ending = false;
     this.story.clear();
+    const teaching = !watching && (this.teachNext || !this.memory.has(TUTORIAL_DONE));
+    this.teachNext = false;
+    this.tutorial = this.newTutorial(teaching);
+    this.lesson = [];
     if (firstWorld) {
-      this.story.play(introScene(firstWorld.id), watching);
+      this.story.play(introScene(firstWorld.id, teaching), watching);
     }
   }
 
@@ -336,6 +388,9 @@ export class ArenaGame {
   }
 
   private finishRun(): void {
+    if (this.tutorial.basicsDone || this.tutorial.finished) {
+      this.memory.add(TUTORIAL_DONE);
+    }
     const playback = this.playback;
     if (playback) {
       this.watched = {
@@ -424,6 +479,9 @@ export class ArenaGame {
     if (this.screen === "title") {
       if (lower === "enter" || lower === " ") {
         this.start();
+      } else if (lower === "h") {
+        this.teachNext = true;
+        this.start();
       } else if (lower === "l") {
         void this.changeLocale(nextLocale(currentLocale()));
       }
@@ -441,6 +499,12 @@ export class ArenaGame {
       } else if (lower === "t" && this.allows("toTitle")) {
         this.setScreen("title");
       }
+      return;
+    }
+    if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "shift"].includes(lower)) {
+      this.device = "keys";
+    }
+    if (lower === "tab" && this.skipTutorial()) {
       return;
     }
     if (this.screen === "run" && this.story.holding) {
@@ -474,6 +538,9 @@ export class ArenaGame {
       return;
     }
     if (this.state.status === "levelUp") {
+      if (this.lessonShowing()) {
+        return;
+      }
       const index = ["1", "2", "3"].indexOf(lower);
       if (index >= 0) {
         this.act({ kind: "choose", index });
@@ -514,6 +581,9 @@ export class ArenaGame {
       if (pressed) {
         this.cycleSpeed(this.playback);
       }
+      return;
+    }
+    if (this.screen === "run" && pressed && this.tutorial.goal && inside(TUTORIAL_SKIP_RECT, x, y) && this.skipTutorial()) {
       return;
     }
     if (this.screen === "run" && this.story.holding) {
@@ -575,6 +645,7 @@ export class ArenaGame {
     if (!this.wantsStick()) {
       return false;
     }
+    this.device = "touch";
     if (this.touch) {
       this.dash();
       return true;
@@ -597,6 +668,9 @@ export class ArenaGame {
   }
 
   padMove(direction: Direction): void {
+    if (direction.moveX !== 0 || direction.moveY !== 0) {
+      this.device = "pad";
+    }
     this.padDirection = direction;
   }
 
@@ -622,6 +696,7 @@ export class ArenaGame {
   }
 
   confirm(): void {
+    this.device = "pad";
     if (this.screen === "run" && this.playback) {
       return;
     }
@@ -629,7 +704,7 @@ export class ArenaGame {
       this.story.advance();
       return;
     }
-    if (this.screen === "run" && this.state.status === "levelUp") {
+    if (this.screen === "run" && this.state.status === "levelUp" && !this.lessonShowing()) {
       this.act({ kind: "choose", index: this.shownCard().index });
       this.hover = -1;
       return;
@@ -734,12 +809,16 @@ export class ArenaGame {
     } else {
       this.accumulator = 0;
     }
-    this.advanceTour(elapsed / 1000);
-    if (
-      this.screen === "run" &&
-      this.spins.length === 0 &&
-      this.state.status !== "levelUp"
-    ) {
+    if (this.screen === "run" && this.spins.length === 0 && !this.playback) {
+      this.tutorial.frame(this.state, elapsed / 1000, this.story.busy);
+      if (this.tutorial.finished) {
+        this.memory.add(TUTORIAL_DONE);
+      }
+    }
+    if (!this.lessonShowing()) {
+      this.advanceTour(elapsed / 1000);
+    }
+    if (this.screen === "run" && this.spins.length === 0 && (this.state.status !== "levelUp" || this.lessonShowing())) {
       this.story.frame((elapsed / 1000) * (this.playback?.speed ?? 1));
     }
     if (this.ending && this.screen === "run" && !this.story.busy) {
@@ -815,6 +894,7 @@ export class ArenaGame {
   }
 
   private handle(events: readonly ArenaEvent[]): void {
+    this.tutorial.see(this.state, events);
     for (const event of events) {
       switch (event.kind) {
         case "damage":
@@ -1157,7 +1237,7 @@ export class ArenaGame {
     }
   }
 
-  private drawStory(): void {
+  private drawStory(rect?: Rect): void {
     const speech = this.story.speech;
     if (!speech) {
       return;
@@ -1181,6 +1261,7 @@ export class ArenaGame {
       age: speech.age,
       first: speech.index === 0,
       frame: this.frameCount,
+      ...(rect ? { rect } : {}),
     });
   }
 
@@ -1301,11 +1382,11 @@ export class ArenaGame {
         this.frameCount,
       );
     }
-    if (
-      this.spins.length === 0 &&
-      this.state.status !== "levelUp" &&
-      this.screen !== "results"
-    ) {
+    const objective = this.screen === "results" || this.state.status === "levelUp" ? null : this.tutorial.objective(this.state);
+    if (objective) {
+      drawObjective(context, objective, this.device, this.state, this.frameCount);
+    }
+    if (this.spins.length === 0 && this.state.status !== "levelUp" && this.screen !== "results") {
       this.drawStory();
     }
     if (this.banner) {
@@ -1319,9 +1400,17 @@ export class ArenaGame {
       drawLevelUp(
         context,
         this.state,
-        this.shownCard().index,
-        this.levelUpGuide(),
+        this.lessonShowing() ? -1 : this.shownCard().index,
+        this.lessonShowing() ? null : this.levelUpGuide(),
       );
+      const speech = this.story.speech;
+      if (speech && this.lessonShowing()) {
+        const spot = this.lesson[speech.index]?.spot;
+        if (spot) {
+          drawSpotlight(context, spotRects(spot, this.state), this.frameCount);
+        }
+        this.drawStory(LESSON_SPEAKER_RECT);
+      }
     }
     const spinning = this.spins[0];
     if (this.screen === "run" && spinning) {

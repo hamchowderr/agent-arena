@@ -101,8 +101,11 @@ export const TIER_LINES: Readonly<Record<Exclude<Tier, 1>, StoryLine>> = {
 
 export const ENDING: readonly StoryLine[] = [guide("story.ending.look", "smile"), you("story.ending.mine"), guide("story.ending.back", "grin")];
 
-export function introScene(world: WorldId): Scene {
-  return { id: "intro", mode: "hold", world, lines: [...INTRO, ...WORLD_BEATS[world].arrival], repeat: "brief", brief: [...INTRO_AGAIN, ...WORLD_BEATS[world].arrival.slice(0, 1)] };
+export const HOW_TO_PLAY: readonly MessageKey[] = ["story.intro.move", "story.intro.tokens"];
+
+export function introScene(world: WorldId, teaching = false): Scene {
+  const intro = teaching ? INTRO.filter((line) => !HOW_TO_PLAY.includes(line.key)) : INTRO;
+  return { id: "intro", mode: "hold", world, lines: [...intro, ...WORLD_BEATS[world].arrival], repeat: teaching ? "always" : "brief", brief: [...INTRO_AGAIN, ...WORLD_BEATS[world].arrival.slice(0, 1)] };
 }
 
 export function arrivalScene(world: WorldId): Scene {
