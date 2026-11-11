@@ -1,6 +1,6 @@
 import { createRng, mixSeed, type Rng } from "../rng";
 import type { Tier } from "../tiers";
-import { offerCards, restoreAmount, type Card } from "./cards";
+import { CARDS_PER_DRAFT, offerCards, readyEvolution, restoreAmount, type Card } from "./cards";
 import {
   ACQUISITION_SECONDS,
   BOSS_EVERY_SECONDS,
@@ -294,6 +294,7 @@ export type ArenaEvent =
   | { readonly kind: "staged"; readonly event: StagedEvent; readonly world: number }
   | { readonly kind: "fakePopped"; readonly x: number; readonly y: number }
   | { readonly kind: "blocked"; readonly x: number; readonly y: number }
+  | { readonly kind: "deflected"; readonly x: number; readonly y: number }
   | { readonly kind: "leeched" }
   | { readonly kind: "metered"; readonly x: number; readonly y: number }
   | { readonly kind: "rooted" };
@@ -1166,7 +1167,7 @@ export function orbitPosition(state: ArenaState, owned: OwnedWeapon, index: numb
 
 function orbitHits(state: ArenaState, owned: OwnedWeapon): void {
   const stats = weaponStats(owned.id, owned.level);
-  const reach = px(7);
+  const reach = BLADE_REACH;
   for (let index = 0; index < stats.count; index += 1) {
     const blade = orbitPosition(state, owned, index);
     state.grid.forEachNear(blade.x, blade.y, reach + px(20), (enemy) => {
@@ -1192,6 +1193,25 @@ function orbitHits(state: ArenaState, owned: OwnedWeapon): void {
       }
     }
   }
+}
+
+export const BLADE_REACH = px(7);
+
+function bladeTouching(state: ArenaState, x: number, y: number): boolean {
+  const reach = BLADE_REACH + SHOT_RADIUS;
+  for (const owned of state.weapons) {
+    if (WEAPONS[owned.id].kind !== "orbit") {
+      continue;
+    }
+    const count = weaponStats(owned.id, owned.level).count;
+    for (let index = 0; index < count; index += 1) {
+      const blade = orbitPosition(state, owned, index);
+      if (distanceSquared(blade.x, blade.y, x, y) <= reach * reach) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function pulse(state: ArenaState, weapon: WeaponId, radius: number, damage: number): void {
@@ -1344,8 +1364,10 @@ function dropGem(state: ArenaState, enemy: Enemy, value: number, prizes: number)
 }
 
 function openChest(state: ArenaState, x: number, y: number): void {
-  const reel = offerCards(state);
-  const prize = reel.length > 0 ? reel[state.rng.intBelow(reel.length)] ?? null : null;
+  const evolution = readyEvolution(state);
+  const offered = offerCards(state);
+  const reel = evolution ? [...offered.slice(0, CARDS_PER_DRAFT - 1), evolution] : offered;
+  const prize = evolution ?? (reel.length > 0 ? reel[state.rng.intBelow(reel.length)] ?? null : null);
   if (prize) {
     applyCard(state, prize);
   } else {
@@ -1535,7 +1557,15 @@ function moveShots(state: ArenaState): void {
     shot.x += shot.vx;
     shot.y += shot.vy;
     shot.life -= 1;
-    if (shot.fake || player.dashTicks > 0 || shot.life <= 0) {
+    if (shot.life <= 0) {
+      continue;
+    }
+    if (bladeTouching(state, shot.x, shot.y)) {
+      shot.life = 0;
+      state.events.push({ kind: "deflected", x: shot.x, y: shot.y });
+      continue;
+    }
+    if (shot.fake || player.dashTicks > 0) {
       continue;
     }
     if (distanceSquared(shot.x, shot.y, player.x, player.y) <= reach * reach) {

@@ -800,6 +800,9 @@ export class ArenaGame {
         case "blocked":
           this.twistFloat("twist.blocked", event.x, event.y, "#9ff6ff");
           break;
+        case "deflected":
+          this.effects.spawn("spark", event.x, event.y);
+          break;
         case "leeched":
           this.twistFloat("twist.leeched", this.state.player.x, this.state.player.y, "#a77ee0");
           break;

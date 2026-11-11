@@ -51,6 +51,7 @@ export const WEAPONS = {
     kind: "pulse",
     tier: 2,
     speed: 0,
+    knockback: 150,
     levels: [level(12, 100, 1, 99, 36), level(15, 94, 1, 99, 40), level(18, 88, 1, 99, 44), level(22, 80, 1, 99, 48), level(26, 72, 1, 99, 54)],
   },
   subagents: {
@@ -79,6 +80,7 @@ export const WEAPONS = {
     tier: 2,
     speed: 0,
     evolved: true,
+    knockback: 180,
     levels: [level(45, 45, 1, 99, 72)],
   },
 } as const satisfies Readonly<Record<string, WeaponDefinition>>;
@@ -228,7 +230,7 @@ export const ACQUISITION_SECONDS = 60;
 
 export const BOSS_EVERY_SECONDS = 120;
 export const MAX_WEAPONS = 5;
-export const MAX_PASSIVES = 5;
+export const MAX_PASSIVES = 6;
 
 export function isEvolvedWeapon(id: WeaponId): boolean {
   const definition: WeaponDefinition = WEAPONS[id];
