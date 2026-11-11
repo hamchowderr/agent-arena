@@ -17,6 +17,9 @@ export const SPARK_BY_WEAPON: Readonly<Record<WeaponKind, SparkStyle>> = {
   bomb: "ember",
   brick: "chip",
   pulse: "ring",
+  laser: "hot",
+  chain: "zap",
+  mine: "ember",
 };
 
 const SPARK_SIZE = 15;
