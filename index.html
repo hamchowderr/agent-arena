@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <title>Agent Arena</title>
     <meta name="description" content="A free, open-source pixel survivors-like that plays in your browser. Grow your own agent and fight the rivals who want you to rent theirs." />
     <meta name="theme-color" content="#0d0f14" />
@@ -37,15 +37,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet" />
     <style>
-      html, body { margin: 0; height: 100%; background: #0d0f14; color: #e8e8ea; font-family: "Silkscreen", ui-monospace, monospace; overflow: hidden; }
-      #stage { position: fixed; inset: 0; display: grid; place-items: center; }
-      #frame { position: relative; width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; }
+      html, body { margin: 0; width: 100%; height: 100%; background: #0d0f14; color: #e8e8ea; font-family: "Silkscreen", ui-monospace, monospace; overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+      #stage { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; }
+      #frame { position: absolute; inset: 0; }
+      #safe { position: fixed; inset: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
       #frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; -webkit-user-select: none; user-select: none; }
       #world { image-rendering: pixelated; }
       #status { position: absolute; inset: 0; display: grid; place-items: center; font-size: 24px; }
     </style>
   </head>
   <body>
+    <div id="safe"></div>
     <div id="stage">
       <div id="frame">
         <canvas id="world" width="480" height="270"></canvas>

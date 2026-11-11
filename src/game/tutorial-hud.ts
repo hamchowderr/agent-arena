@@ -2,7 +2,8 @@ import { t, type MessageKey } from "../i18n";
 import type { ArenaState } from "../sim/arena/sim";
 import { TICKS_PER_SECOND } from "../sim/arena/math";
 import { clock } from "./format";
-import { cardRects, fitSize, HUD_HEIGHT, HUD_WIDTH, panel, REROLL_RECT, SKIP_RECT, text, type Rect } from "./hud";
+import { cardRects, fitSize, loadoutSlots, panel, rerollRect, skipRect, text, type Rect } from "./hud";
+import { fromStage, view } from "./layout";
 import { FIGHT_KILLS, tokenSeconds, type Device, type Goal, type Objective, type Spot } from "./tutorial";
 
 const GOLD = "#ffcd75";
@@ -12,9 +13,20 @@ const MUTED = "#9fb0d0";
 const DONE = "#a7f070";
 const SHADOW = "#10121a";
 
-export const OBJECTIVE_RECT: Rect = { x: 24, y: 122, w: 430, h: 112 };
-export const TUTORIAL_SKIP_RECT: Rect = { x: OBJECTIVE_RECT.x + OBJECTIVE_RECT.w - 150, y: OBJECTIVE_RECT.y + 10, w: 138, h: 30 };
-export const LESSON_SPEAKER_RECT: Rect = { x: HUD_WIDTH / 2 - 470, y: 34, w: 940, h: 150 };
+export function objectiveRect(): Rect {
+  const v = view();
+  const x = v.safe.left + 24;
+  return { x, y: v.safe.top + (v.portrait ? 206 : 122), w: Math.min(430, v.width - v.safe.right - 24 - x), h: 112 };
+}
+
+export function tutorialSkipRect(): Rect {
+  const rect = objectiveRect();
+  return { x: rect.x + rect.w - 150, y: rect.y + 10, w: 138, h: 30 };
+}
+
+export function lessonSpeakerRect(): Rect {
+  return fromStage(view().stage.portrait ? { x: 12, y: 12, w: 516, h: 200 } : { x: view().stage.width / 2 - 470, y: 34, w: 940, h: 150 });
+}
 
 const GOAL_KEYS: Readonly<Record<Goal, MessageKey>> = {
   move: "tutorial.goal.move",
@@ -71,7 +83,7 @@ function check(context: CanvasRenderingContext2D, x: number, y: number, color: s
 }
 
 export function drawObjective(context: CanvasRenderingContext2D, objective: Objective, device: Device, state: ArenaState, frame: number): void {
-  const rect = OBJECTIVE_RECT;
+  const rect = objectiveRect();
   const flash = objective.flash;
   context.save();
   panel(context, rect, flash > 0 ? DONE : GUIDE);
@@ -79,7 +91,7 @@ export function drawObjective(context: CanvasRenderingContext2D, objective: Obje
   context.fillRect(rect.x + 3, rect.y + 3, 6, rect.h - 6);
   text(context, t("tutorial.title", { step: objective.step, count: objective.count }), rect.x + 22, rect.y + 16, 15, GOLD);
 
-  const skip = TUTORIAL_SKIP_RECT;
+  const skip = tutorialSkipRect();
   context.fillStyle = SHADOW;
   context.fillRect(skip.x - 2, skip.y - 2, skip.w + 4, skip.h + 4);
   context.fillStyle = "#20243a";
@@ -116,12 +128,11 @@ function grow(rect: Rect, by: number): Rect {
 }
 
 export function loadoutRect(state: ArenaState): Rect {
-  const width = 24 + state.weapons.length * 70 + 12 + state.passives.size * 54;
-  return { x: 12, y: HUD_HEIGHT - 98, w: Math.max(140, width), h: 86 };
+  return loadoutSlots(state.weapons.length, state.passives.size).bounds;
 }
 
 export function spotRects(spot: Spot, state: ArenaState): Rect[] {
-  const cards = cardRects(state.cards.length);
+  const cards = cardRects(state.cards.length).map(fromStage);
   switch (spot) {
     case "cards":
       return cards.map((rect) => grow(rect, 8));
@@ -130,7 +141,7 @@ export function spotRects(spot: Spot, state: ArenaState): Rect[] {
     case "loadout":
       return [loadoutRect(state)];
     case "buttons":
-      return [grow(REROLL_RECT, 6), grow(SKIP_RECT, 6)];
+      return [grow(fromStage(rerollRect()), 6), grow(fromStage(skipRect()), 6)];
     case "recommended": {
       const index = state.cards.findIndex((card) => card.recommended);
       const rect = cards[index];
@@ -142,7 +153,7 @@ export function spotRects(spot: Spot, state: ArenaState): Rect[] {
 export function drawSpotlight(context: CanvasRenderingContext2D, rects: readonly Rect[], frame: number): void {
   context.save();
   context.beginPath();
-  context.rect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+  context.rect(0, 0, view().width, view().height);
   for (const rect of rects) {
     context.rect(rect.x, rect.y, rect.w, rect.h);
   }

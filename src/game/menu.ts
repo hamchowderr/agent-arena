@@ -1,5 +1,6 @@
 import { CONTEXT_ORDER, DEFAULT_LOADOUT, TEMPERATURE_ORDER, WORLDS, type ArenaLoadout, type ContextWindow, type Temperature } from "../sim/arena/content";
 import type { Rect } from "./hud";
+import { view } from "./layout";
 
 export type MenuPage = "home" | "loadout" | "settings" | "controls" | "credits";
 
@@ -61,59 +62,149 @@ export type MenuCommand =
   | { readonly kind: "open"; readonly link: MenuLink }
   | { readonly kind: "page"; readonly page: MenuPage };
 
-const HOME_X = 72;
-const HOME_W = 380;
-
-export const WORLD_CARD: Rect = { x: 930, y: 118, w: 430, h: 540 };
-export const SETTINGS_PANEL: Rect = { x: 380, y: 120, w: 680, h: 580 };
-export const CONTROLS_PANEL: Rect = { x: 110, y: 96, w: 1220, h: 560 };
-export const CREDITS_PANEL: Rect = { x: 260, y: 96, w: 920, h: 500 };
-
-const SETTING_ROW = (index: number): Rect => ({ x: SETTINGS_PANEL.x + 30, y: SETTINGS_PANEL.y + 110 + index * 84, w: SETTINGS_PANEL.w - 60, h: 68 });
-const STEPPER_LEFT = SETTINGS_PANEL.x + 300;
-const STEPPER_RIGHT = SETTINGS_PANEL.x + SETTINGS_PANEL.w - 30 - 64;
-
-function stepper(row: Rect, side: "left" | "right"): Rect {
-  return { x: side === "left" ? STEPPER_LEFT : STEPPER_RIGHT, y: row.y + 6, w: 64, h: row.h - 12 };
+export interface MenuLayout {
+  readonly tall: boolean;
+  readonly worldCard: Rect;
+  readonly settingsPanel: Rect;
+  readonly controlsPanel: Rect;
+  readonly creditsPanel: Rect;
+  readonly rects: Readonly<Record<MenuItem, Rect>>;
+  readonly linkRow: Rect;
+  readonly volumeBar: (row: Rect) => Rect;
 }
 
-export const VOLUME_BAR = (row: Rect): Rect => ({ x: STEPPER_LEFT + 78, y: row.y + 18, w: STEPPER_RIGHT - STEPPER_LEFT - 92, h: row.h - 36 });
+const STEPPER_SIZE = 64;
 
-export const MENU_RECTS: Readonly<Record<MenuItem, Rect>> = {
-  start: { x: HOME_X, y: 300, w: HOME_W, h: 92 },
-  loadout: { x: HOME_X, y: 406, w: HOME_W, h: 60 },
-  settings: { x: HOME_X, y: 478, w: HOME_W, h: 60 },
-  howTo: { x: HOME_X, y: 550, w: HOME_W, h: 60 },
-  credits: { x: HOME_X, y: 622, w: HOME_W, h: 60 },
-  context: SETTING_ROW(0),
-  temperature: SETTING_ROW(1),
-  contextPrev: stepper(SETTING_ROW(0), "left"),
-  contextNext: stepper(SETTING_ROW(0), "right"),
-  temperaturePrev: stepper(SETTING_ROW(1), "left"),
-  temperatureNext: stepper(SETTING_ROW(1), "right"),
-  mastra: { x: HOME_X, y: 690, w: HOME_W + 120, h: 50 },
-  worldPrev: { x: WORLD_CARD.x - 58, y: WORLD_CARD.y + 160, w: 50, h: 96 },
-  worldNext: { x: WORLD_CARD.x + WORLD_CARD.w + 8, y: WORLD_CARD.y + 160, w: 50, h: 96 },
-  worldCard: WORLD_CARD,
-  language: SETTING_ROW(0),
-  music: SETTING_ROW(1),
-  sound: SETTING_ROW(2),
-  controls: SETTING_ROW(3),
-  done: { x: SETTINGS_PANEL.x + SETTINGS_PANEL.w / 2 - 150, y: SETTINGS_PANEL.y + SETTINGS_PANEL.h - 96, w: 300, h: 64 },
-  languagePrev: stepper(SETTING_ROW(0), "left"),
-  languageNext: stepper(SETTING_ROW(0), "right"),
-  musicDown: stepper(SETTING_ROW(1), "left"),
-  musicUp: stepper(SETTING_ROW(1), "right"),
-  soundDown: stepper(SETTING_ROW(2), "left"),
-  soundUp: stepper(SETTING_ROW(2), "right"),
-  back: { x: 1440 / 2 - 160, y: 690, w: 320, h: 64 },
-  source: { x: CREDITS_PANEL.x + CREDITS_PANEL.w / 2 + 12, y: 612, w: 420, h: 60 },
-};
+function wideLayout(): MenuLayout {
+  const homeX = 72;
+  const homeW = 380;
+  const worldCard: Rect = { x: 930, y: 118, w: 430, h: 540 };
+  const settingsPanel: Rect = { x: 380, y: 120, w: 680, h: 580 };
+  const controlsPanel: Rect = { x: 110, y: 96, w: 1220, h: 560 };
+  const creditsPanel: Rect = { x: 260, y: 96, w: 920, h: 500 };
+  const row = (index: number): Rect => ({ x: settingsPanel.x + 30, y: settingsPanel.y + 110 + index * 84, w: settingsPanel.w - 60, h: 68 });
+  const stepperLeft = settingsPanel.x + 300;
+  const stepperRight = settingsPanel.x + settingsPanel.w - 30 - STEPPER_SIZE;
+  const stepper = (at: Rect, side: "left" | "right"): Rect => ({ x: side === "left" ? stepperLeft : stepperRight, y: at.y + 6, w: STEPPER_SIZE, h: at.h - 12 });
+  return {
+    tall: false,
+    worldCard,
+    settingsPanel,
+    controlsPanel,
+    creditsPanel,
+    rects: {
+      start: { x: homeX, y: 300, w: homeW, h: 92 },
+      loadout: { x: homeX, y: 406, w: homeW, h: 60 },
+      settings: { x: homeX, y: 478, w: homeW, h: 60 },
+      howTo: { x: homeX, y: 550, w: homeW, h: 60 },
+      credits: { x: homeX, y: 622, w: homeW, h: 60 },
+      ...settingRects(row, stepper),
+      mastra: { x: homeX, y: 690, w: homeW + 120, h: 50 },
+      worldPrev: { x: worldCard.x - 58, y: worldCard.y + 160, w: 50, h: 96 },
+      worldNext: { x: worldCard.x + worldCard.w + 8, y: worldCard.y + 160, w: 50, h: 96 },
+      worldCard,
+      done: { x: settingsPanel.x + settingsPanel.w / 2 - 150, y: settingsPanel.y + settingsPanel.h - 96, w: 300, h: 64 },
+      back: { x: 1440 / 2 - 160, y: 690, w: 320, h: 64 },
+      source: { x: creditsPanel.x + creditsPanel.w / 2 + 12, y: 612, w: 420, h: 60 },
+    },
+    linkRow: { x: creditsPanel.x + creditsPanel.w / 2 - 432, y: 612, w: 420, h: 60 },
+    volumeBar: (at) => ({ x: stepperLeft + 78, y: at.y + 18, w: stepperRight - stepperLeft - 92, h: at.h - 36 }),
+  };
+}
 
-const LINK_ROW: Rect = { x: CREDITS_PANEL.x + CREDITS_PANEL.w / 2 - 432, y: 612, w: 420, h: 60 };
+function tallLayout(): MenuLayout {
+  const homeX = 40;
+  const homeW = 460;
+  const half = (homeW - 12) / 2;
+  const worldCard: Rect = { x: 70, y: 196, w: 400, h: 520 };
+  const settingsPanel: Rect = { x: 20, y: 150, w: 500, h: 690 };
+  const controlsPanel: Rect = { x: 20, y: 90, w: 500, h: 870 };
+  const creditsPanel: Rect = { x: 20, y: 90, w: 500, h: 760 };
+  const row = (index: number): Rect => ({ x: settingsPanel.x + 24, y: settingsPanel.y + 100 + index * 116, w: settingsPanel.w - 48, h: 104 });
+  const stepper = (at: Rect, side: "left" | "right"): Rect => ({
+    x: side === "left" ? at.x + 12 : at.x + at.w - 12 - STEPPER_SIZE,
+    y: at.y + 46,
+    w: STEPPER_SIZE,
+    h: 50,
+  });
+  return {
+    tall: true,
+    worldCard,
+    settingsPanel,
+    controlsPanel,
+    creditsPanel,
+    rects: {
+      start: { x: homeX, y: 736, w: homeW, h: 88 },
+      loadout: { x: homeX, y: 842, w: half, h: 58 },
+      settings: { x: homeX + half + 12, y: 842, w: half, h: 58 },
+      howTo: { x: homeX, y: 912, w: half, h: 58 },
+      credits: { x: homeX + half + 12, y: 912, w: half, h: 58 },
+      ...settingRects(row, stepper),
+      mastra: { x: homeX, y: 990, w: homeW, h: 50 },
+      worldPrev: { x: worldCard.x - 58, y: worldCard.y + 160, w: 50, h: 96 },
+      worldNext: { x: worldCard.x + worldCard.w + 8, y: worldCard.y + 160, w: 50, h: 96 },
+      worldCard,
+      done: { x: settingsPanel.x + settingsPanel.w / 2 - 150, y: settingsPanel.y + settingsPanel.h - 96, w: 300, h: 64 },
+      back: { x: 540 / 2 - 160, y: 984, w: 320, h: 64 },
+      source: { x: homeX, y: 928, w: homeW, h: 52 },
+    },
+    linkRow: { x: homeX, y: 866, w: homeW, h: 52 },
+    volumeBar: (at) => {
+      const left = stepper(at, "left");
+      const right = stepper(at, "right");
+      return { x: left.x + 78, y: at.y + 50, w: right.x - left.x - 92, h: 40 };
+    },
+  };
+}
 
-export function menuRect(page: MenuPage, item: MenuItem): Rect {
-  return page === "credits" && item === "mastra" ? LINK_ROW : MENU_RECTS[item];
+type SettingItem =
+  | "context"
+  | "temperature"
+  | "contextPrev"
+  | "contextNext"
+  | "temperaturePrev"
+  | "temperatureNext"
+  | "language"
+  | "music"
+  | "sound"
+  | "controls"
+  | "languagePrev"
+  | "languageNext"
+  | "musicDown"
+  | "musicUp"
+  | "soundDown"
+  | "soundUp";
+
+function settingRects(row: (index: number) => Rect, stepper: (at: Rect, side: "left" | "right") => Rect): Record<SettingItem, Rect> {
+  return {
+    context: row(0),
+    temperature: row(1),
+    contextPrev: stepper(row(0), "left"),
+    contextNext: stepper(row(0), "right"),
+    temperaturePrev: stepper(row(1), "left"),
+    temperatureNext: stepper(row(1), "right"),
+    language: row(0),
+    music: row(1),
+    sound: row(2),
+    controls: row(3),
+    languagePrev: stepper(row(0), "left"),
+    languageNext: stepper(row(0), "right"),
+    musicDown: stepper(row(1), "left"),
+    musicUp: stepper(row(1), "right"),
+    soundDown: stepper(row(2), "left"),
+    soundUp: stepper(row(2), "right"),
+  };
+}
+
+export const WIDE_MENU = wideLayout();
+export const TALL_MENU = tallLayout();
+
+export function menuLayout(): MenuLayout {
+  return view().stage.portrait ? TALL_MENU : WIDE_MENU;
+}
+
+export function menuRect(page: MenuPage, item: MenuItem, layout: MenuLayout = menuLayout()): Rect {
+  return page === "credits" && item === "mastra" ? layout.linkRow : layout.rects[item];
 }
 
 export const PAGE_ROWS: Readonly<Record<MenuPage, readonly (readonly MenuItem[])[]>> = {
@@ -420,7 +511,7 @@ export class Menu {
     }
     this.hover(x, y);
     if (this.page === "settings" && (item === "music" || item === "sound")) {
-      const bar = VOLUME_BAR(MENU_RECTS[item]);
+      const bar = menuLayout().volumeBar(menuLayout().rects[item]);
       if (inRect(bar, x, y)) {
         return this.setVolume(item, Math.ceil(((x - bar.x) / bar.w) * VOLUME_STEPS));
       }

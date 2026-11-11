@@ -52,6 +52,7 @@ import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, pat
 
 export const RENDER_WIDTH = 480;
 export const RENDER_HEIGHT = 270;
+const BASE_FOV = 32;
 const PITCH = (48 * Math.PI) / 180;
 const CAMERA_DISTANCE = 380;
 const TRAIL_LENGTH = 10;
@@ -316,6 +317,8 @@ uniform vec2 texel;
 uniform float hurt;
 uniform float letterbox;
 uniform float dark;
+uniform vec2 vignetteShape;
+uniform vec2 sightShape;
 varying vec2 vUv;
 void main() {
   float edge = clamp((abs(vUv.y - 0.5) - 0.24) / 0.26, 0.0, 1.0);
@@ -326,9 +329,9 @@ void main() {
   color += texture2D(scene, vUv + vec2(texel.x * spread, 0.0)) * 0.18;
   color += texture2D(scene, vUv - vec2(texel.x * spread, 0.0)) * 0.18;
   vec2 centered = vUv - 0.5;
-  float vignette = smoothstep(0.85, 0.25, length(centered * vec2(1.0, 1.25)));
+  float vignette = smoothstep(0.85, 0.25, length(centered * vignetteShape));
   color.rgb *= mix(0.55, 1.05, vignette);
-  float sight = smoothstep(0.5, 0.18, length(centered * vec2(1.0, 1.6)));
+  float sight = smoothstep(0.5, 0.18, length(centered * sightShape));
   color.rgb *= mix(1.0, 0.12 + 0.88 * sight, dark);
   color.rgb = mix(color.rgb, color.rgb * vec3(1.06, 1.0, 0.9), 0.5);
   float border = max(smoothstep(0.42, 0.5, abs(centered.x)), smoothstep(0.40, 0.5, abs(centered.y)));
@@ -339,6 +342,11 @@ void main() {
   #include <colorspace_fragment>
 }
 `;
+
+export function viewFov(renderHeight: number): number {
+  const half = Math.tan((BASE_FOV * Math.PI) / 360) * (renderHeight / RENDER_HEIGHT);
+  return (Math.atan(half) * 360) / Math.PI;
+}
 
 function worldOf(tier: Tier): WorldId {
   return WORLDS.find((world) => world.tier === tier)?.id ?? "hustlr";
@@ -351,7 +359,7 @@ function hash(seed: number, x: number, y: number, salt: number): number {
 export class ArenaRenderer {
   readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
-  private readonly camera = new PerspectiveCamera(32, RENDER_WIDTH / RENDER_HEIGHT, 10, 2000);
+  private readonly camera = new PerspectiveCamera(BASE_FOV, RENDER_WIDTH / RENDER_HEIGHT, 10, 2000);
   private readonly target = new WebGLRenderTarget(RENDER_WIDTH, RENDER_HEIGHT, { magFilter: NearestFilter, minFilter: NearestFilter });
   private readonly postScene = new Scene();
   private readonly postCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -410,6 +418,8 @@ export class ArenaRenderer {
   private seed = 0;
   private readonly patches: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
   private readonly patchMaterials: Readonly<Record<GroundHazard, MeshBasicMaterial>>;
+  width = RENDER_WIDTH;
+  height = RENDER_HEIGHT;
   hurt = 0;
   dark = 0;
   letterbox = 0;
@@ -430,6 +440,8 @@ export class ArenaRenderer {
         hurt: { value: 0 },
         letterbox: { value: 0 },
         dark: { value: 0 },
+        vignetteShape: { value: [1, 1.25] },
+        sightShape: { value: [1, 1.6] },
       },
       depthTest: false,
       depthWrite: false,
@@ -888,6 +900,30 @@ export class ArenaRenderer {
     ring.age = 0;
     ring.life = 18;
     ring.radius = radius / SUB;
+  }
+
+  resize(width: number, height: number): void {
+    if (this.width === width && this.height === height) {
+      return;
+    }
+    this.width = width;
+    this.height = height;
+    this.renderer.setSize(width, height, false);
+    this.target.setSize(width, height);
+    this.camera.aspect = width / height;
+    this.camera.fov = viewFov(height);
+    this.camera.updateProjectionMatrix();
+    const uniforms = this.postMaterial.uniforms;
+    const tall = height > width;
+    if (uniforms["texel"]) {
+      uniforms["texel"].value = [1 / width, 1 / height];
+    }
+    if (uniforms["vignetteShape"]) {
+      uniforms["vignetteShape"].value = tall ? [1.25, 1] : [1, 1.25];
+    }
+    if (uniforms["sightShape"]) {
+      uniforms["sightShape"].value = tall ? [1.6, 1] : [1, 1.6];
+    }
   }
 
   project(x: number, y: number, height: number): { readonly x: number; readonly y: number } {

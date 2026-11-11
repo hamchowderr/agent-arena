@@ -80,9 +80,7 @@ async function boot(): Promise<void> {
   if (!worldCanvas || !hudCanvas || !hud) {
     return;
   }
-  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale, playBlip, postToXUrl, readReplayCode, replayCodeFrom, replayUrl } = await import("./game/arena-game");
-  hudCanvas.width = HUD_WIDTH;
-  hudCanvas.height = HUD_HEIGHT;
+  const { ArenaGame, detectLocale, fitView, hudBacking, playBlip, postToXUrl, readReplayCode, replayCodeFrom, replayUrl } = await import("./game/arena-game");
   const query = new URLSearchParams(window.location.search);
   const fixedSeed = Number(query.get("seed"));
   const wanted = query.get("lang");
@@ -138,6 +136,31 @@ async function boot(): Promise<void> {
       }
     },
   });
+  const stage = document.querySelector<HTMLElement>("#stage") ?? hudCanvas;
+  const safeProbe = document.querySelector<HTMLElement>("#safe");
+  let current = fitView(1, 1);
+  const resize = () => {
+    const box = stage.getBoundingClientRect();
+    const inset = safeProbe ? window.getComputedStyle(safeProbe) : null;
+    const read = (value: string | undefined) => Number.parseFloat(value ?? "") || 0;
+    current = fitView(box.width, box.height, {
+      top: read(inset?.paddingTop),
+      right: read(inset?.paddingRight),
+      bottom: read(inset?.paddingBottom),
+      left: read(inset?.paddingLeft),
+    });
+    game.resize(current);
+    const backing = hudBacking(box.width, box.height, window.devicePixelRatio || 1);
+    if (hudCanvas.width !== backing.width || hudCanvas.height !== backing.height) {
+      hudCanvas.width = backing.width;
+      hudCanvas.height = backing.height;
+    }
+    hud.setTransform(backing.width / current.width, 0, 0, backing.height / current.height, 0, 0);
+  };
+  resize();
+  window.addEventListener("resize", resize);
+  window.visualViewport?.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", () => window.setTimeout(resize, 120));
   await game.changeLocale(detectLocale([wanted, readSavedLocale(), ...navigator.languages]));
   const sharedCode = replayCodeFrom(window.location.hash);
   if (sharedCode !== null) {
@@ -151,14 +174,20 @@ async function boot(): Promise<void> {
   loadingNote?.remove();
   const toHud = (event: PointerEvent) => {
     const box = hudCanvas.getBoundingClientRect();
-    return { x: ((event.clientX - box.left) * HUD_WIDTH) / box.width, y: ((event.clientY - box.top) * HUD_HEIGHT) / box.height };
+    return { x: ((event.clientX - box.left) * current.width) / box.width, y: ((event.clientY - box.top) * current.height) / box.height };
   };
   hudCanvas.addEventListener("pointermove", (event) => {
     const point = toHud(event);
     game.touchMove(event.pointerId, point.x, point.y);
     game.pointer(point.x, point.y, false);
   });
+  if (window.matchMedia?.("(pointer: coarse)").matches) {
+    game.preferTouch();
+  }
   hudCanvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch") {
+      game.preferTouch();
+    }
     const point = toHud(event);
     if (event.pointerType !== "mouse" && game.touchStart(event.pointerId, point.x, point.y)) {
       hudCanvas.setPointerCapture(event.pointerId);
