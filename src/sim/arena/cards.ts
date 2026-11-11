@@ -1,4 +1,4 @@
-import { EVOLUTIONS, MAX_PASSIVES, MAX_WEAPONS, PASSIVES, WEAPONS, type PassiveId, type PassiveStat, type WeaponDefinition, type WeaponId } from "./content";
+import { EVOLUTIONS, MAX_PASSIVES, MERGES, MAX_WEAPONS, PASSIVES, WEAPONS, type PassiveId, type PassiveStat, type WeaponDefinition, type WeaponId, type WeaponKind } from "./content";
 import { BASE_CRIT, hallucinationPercent, maxHealth, statTotal, type ArenaState } from "./sim";
 
 export const CARDS_PER_DRAFT = 3;
@@ -36,6 +36,8 @@ type Candidate = (
   | { readonly kind: "passive"; readonly id: PassiveId; readonly toLevel: number }
 ) & { readonly weight: number; readonly priority: number };
 
+const AREA_KINDS: ReadonlySet<WeaponKind> = new Set(["mine", "chain"]);
+
 function weaponChanges(id: WeaponId, fromLevel: number, toLevel: number): CardChange[] {
   const levels = WEAPONS[id].levels;
   const after = levels[toLevel - 1];
@@ -55,10 +57,10 @@ function weaponChanges(id: WeaponId, fromLevel: number, toLevel: number): CardCh
     add("every", before?.cooldown, after.cooldown, "ticks");
   }
   add(WEAPONS[id].kind === "orbit" ? "blocks" : "shots", before?.count, after.count);
-  if (WEAPONS[id].kind === "beam" || WEAPONS[id].kind === "seeker") {
+  if (WEAPONS[id].kind === "beam" || WEAPONS[id].kind === "seeker" || WEAPONS[id].kind === "chain") {
     add("pierce", before?.pierce, after.pierce);
   }
-  if (WEAPONS[id].kind === "pulse" || WEAPONS[id].kind === "orbit") {
+  if (WEAPONS[id].kind === "pulse" || WEAPONS[id].kind === "orbit" || AREA_KINDS.has(WEAPONS[id].kind)) {
     add("radius", before?.radius, after.radius);
   }
   return changes;
@@ -84,7 +86,16 @@ function passiveChanges(state: ArenaState, id: PassiveId, fromLevel: number): Ca
 }
 
 function evolvedFrom(state: ArenaState, id: WeaponId): boolean {
-  return EVOLUTIONS.some((evolution) => evolution.weapon === id && state.weapons.some((weapon) => weapon.id === evolution.result));
+  const owns = (result: WeaponId) => state.weapons.some((weapon) => weapon.id === result);
+  return (
+    EVOLUTIONS.some((evolution) => evolution.weapon === id && owns(evolution.result)) ||
+    MERGES.some((merge) => merge.weapons.includes(id) && (owns(merge.result) || EVOLUTIONS.some((evolution) => evolution.weapon === merge.result && owns(evolution.result))))
+  );
+}
+
+function maxed(state: ArenaState, id: WeaponId): boolean {
+  const owned = state.weapons.find((weapon) => weapon.id === id);
+  return owned !== undefined && owned.level >= WEAPONS[id].levels.length;
 }
 
 export function readyEvolution(state: ArenaState): Card | null {
@@ -93,6 +104,11 @@ export function readyEvolution(state: ArenaState): Card | null {
     const alreadyEvolved = state.weapons.some((weapon) => weapon.id === evolution.result);
     if (!alreadyEvolved && owned && owned.level >= WEAPONS[evolution.weapon].levels.length && (state.passives.get(evolution.passive) ?? 0) > 0) {
       return { kind: "evolve", id: evolution.result, toLevel: 1, recommended: true, changes: weaponChanges(evolution.result, 0, 1) };
+    }
+  }
+  for (const merge of MERGES) {
+    if (merge.weapons.every((id) => maxed(state, id)) && !state.weapons.some((weapon) => weapon.id === merge.result)) {
+      return { kind: "evolve", id: merge.result, toLevel: 1, recommended: true, changes: weaponChanges(merge.result, 0, 1) };
     }
   }
   return null;

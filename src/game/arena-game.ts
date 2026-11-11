@@ -985,6 +985,26 @@ export class ArenaGame {
             );
           }
           break;
+        case "chain":
+          this.renderer.tools.chain(event.weapon, event.points);
+          break;
+        case "mine":
+          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "durableWorkflow" ? "#ffcd75" : "#ef7d57");
+          this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.5), "#ffffff");
+          if (event.order === 0 || this.frameCount % 2 === 0) {
+            this.effects.spawn("pow", event.x, event.y);
+          }
+          this.renderer.shake = Math.max(this.renderer.shake, 0.22);
+          break;
+        case "splash":
+          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "coderSubagent" ? "#ef7d57" : "#ffcd75");
+          break;
+        case "reduced":
+          this.renderer.pulse(event.x, event.y, event.radius, "#ffcd75");
+          this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.6), "#ffffff");
+          this.effects.spawn("pow", event.x, event.y);
+          this.renderer.shake = Math.max(this.renderer.shake, 0.3);
+          break;
         case "levelUp":
           this.effects.spawn("burst", this.state.player.x, this.state.player.y);
           this.tell(tipScene(currentWorld(this.state).id, "firstPick"));
