@@ -1,6 +1,7 @@
 import type { RegularKind, WorldId } from "../sim/arena/content";
 import type { Tier } from "../sim/tiers";
 import { deathFrames, hurtFrames, squash, walkFrames, type DeathSheet } from "./animate";
+import { TRANSPARENT } from "./palette";
 import type { Sprite } from "./sprites";
 import { eliteSprite } from "./arena-sprites";
 import { enemyActs, enemyPoses, enemySprite, wallSprite } from "./world-enemies";
@@ -26,6 +27,12 @@ export const WALK_FPS: Readonly<Record<RegularKind, number>> = {
 };
 
 const WINDUP_CROUCH: readonly number[] = [1, 2];
+
+function knockedFlat(sprite: Sprite): Sprite {
+  const height = sprite.length;
+  const width = sprite[0]?.length ?? 0;
+  return Array.from({ length: width }, (_, x) => Array.from({ length: height }, (_, y) => sprite[height - 1 - y]?.[x] ?? TRANSPARENT).join(""));
+}
 
 function bellyUp(sprite: Sprite): Sprite {
   return [...sprite].reverse();
@@ -58,7 +65,7 @@ export function bossClips(world: WorldId, faction: string): EnemyClips {
   const idle = IDLE_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: frame, angry: false }), rows)));
   const windup = WINDUP_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 4 + frame, angry: true }), rows)));
   const impact = IMPACT_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 6 - frame * 2, angry: true }), rows)));
-  return { moving: [...idle, ...windup, ...impact, ...hurtFrames(idle[0] ?? [])], death: deathFrames(paint(bossSprite(world))) };
+  return { moving: [...idle, ...windup, ...impact, ...hurtFrames(idle[0] ?? [])], death: deathFrames(paint(knockedFlat(bossSprite(world, { flicker: 0, angry: false, dead: true })))) };
 }
 
 export function agentClips(tier: Tier): ColorGrid[] {

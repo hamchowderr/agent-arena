@@ -21,6 +21,9 @@ const RAMP_COLORS = {
   fur: ["#f4ece4", "#ccc0b4", "#a0948a", "#6c605c", "#2a2224"],
   coral: ["#ffe0d0", "#ffaa98", "#f57a68", "#b84a4a", "#4a1420"],
   tan: ["#fff0d8", "#f0c890", "#d09a60", "#9a6440", "#3a2018"],
+  umber: ["#e0a878", "#b87850", "#8a5434", "#5e3420", "#22100a"],
+  peach: ["#fff4ea", "#ffdcc4", "#f4b898", "#c07a68", "#4a2228"],
+  navy: ["#a8b8e8", "#6878b8", "#3e4a8a", "#28305e", "#0e1028"],
 } as const;
 
 export type RampName = keyof typeof RAMP_COLORS;
