@@ -1,9 +1,9 @@
-import { WORLDS, type EnemyKind, type RegularKind } from "../sim/arena/content";
+import { isEvolvedWeapon, WORLDS, type EnemyKind, type RegularKind, type WeaponId } from "../sim/arena/content";
 import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, ENEMY_SHOT, eliteSprite, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
 import { enemySprite, wallSprite } from "./world-enemies";
 import { bossSprite } from "./bosses";
 import { agentClips, enemyClips } from "./clips";
-import { WEAPON_STAGES, weaponSprite } from "./weapon-art";
+import { shotFrames, WEAPON_STAGES, weaponSprite } from "./weapon-art";
 import { bossClips } from "./clips";
 import { ENEMY_ART_TIER, RENDER_SCALE, type ArtTier } from "./art-rules";
 import { rgbOf } from "./audit";
@@ -224,6 +224,26 @@ export function evolutionSheet(): Picture {
     [...WEAPON_STAGES.map((stage) => paint(weaponSprite("shell", stage))), paint(weaponSprite("ciPipeline", 0))],
   ];
   return framesSheet(rows, [WORLD_LOOKS[1].ground[0], WORLD_LOOKS[1].ground[2]], 6);
+}
+
+export const SHOT_ROWS: readonly (readonly WeaponId[])[] = [
+  ["prompt"],
+  ["webSearch", "ragSearch"],
+  ["codeExec", "codeInterpreter"],
+  ["browser", "computerUse"],
+  ["shell", "ciPipeline"],
+  ["voice", "realtimeVoice"],
+  ["subagents", "coderSubagent", "agentNetwork", "durableAgentTeam"],
+  ["fileReader", "mapReduce"],
+  ["apiCall", "mcpServer"],
+  ["scheduledJob", "durableWorkflow"],
+];
+
+export function shotSheet(): Picture {
+  const faction = WORLD_LOOKS[1].faction;
+  const stagesOf = (weapon: WeaponId) => (isEvolvedWeapon(weapon) ? [0 as const] : WEAPON_STAGES);
+  const rows = SHOT_ROWS.map((row) => row.flatMap((weapon) => stagesOf(weapon).flatMap((stage) => shotFrames(weapon, stage).map((frame) => shade([frame], faction)))));
+  return framesSheet(rows, WORLDS.map((world) => WORLD_LOOKS[world.tier].ground[0]), 5);
 }
 
 function framesSheet(rows: readonly (readonly ColorGrid[])[], grounds: readonly string[], zoom: number): Picture {

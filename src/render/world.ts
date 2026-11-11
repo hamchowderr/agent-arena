@@ -33,19 +33,20 @@ import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, B
 import { ENEMY_ART_TIER, RENDER_SCALE } from "../art/art-rules";
 import { CHEST_SPRITES, chestKind, TOKEN_SPRITES, tokenTier, type ChestKind, type TokenTier } from "../art/loot";
 import { MARK_SIZES, MARK_WIDTH, markFrameIndex, markFrames, SPARK_BY_WEAPON, SPARK_FRAMES, sparkFrameIndex, sparkFrames, type MarkSize, type SparkStyle } from "../art/impacts";
-import { WEAPON_STAGES, weaponSprite, weaponStage, type WeaponStage } from "../art/weapon-art";
+import { SHOT_FRAMES, SHOT_GLOW, shotFrames, shotPlace, WEAPON_STAGES, weaponStage, type WeaponStage } from "../art/weapon-art";
+import { shade } from "../art/shade";
 import { BOSS_CLIP_START, bossClips, enemyClips, WALK_FPS, wallClips } from "../art/clips";
 import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
 import type { Sprite } from "../art/sprites";
 import { agentClips } from "../art/clips";
 import { agentBody } from "../art/agent";
-import { isEvolvedWeapon, REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
+import { isEvolvedWeapon, REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WeaponKind, type WorldId } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
 import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, ownedStats, seesThroughFakes, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
-import { dronePhase } from "../sim/arena/tools";
+import { dronePhase, rayEnd } from "../sim/arena/tools";
 import { CODER_DRONE } from "../art/tool-art";
-import { ToolFx } from "./tool-fx";
+import { mineIsHot, ToolFx } from "./tool-fx";
 import type { Tier } from "../sim/tiers";
 import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, patchTexture, pixelTexture, spriteImage, type AtlasImage, type PatchLook } from "./textures";
 
@@ -93,6 +94,22 @@ const WINDUP_TICKS_PER_FRAME = 4;
 const PLAYER_RING_RADIUS = 13;
 const MAX_HAZARD_SPRITES = 40;
 const HAZARD_PIXELS = 13;
+const SHOT_FRAME_TICKS = 6;
+const WAVE_ARCS = 8;
+const WAVE_LIFE = 22;
+const SHOT_CAPACITY: Readonly<Record<WeaponKind, number>> = {
+  bolt: 200,
+  beam: 100,
+  homing: 100,
+  seeker: 120,
+  orbit: 16,
+  bomb: 40,
+  brick: 40,
+  pulse: WAVE_ARCS * 6,
+  laser: 16,
+  chain: 80,
+  mine: 40,
+};
 const BIG_HAZARD_SCALE = 18 / 13;
 const HAZARD_BLINK_TICKS = 40;
 const FLASH_COLOR = new Color(4, 4, 4);
@@ -204,6 +221,14 @@ class SpriteBatch {
     (this.mesh.material as MeshBasicMaterial).map?.dispose();
     (this.mesh.material as MeshBasicMaterial).dispose();
   }
+}
+
+interface Wave {
+  readonly x: number;
+  readonly z: number;
+  readonly radius: number;
+  readonly weapon: WeaponId;
+  age: number;
 }
 
 interface Spark {
@@ -374,6 +399,7 @@ export class ArenaRenderer {
   private readonly bigHazards: SpriteBatch;
   private readonly props: SpriteBatch[];
   private readonly rings: Ring[] = [];
+  private readonly waves: Wave[] = [];
   readonly tools: ToolFx;
   private readonly heading = new Quaternion();
   private readonly up = new Vector3(0, 1, 0);
@@ -540,36 +566,29 @@ export class ArenaRenderer {
   }
 
   private buildArms(): void {
-    const looks: readonly { readonly weapon: WeaponId; readonly stages: readonly WeaponStage[]; readonly flat: boolean; readonly capacity: number; readonly glow: string }[] = [
-      { weapon: "prompt", stages: WEAPON_STAGES, flat: false, capacity: 200, glow: "#73eff7" },
-      { weapon: "webSearch", stages: WEAPON_STAGES, flat: true, capacity: 100, glow: "#41a6f6" },
-      { weapon: "ragSearch", stages: [0], flat: true, capacity: 100, glow: "#a7f070" },
-      { weapon: "subagents", stages: WEAPON_STAGES, flat: false, capacity: 100, glow: "#73eff7" },
-      { weapon: "codeExec", stages: WEAPON_STAGES, flat: false, capacity: 40, glow: "#ef7d57" },
-      { weapon: "codeInterpreter", stages: [0], flat: false, capacity: 40, glow: "#ffcd75" },
-      { weapon: "browser", stages: WEAPON_STAGES, flat: false, capacity: 16, glow: "#73eff7" },
-      { weapon: "computerUse", stages: [0], flat: false, capacity: 16, glow: "#73eff7" },
-      { weapon: "shell", stages: WEAPON_STAGES, flat: false, capacity: 40, glow: "#94b0c2" },
-      { weapon: "ciPipeline", stages: [0], flat: false, capacity: 40, glow: "#ffcd75" },
-      { weapon: "coderSubagent", stages: WEAPON_STAGES, flat: false, capacity: 60, glow: "#ef7d57" },
-      { weapon: "agentNetwork", stages: [0], flat: false, capacity: 100, glow: "#41a6f6" },
-      { weapon: "durableAgentTeam", stages: [0], flat: false, capacity: 120, glow: "#ffcd75" },
-    ];
-    for (const look of looks) {
-      for (const stage of look.stages) {
-        const sprite = weaponSprite(look.weapon, stage);
-        const key = `${look.weapon}:${stage}`;
-        const width = sprite[0]?.length ?? 1;
-        const evolved = look.stages.length === 1;
+    const faction = WORLD_LOOKS[this.tier].faction;
+    for (const weapon of Object.keys(WEAPONS) as WeaponId[]) {
+      const place = shotPlace(weapon);
+      const evolved = isEvolvedWeapon(weapon);
+      const stages: readonly WeaponStage[] = evolved ? [0] : WEAPON_STAGES;
+      const capacity = SHOT_CAPACITY[WEAPONS[weapon].kind];
+      for (const stage of stages) {
+        const key = `${weapon}:${stage}`;
+        const image = atlasImage(shotFrames(weapon, stage).map((frame) => shade([frame], faction)));
+        const flat = place === "flat" || place === "wave";
+        const batch = new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width, image.height, capacity, flat, { frames: image.frames, sink: 0, lead: place === "flat" ? 2 : undefined });
+        this.arms.set(key, place === "ground" ? batch : this.onTop(batch));
+        if (place !== "flying" && place !== "flat") {
+          continue;
+        }
         const boost = evolved ? 1.6 : 1 + stage * 0.3;
         const alpha = Math.min(0.85, 0.45 + stage * 0.12 + (evolved ? 0.25 : 0));
-        if (look.flat) {
-          this.arms.set(key, this.onTop(this.leadBatch([sprite], look.capacity)));
-          this.armGlows.set(key, this.glowBatch(width * 1.4, 16 * boost, look.glow, alpha, look.capacity, 8));
-        } else {
-          this.arms.set(key, this.onTop(this.batch([sprite], 1, look.capacity, false)));
-          this.armGlows.set(key, this.glowBatch(width * 2 * boost, width * 1.5 * boost, look.glow, alpha, look.capacity));
-        }
+        this.armGlows.set(
+          key,
+          place === "flat"
+            ? this.glowBatch(image.width * 1.4, 16 * boost, SHOT_GLOW[weapon], alpha, capacity, 8)
+            : this.glowBatch(image.width * 2 * boost, image.width * 1.5 * boost, SHOT_GLOW[weapon], alpha, capacity),
+        );
       }
     }
   }
@@ -583,11 +602,6 @@ export class ArenaRenderer {
     batch.mesh.renderOrder = 11;
     (batch.mesh.material as MeshBasicMaterial).depthTest = false;
     return batch;
-  }
-
-  private leadBatch(layers: readonly Sprite[], capacity: number): SpriteBatch {
-    const image = spriteImage(layers);
-    return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width, image.height, capacity, true, { frames: 1, sink: 0, lead: 2 });
   }
 
   private glowBatch(width: number, height: number, color: string, alpha: number, capacity: number, lead?: number): SpriteBatch {
@@ -833,6 +847,35 @@ export class ArenaRenderer {
     }
   }
 
+  private syncWaves(tick: number): void {
+    for (let index = this.waves.length - 1; index >= 0; index -= 1) {
+      const wave = this.waves[index];
+      if (!wave) {
+        continue;
+      }
+      wave.age += 1;
+      if (wave.age > WAVE_LIFE) {
+        this.waves.splice(index, 1);
+        continue;
+      }
+      const progress = Math.min(1, (wave.age / WAVE_LIFE) * 1.3);
+      const reach = wave.radius * (1 - (1 - progress) ** 2);
+      const batch = this.arms.get(this.arm(wave.weapon));
+      for (let arc = 0; arc < WAVE_ARCS; arc += 1) {
+        const angle = (arc / WAVE_ARCS) * Math.PI * 2 + wave.age * 0.02;
+        this.heading.setFromAxisAngle(this.up, -angle);
+        batch?.add(wave.x + Math.cos(angle) * reach, 1, wave.z + Math.sin(angle) * reach, false, this.heading, (Math.floor(tick / SHOT_FRAME_TICKS) + arc) % SHOT_FRAMES);
+      }
+    }
+  }
+
+  wave(weapon: WeaponId, x: number, y: number, radius: number): void {
+    if (this.waves.length >= 6) {
+      this.waves.shift();
+    }
+    this.waves.push({ x: x / SUB, z: y / SUB, radius: radius / SUB, weapon, age: 0 });
+  }
+
   pulse(x: number, y: number, radius: number, color: string): void {
     const ring = this.rings.find((candidate) => !candidate.mesh.visible) ?? this.rings[0];
     if (!ring) {
@@ -973,22 +1016,39 @@ export class ArenaRenderer {
       batch.begin();
     }
     this.hallucinations.begin();
-    for (const projectile of state.projectiles) {
+    const shotFrame = (index: number) => (Math.floor(state.tick / SHOT_FRAME_TICKS) + index) % SHOT_FRAMES;
+    state.projectiles.forEach((projectile, index) => {
       const x = projectile.x / SUB;
       const z = projectile.y / SUB;
       this.heading.setFromAxisAngle(this.up, -Math.atan2(projectile.vy, projectile.vx));
       if (projectile.hallucinated) {
         this.hallucinations.add(x, 6, z, false, this.heading);
-        continue;
+        return;
       }
       const key = this.arm(projectile.weapon);
-      const flat = projectile.kind === "beam" || projectile.kind === "homing";
+      const flat = shotPlace(projectile.weapon) === "flat";
       const lift = flat ? 6 : projectile.kind === "bomb" ? 4 + Math.min(projectile.life, 14) : 4;
-      this.arms.get(key)?.add(x, lift, z, false, flat ? this.heading : null);
+      this.arms.get(key)?.add(x, lift, z, false, flat ? this.heading : null, shotFrame(index));
       this.armGlows.get(key)?.add(x, 0.7, z, false, flat ? this.heading : null);
       this.shadows.add(x, z, 5);
-    }
+    });
     this.hallucinations.commit();
+    state.rays.forEach((ray, index) => {
+      if (ray.hallucinated) {
+        return;
+      }
+      const end = rayEnd(state, ray);
+      this.arms.get(this.arm(ray.weapon))?.add(end.x / SUB, 6, end.y / SUB, false, null, shotFrame(index));
+    });
+    this.tools.hops().forEach((hop, index) => {
+      this.arms.get(this.arm(hop.weapon))?.add(hop.x, 6, hop.z, false, null, shotFrame(index));
+    });
+    state.mines.forEach((mine) => {
+      const hot = mineIsHot(mine.fuse);
+      this.arms.get(this.arm(mine.weapon))?.add(mine.x / SUB, 0, mine.y / SUB, false, null, hot ? 1 : 0);
+      this.shadows.add(mine.x / SUB, mine.y / SUB, 6);
+    });
+    this.syncWaves(state.tick);
 
     this.shots.begin();
     this.seenFakes.begin();
@@ -1041,7 +1101,7 @@ export class ArenaRenderer {
       const count = ownedStats(state, owned).count;
       for (let index = 0; index < count; index += 1) {
         const blade = orbitPosition(state, owned, index);
-        this.arms.get(key)?.add(blade.x / SUB, 4, blade.y / SUB);
+        this.arms.get(key)?.add(blade.x / SUB, 4, blade.y / SUB, false, null, shotFrame(index));
         this.armGlows.get(key)?.add(blade.x / SUB, 0.7, blade.y / SUB);
         this.shadows.add(blade.x / SUB, blade.y / SUB, 7);
       }

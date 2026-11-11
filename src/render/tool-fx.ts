@@ -1,12 +1,10 @@
 import { AdditiveBlending, CanvasTexture, Mesh, MeshBasicMaterial, NearestFilter, PlaneGeometry, RingGeometry, SRGBColorSpace, type Scene } from "three";
 import { PALETTE, type PaletteKey } from "../art/palette";
-import { BOLT_PROFILES, DURABLE_MINE, DURABLE_MINE_HOT, MINE, MINE_HOT, RAY_PROFILES, type BoltLook, type RayLook } from "../art/tool-art";
-import type { Sprite } from "../art/sprites";
+import { BOLT_PROFILES, RAY_PROFILES, type BoltLook, type RayLook } from "../art/tool-art";
 import type { WeaponId } from "../sim/arena/content";
 import { SUB } from "../sim/arena/math";
 import type { ArenaState } from "../sim/arena/sim";
 import { RAY_TICKS, rayEnd } from "../sim/arena/tools";
-import { pixelTexture, spriteImage } from "./textures";
 
 const MAX_RAYS = 16;
 const MAX_BOLT_SEGMENTS = 160;
@@ -16,12 +14,22 @@ const BOLT_JAGS = 6;
 const BOLT_REJAG_EVERY = 3;
 const RAY_LIFT = 6;
 const BOLT_LIFT = 7;
-const MINE_LIFT = 0.45;
 const MINE_HOT_TICKS = 24;
 const RAY_OPEN_TICKS = 4;
 const RAY_CLOSE_TICKS = 8;
 
+export function mineIsHot(fuse: number): boolean {
+  return fuse <= MINE_HOT_TICKS && Math.floor(fuse / (fuse < 10 ? 2 : 4)) % 2 === 0;
+}
+
+export interface Hop {
+  readonly weapon: WeaponId;
+  readonly x: number;
+  readonly z: number;
+}
+
 interface Bolt {
+  readonly weapon: WeaponId;
   readonly look: BoltLook;
   readonly points: readonly number[];
   age: number;
@@ -75,13 +83,10 @@ export class ToolFx {
   private readonly rays: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
   private readonly rayGlows: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
   private readonly segments: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
-  private readonly mines: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
   private readonly marks: Mesh<RingGeometry, MeshBasicMaterial>[] = [];
   private readonly rayMaterials: Readonly<Record<RayLook, MeshBasicMaterial>>;
   private readonly rayGlowMaterials: Readonly<Record<RayLook, MeshBasicMaterial>>;
   private readonly boltMaterials: Readonly<Record<BoltLook, MeshBasicMaterial>>;
-  private readonly mineMaterials: Readonly<Record<"plain" | "hot" | "durable" | "durableHot", MeshBasicMaterial>>;
-  private readonly mineSizes: Readonly<Record<"plain" | "hot" | "durable" | "durableHot", number>>;
   private readonly bolts: Bolt[] = [];
 
   constructor(scene: Scene) {
@@ -91,9 +96,6 @@ export class ToolFx {
       mapReduce: new MeshBasicMaterial({ color: PALETTE.y, transparent: true, opacity: 0.12, depthWrite: false, depthTest: false, blending: AdditiveBlending, toneMapped: false }),
     };
     this.boltMaterials = { apiCall: band(bandTexture(BOLT_PROFILES.apiCall)), mcpServer: band(bandTexture(BOLT_PROFILES.mcpServer)) };
-    const mineMaterial = (sprite: Sprite) => new MeshBasicMaterial({ map: pixelTexture(spriteImage([sprite]).canvas), transparent: true, alphaTest: 0.5, depthWrite: false, toneMapped: false });
-    this.mineMaterials = { plain: mineMaterial(MINE), hot: mineMaterial(MINE_HOT), durable: mineMaterial(DURABLE_MINE), durableHot: mineMaterial(DURABLE_MINE_HOT) };
-    this.mineSizes = { plain: MINE[0]?.length ?? 13, hot: MINE_HOT[0]?.length ?? 13, durable: DURABLE_MINE[0]?.length ?? 13, durableHot: DURABLE_MINE_HOT[0]?.length ?? 13 };
     const plane = flatPlane();
     for (let index = 0; index < MAX_RAYS; index += 1) {
       const glow = new Mesh(plane, this.rayGlowMaterials.fileReader);
@@ -122,11 +124,6 @@ export class ToolFx {
       mark.visible = false;
       scene.add(mark);
       this.marks.push(mark);
-      const mine = new Mesh(plane, this.mineMaterials.plain);
-      mine.renderOrder = 3;
-      mine.visible = false;
-      scene.add(mine);
-      this.mines.push(mine);
     }
   }
 
@@ -134,7 +131,17 @@ export class ToolFx {
     if (this.bolts.length > 24) {
       this.bolts.shift();
     }
-    this.bolts.push({ look: boltLook(weapon), points, age: 0, jags: [] });
+    this.bolts.push({ weapon, look: boltLook(weapon), points, age: 0, jags: [] });
+  }
+
+  hops(): Hop[] {
+    return this.bolts.flatMap((bolt) => {
+      const hops: Hop[] = [];
+      for (let index = 2; index + 1 < bolt.points.length; index += 2) {
+        hops.push({ weapon: bolt.weapon, x: (bolt.points[index] ?? 0) / SUB, z: (bolt.points[index + 1] ?? 0) / SUB });
+      }
+      return hops;
+    });
   }
 
   sync(state: ArenaState): void {
@@ -239,24 +246,13 @@ export class ToolFx {
   }
 
   private syncMines(state: ArenaState): void {
-    this.mines.forEach((mesh, index) => {
-      const mark = this.marks[index];
+    this.marks.forEach((mark, index) => {
       const mine = state.mines[index];
-      if (!mine || !mark) {
-        mesh.visible = false;
-        if (mark) {
-          mark.visible = false;
-        }
+      if (!mine) {
+        mark.visible = false;
         return;
       }
-      const durable = mine.weapon === "durableWorkflow";
-      const hot = mine.fuse <= MINE_HOT_TICKS && Math.floor(mine.fuse / (mine.fuse < 10 ? 2 : 4)) % 2 === 0;
-      const look = durable ? (hot ? "durableHot" : "durable") : hot ? "hot" : "plain";
-      const size = this.mineSizes[look];
-      mesh.visible = true;
-      mesh.material = this.mineMaterials[look];
-      mesh.position.set(mine.x / SUB, MINE_LIFT, mine.y / SUB);
-      mesh.scale.set(size, 1, size);
+      const hot = mineIsHot(mine.fuse);
       const warning = Math.max(0, 1 - mine.fuse / (MINE_HOT_TICKS * 2));
       mark.visible = warning > 0;
       mark.position.x = mine.x / SUB;

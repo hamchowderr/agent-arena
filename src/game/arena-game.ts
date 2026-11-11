@@ -2,6 +2,7 @@ import { setMusic } from "../audio/music";
 import { cueFor } from "../audio/score";
 import { Effects } from "../render/effects";
 import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
+import { SHOT_GLOW } from "../art/weapon-art";
 import { WORLDS, type SignatureWave } from "../sim/arena/content";
 import type { StagedEvent } from "../sim/arena/formations";
 import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
@@ -1175,9 +1176,10 @@ export class ArenaGame {
           }
           break;
         case "pulse":
-          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "realtimeVoice" ? "#ffcd75" : "#9ff6ff");
+          this.renderer.pulse(event.x, event.y, event.radius, SHOT_GLOW[event.weapon]);
+          this.renderer.wave(event.weapon, event.x, event.y, event.radius);
           if (event.weapon === "realtimeVoice") {
-            this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.6), "#ffffff");
+            this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.6), "#ffcd75");
           }
           break;
         case "interrupted":
@@ -1195,7 +1197,7 @@ export class ArenaGame {
           this.renderer.shake = Math.max(this.renderer.shake, 0.22);
           break;
         case "splash":
-          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "coderSubagent" ? "#ef7d57" : "#ffcd75");
+          this.renderer.pulse(event.x, event.y, event.radius, SHOT_GLOW[event.weapon]);
           break;
         case "reduced":
           this.renderer.pulse(event.x, event.y, event.radius, "#ffcd75");
