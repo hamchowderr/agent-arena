@@ -1410,3 +1410,74 @@ export function inside(rect: Rect, x: number, y: number): boolean {
     x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h
   );
 }
+
+export interface BossEntranceView {
+  readonly label: string;
+  readonly name: string;
+  readonly company: string;
+  readonly portrait: HTMLCanvasElement;
+  readonly age: number;
+}
+
+export const ENTRANCE_SECONDS = 2.2;
+export const ENTRANCE_SLAM_SECONDS = 0.42;
+const ENTRANCE_RED = "#ff4d5e";
+
+export function bossEntranceAlpha(age: number): number {
+  const fadeIn = Math.min(1, age / 0.12);
+  const fadeOut = Math.min(1, Math.max(0, (ENTRANCE_SECONDS - age) / 0.35));
+  return Math.max(0, Math.min(fadeIn, fadeOut));
+}
+
+export function drawBossEntrance(context: CanvasRenderingContext2D, view: BossEntranceView): void {
+  const alpha = bossEntranceAlpha(view.age);
+  if (alpha <= 0) {
+    return;
+  }
+  const slide = 1 - (1 - Math.min(1, view.age / 0.3)) ** 3;
+  const slam = Math.min(1, Math.max(0, (view.age - 0.2) / (ENTRANCE_SLAM_SECONDS - 0.2)));
+  const band = { x: 0, y: 150, w: HUD_WIDTH, h: 190 };
+  context.save();
+  context.globalAlpha = alpha;
+  context.fillStyle = "rgba(18, 6, 12, 0.9)";
+  context.fillRect(band.x, band.y, band.w, band.h);
+  context.fillStyle = ENTRANCE_RED;
+  const stripe = Math.round((1 - slide) * HUD_WIDTH);
+  context.fillRect(-stripe, band.y, HUD_WIDTH, 6);
+  context.fillRect(stripe, band.y + band.h - 6, HUD_WIDTH, 6);
+  for (let x = -40 + ((view.age * 160) % 40); x < HUD_WIDTH; x += 40) {
+    context.fillStyle = "rgba(255, 77, 94, 0.08)";
+    context.beginPath();
+    context.moveTo(x, band.y + 6);
+    context.lineTo(x + 20, band.y + 6);
+    context.lineTo(x + 20 - 60, band.y + band.h - 6);
+    context.lineTo(x - 60, band.y + band.h - 6);
+    context.fill();
+  }
+  const box = 150;
+  const boxX = HUD_WIDTH / 2 - 380 - Math.round((1 - slide) * 500);
+  const boxY = band.y + (band.h - box) / 2;
+  context.fillStyle = "#2a1420";
+  context.fillRect(boxX, boxY, box, box);
+  context.imageSmoothingEnabled = false;
+  const art = view.portrait;
+  const scale = Math.max(1, Math.floor((box - 12) / Math.max(art.width, art.height)));
+  const w = art.width * scale;
+  const h = art.height * scale;
+  context.drawImage(art, boxX + (box - w) / 2, boxY + box - 6 - h, w, h);
+  context.strokeStyle = ENTRANCE_RED;
+  context.lineWidth = 4;
+  context.strokeRect(boxX + 2, boxY + 2, box - 4, box - 4);
+  const textX = boxX + box + 36 + Math.round((1 - slide) * 900);
+  text(context, view.label, textX, band.y + 30, 20, ENTRANCE_RED);
+  const nameSize = Math.round(58 * (1 + 0.7 * (1 - slam)));
+  context.globalAlpha = alpha * (0.35 + 0.65 * slam);
+  text(context, view.name, textX, band.y + 62 - Math.round((nameSize - 58) / 2), nameSize, INK);
+  context.globalAlpha = alpha;
+  text(context, view.company, textX, band.y + 136, 24, "#ffb3b3");
+  if (slam >= 1 && view.age < ENTRANCE_SLAM_SECONDS + 0.12) {
+    context.fillStyle = "rgba(255, 255, 255, 0.25)";
+    context.fillRect(band.x, band.y, band.w, band.h);
+  }
+  context.restore();
+}
