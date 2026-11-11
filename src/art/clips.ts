@@ -63,8 +63,8 @@ const IMPACT_SQUASH: readonly number[] = [-5, -2, 0];
 export function bossClips(world: WorldId, faction: string): EnemyClips {
   const paint = (sprite: readonly string[]) => shade([sprite], faction);
   const idle = IDLE_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: frame, angry: false }), rows)));
-  const windup = WINDUP_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 4 + frame, angry: true }), rows)));
-  const impact = IMPACT_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 6 - frame * 2, angry: true }), rows)));
+  const windup = WINDUP_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 4 + frame, angry: true, pose: "windup" }), rows)));
+  const impact = IMPACT_SQUASH.map((rows, frame) => paint(squash(bossSprite(world, { flicker: 6 - frame * 2, angry: true, pose: "impact" }), rows)));
   return { moving: [...idle, ...windup, ...impact, ...hurtFrames(idle[0] ?? [])], death: deathFrames(paint(knockedFlat(bossSprite(world, { flicker: 0, angry: false, dead: true })))) };
 }
 
