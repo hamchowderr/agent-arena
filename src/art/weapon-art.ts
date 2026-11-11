@@ -103,6 +103,7 @@ export function weaponSprite(weapon: WeaponId, stage: WeaponStage): Sprite {
     case "ciPipeline":
       return outlined(outlined(BRICK, "y"), "o");
     case "voice":
+    case "realtimeVoice":
     case "fileReader":
     case "mapReduce":
     case "apiCall":

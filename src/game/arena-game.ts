@@ -1175,12 +1175,13 @@ export class ArenaGame {
           }
           break;
         case "pulse":
-          this.renderer.pulse(
-            event.x,
-            event.y,
-            event.radius,
-            "#9ff6ff",
-          );
+          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "realtimeVoice" ? "#ffcd75" : "#9ff6ff");
+          if (event.weapon === "realtimeVoice") {
+            this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.6), "#ffffff");
+          }
+          break;
+        case "interrupted":
+          this.renderer.pulse(event.x, event.y, 6 * SUB, "#ffcd75");
           break;
         case "chain":
           this.renderer.tools.chain(event.weapon, event.points);

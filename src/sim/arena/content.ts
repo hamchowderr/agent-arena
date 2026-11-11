@@ -20,6 +20,7 @@ export interface WeaponDefinition {
   readonly length?: number;
   readonly splash?: number;
   readonly reduce?: number;
+  readonly interrupts?: true;
 }
 
 const level = (damage: number, cooldown: number, count: number, pierce: number, radius: number): WeaponLevel => ({
@@ -97,6 +98,15 @@ export const WEAPONS = {
     evolved: true,
     knockback: 140,
     levels: [level(24, 10, 6, 99, 40)],
+  },
+  realtimeVoice: {
+    kind: "pulse",
+    tier: 2,
+    speed: 0,
+    evolved: true,
+    interrupts: true,
+    knockback: 120,
+    levels: [level(36, 44, 1, 99, 66)],
   },
   ciPipeline: {
     kind: "brick",
@@ -256,6 +266,7 @@ export const EVOLUTIONS: readonly Evolution[] = [
   { weapon: "codeExec", passive: "sandbox", result: "codeInterpreter" },
   { weapon: "browser", passive: "planner", result: "computerUse" },
   { weapon: "shell", passive: "autoTestHook", result: "ciPipeline" },
+  { weapon: "voice", passive: "conversationBuffer", result: "realtimeVoice" },
   { weapon: "fileReader", passive: "compaction", result: "mapReduce" },
   { weapon: "apiCall", passive: "mcpConnector", result: "mcpServer" },
   { weapon: "scheduledJob", passive: "loopRunner", result: "durableWorkflow" },

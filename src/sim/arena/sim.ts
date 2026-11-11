@@ -298,6 +298,7 @@ export type ArenaEvent =
   | { readonly kind: "hurt"; readonly amount: number; readonly source: EnemyKind }
   | { readonly kind: "hallucinated"; readonly x: number; readonly y: number }
   | { readonly kind: "pulse"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
+  | { readonly kind: "interrupted"; readonly x: number; readonly y: number }
   | { readonly kind: "levelUp"; readonly level: number }
   | { readonly kind: "bossArrives"; readonly world: number }
   | { readonly kind: "bossDown"; readonly world: number; readonly x: number; readonly y: number }
@@ -1352,8 +1353,20 @@ function bladeTouching(state: ArenaState, x: number, y: number): boolean {
   return false;
 }
 
+function interruptShots(state: ArenaState, radius: number): void {
+  for (const shot of state.shots) {
+    if (shot.life > 0 && distanceSquared(state.player.x, state.player.y, shot.x, shot.y) <= radius * radius) {
+      shot.life = 0;
+      state.events.push({ kind: "interrupted", x: shot.x, y: shot.y });
+    }
+  }
+}
+
 function pulse(state: ArenaState, weapon: WeaponId, radius: number, damage: number): void {
   state.events.push({ kind: "pulse", x: state.player.x, y: state.player.y, radius, weapon });
+  if ("interrupts" in WEAPONS[weapon]) {
+    interruptShots(state, radius);
+  }
   state.grid.forEachNear(state.player.x, state.player.y, radius + px(20), (enemy) => {
     if (enemy.health <= 0) {
       return;

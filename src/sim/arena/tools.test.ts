@@ -201,6 +201,41 @@ describe("weapon + weapon evolutions", () => {
   });
 });
 
+describe("realtime voice agent", () => {
+  it("evolves from maxed voice and conversation buffer in a chest", () => {
+    const state = quietArena(12);
+    arm(state, "voice");
+    state.passives.set("conversationBuffer", 1);
+    state.gems.push({ x: state.player.x, y: state.player.y, value: 0, chest: true, prizes: 1, settle: 0, life: seconds(20), pulled: false });
+    run(state, 60);
+    expect(state.weapons.map((weapon) => weapon.id)).toEqual(["realtimeVoice"]);
+  });
+
+  it("cuts enemy shots inside its wave out of the air and leaves shots outside it alone", () => {
+    const state = quietArena(13);
+    arm(state, "realtimeVoice");
+    const reach = px(WEAPONS.realtimeVoice.levels[0].radius);
+    const shot = (dx: number) => ({ x: state.player.x + dx, y: state.player.y + px(200), vx: 0, vy: 0, life: seconds(4), damage: 0, fake: false, source: "shooter" as const });
+    const inside = shot(0);
+    const outside = shot(0);
+    inside.y = state.player.y + reach - px(4);
+    outside.y = state.player.y + reach + px(30);
+    state.shots.push(inside, outside);
+    const events = run(state, 2);
+    expect(events.filter((event) => event.kind === "interrupted")).toHaveLength(1);
+    expect(state.shots).toEqual([outside]);
+  });
+
+  it("plain voice never interrupts shots", () => {
+    const state = quietArena(14);
+    arm(state, "voice");
+    state.shots.push({ x: state.player.x, y: state.player.y + px(10), vx: 0, vy: 0, life: seconds(4), damage: 0, fake: false, source: "shooter" });
+    const events = run(state, 2);
+    expect(events.some((event) => event.kind === "pulse")).toBe(true);
+    expect(events.some((event) => event.kind === "interrupted")).toBe(false);
+  });
+});
+
 describe("new tools stay deterministic", () => {
   it("plays the same seed the same way with every new tool armed", () => {
     const play = () => {
