@@ -1,5 +1,5 @@
 import type { CardChange, Card } from "../sim/arena/cards";
-import type { PassiveId, WeaponId, World, WorldId } from "../sim/arena/content";
+import { EVOLUTIONS, type PassiveId, type WeaponId, type World, type WorldId } from "../sim/arena/content";
 import type { Killer } from "../sim/arena/sim";
 import type { Tier } from "../sim/tiers";
 import { t } from "../i18n";
@@ -91,4 +91,26 @@ export function abbreviation(name: string): string {
 
 export function compact(value: number): string {
   return value >= 10000 ? t("unit.thousands", { value: (value / 1000).toFixed(1) }) : String(value);
+}
+
+function evolutionNote(card: Card): string | null {
+  if (card.kind === "restore") {
+    return null;
+  }
+  if (card.kind === "passive") {
+    const evolution = EVOLUTIONS.find((entry) => entry.passive === card.id);
+    return evolution ? t("story.part.passiveEvolves", { weapon: weaponName(evolution.weapon), result: weaponName(evolution.result) }) : null;
+  }
+  const into = EVOLUTIONS.find((entry) => entry.weapon === card.id);
+  if (into) {
+    return t("story.part.weaponEvolves", { passive: passiveName(into.passive), result: weaponName(into.result) });
+  }
+  const from = EVOLUTIONS.find((entry) => entry.result === card.id);
+  return from ? t("story.part.evolved", { weapon: weaponName(from.weapon), passive: passiveName(from.passive) }) : null;
+}
+
+export function partGuide(card: Card): string {
+  const guide = card.kind === "restore" ? t("card.restore.guide") : card.kind === "passive" ? t(`passive.${card.id}.guide`) : t(`weapon.${card.id}.guide`);
+  const note = evolutionNote(card);
+  return note ? `${guide} ${note}` : guide;
 }

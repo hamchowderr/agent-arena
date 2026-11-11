@@ -12,7 +12,7 @@ import type { Tier } from "../sim/tiers";
 import { currentLocale, nextLocale, setLocale, t, usesSpaces, type LocaleCode } from "../i18n";
 import type { MessageKey } from "../i18n/locales/en";
 import { STICK_RADIUS, STILL, stickDirection, stickKnob, type Direction, type Stick } from "./controls";
-import { bossName, clock, passiveName, rivalName, tierStage } from "./format";
+import { bossName, cardName, clock, partGuide, passiveName, rivalName, tierStage } from "./format";
 import { agentCanvas, bossCanvas, guideCanvas } from "./portraits";
 import { acquisitionScene, arrivalScene, bossScene, checkScene, eliteScene, endingScene, GUIDE_COLOR, introScene, payoffScene, RIVAL_COLOR, tierScene, tipScene, YOU_COLOR, type StoryLine } from "./story";
 import { memoryOf, StoryPlayer, type Speech, type StoryMemory } from "./story-player";
@@ -32,6 +32,7 @@ import {
   drawResults,
   drawRunHud,
   drawSpeaker,
+  guideAccent,
   drawTitle,
   HUD_HEIGHT,
   HUD_WIDTH,
@@ -44,6 +45,7 @@ import {
   type Banner,
   type ChestSpin,
   type FloatText,
+  type LevelUpGuide,
 } from "./hud";
 
 export type Screen = "title" | "run" | "paused" | "results";
@@ -872,6 +874,21 @@ export class ArenaGame {
     });
   }
 
+  private levelUpGuide(): LevelUpGuide | null {
+    const cards = this.state.cards;
+    const card = cards[this.hover] ?? cards.find((entry) => entry.recommended) ?? cards[0];
+    if (!card) {
+      return null;
+    }
+    const blink = Math.floor(this.frameCount / 8) % 26 === 0;
+    return {
+      name: `${t("story.guideName")} · ${cardName(card)}`,
+      text: partGuide(card),
+      portrait: guideCanvas({ face: card.kind === "evolve" ? "grin" : "smile", talking: false, blink }),
+      accent: guideAccent(card),
+    };
+  }
+
   private twistFloat(key: MessageKey, x: number, y: number, color: string): void {
     if (this.floats.length >= MAX_FLOATS || this.frameCount < this.twistFloatAt) {
       return;
@@ -919,7 +936,7 @@ export class ArenaGame {
       }
     }
     if (this.screen === "run" && this.state.status === "levelUp") {
-      drawLevelUp(context, this.state, this.hover);
+      drawLevelUp(context, this.state, this.hover, this.levelUpGuide());
     }
     const spinning = this.spins[0];
     if (this.screen === "run" && spinning) {

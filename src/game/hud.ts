@@ -442,11 +442,51 @@ export function cardRects(count: number): Rect[] {
 export const REROLL_RECT: Rect = { x: HUD_WIDTH / 2 - 330, y: 670, w: 300, h: 60 };
 export const SKIP_RECT: Rect = { x: HUD_WIDTH / 2 + 30, y: 670, w: 300, h: 60 };
 
-export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState, hover: number): void {
+export interface LevelUpGuide {
+  readonly name: string;
+  readonly text: string;
+  readonly portrait: HTMLCanvasElement;
+  readonly accent: string;
+}
+
+const GUIDE_STRIP: Rect = { x: HUD_WIDTH / 2 - 590, y: 88, w: 1180, h: 96 };
+const GUIDE_SIZES = [18, 16, 15, 14] as const;
+
+function drawGuideStrip(context: CanvasRenderingContext2D, guide: LevelUpGuide): void {
+  const rect = GUIDE_STRIP;
+  context.fillStyle = SHADOW;
+  context.fillRect(rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6);
+  context.fillStyle = "rgba(14, 16, 26, 0.95)";
+  context.fillRect(rect.x, rect.y, rect.w, rect.h);
+  context.strokeStyle = guide.accent;
+  context.lineWidth = 2;
+  context.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
+  const frame = { x: rect.x + 8, y: rect.y + 8, w: 80, h: 80 };
+  context.fillStyle = "#232741";
+  context.fillRect(frame.x, frame.y, frame.w, frame.h);
+  context.imageSmoothingEnabled = false;
+  context.drawImage(guide.portrait, frame.x, frame.y, frame.w, frame.h);
+  context.strokeStyle = guide.accent;
+  context.strokeRect(frame.x + 1, frame.y + 1, frame.w - 2, frame.h - 2);
+  const textX = frame.x + frame.w + 18;
+  const width = rect.x + rect.w - textX - 18;
+  text(context, guide.name, textX, rect.y + 10, 16, guide.accent);
+  const size = GUIDE_SIZES.find((candidate) => wrap(context, guide.text, width, candidate).length <= 3) ?? 14;
+  wrap(context, guide.text, width, size)
+    .slice(0, 3)
+    .forEach((line, index) => text(context, line, textX, rect.y + 32 + index * Math.round(size * 1.3), size, INK));
+}
+
+export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState, hover: number, guide: LevelUpGuide | null = null): void {
   context.fillStyle = "rgba(8, 10, 18, 0.62)";
   context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  text(context, t("levelUp.title", { level: state.level }), HUD_WIDTH / 2, 92, 60, GOLD, "center");
-  text(context, t("levelUp.hint"), HUD_WIDTH / 2, 166, 20, "#9fb0d0", "center");
+  if (guide) {
+    text(context, t("levelUp.title", { level: state.level }), HUD_WIDTH / 2, 28, 46, GOLD, "center");
+    drawGuideStrip(context, guide);
+  } else {
+    text(context, t("levelUp.title", { level: state.level }), HUD_WIDTH / 2, 92, 60, GOLD, "center");
+    text(context, t("levelUp.hint"), HUD_WIDTH / 2, 166, 20, "#9fb0d0", "center");
+  }
   const rects = cardRects(state.cards.length);
   state.cards.forEach((card, index) => {
     const rect = rects[index];
@@ -456,6 +496,10 @@ export function drawLevelUp(context: CanvasRenderingContext2D, state: ArenaState
   });
   drawButton(context, REROLL_RECT, t("levelUp.reroll", { count: state.rerolls }), state.rerolls > 0);
   drawButton(context, SKIP_RECT, t("levelUp.skip", { count: state.skips }), state.skips > 0);
+}
+
+export function guideAccent(card: Card): string {
+  return cardAccent(card);
 }
 
 function reelCard(spin: ChestSpin, slot: number): Card {
