@@ -58,6 +58,22 @@ export class StoryPlayer {
     }
   }
 
+  cut(scene: Scene): void {
+    if (this.playing?.scene.id === scene.id || this.queue.some((entry) => entry.scene.id === scene.id)) {
+      return;
+    }
+    this.queue.unshift({ scene, watching: false });
+    if (this.playing?.mode !== "hold") {
+      this.next();
+    }
+  }
+
+  forget(stale: (id: string) => boolean): void {
+    const kept = this.queue.filter((entry) => !stale(entry.scene.id));
+    this.queue.length = 0;
+    this.queue.push(...kept);
+  }
+
   clear(): void {
     this.queue.length = 0;
     this.playing = null;

@@ -169,11 +169,7 @@ export function text(
   context.fillText(value, x, y);
 }
 
-function panel(
-  context: CanvasRenderingContext2D,
-  rect: Rect,
-  edge = PANEL_EDGE,
-): void {
+export function panel(context: CanvasRenderingContext2D, rect: Rect, edge = PANEL_EDGE): void {
   context.fillStyle = PANEL;
   context.fillRect(rect.x, rect.y, rect.w, rect.h);
   context.strokeStyle = edge;
@@ -201,21 +197,12 @@ function bar(
   );
 }
 
-function measure(
-  context: CanvasRenderingContext2D,
-  value: string,
-  size: number,
-): number {
+export function measure(context: CanvasRenderingContext2D, value: string, size: number): number {
   context.font = `${size}px ${FONT}`;
   return context.measureText(value).width;
 }
 
-function fitSize(
-  context: CanvasRenderingContext2D,
-  value: string,
-  width: number,
-  size: number,
-): number {
+export function fitSize(context: CanvasRenderingContext2D, value: string, width: number, size: number): number {
   let fitted = size;
   while (fitted > 10 && measure(context, value, fitted) > width) {
     fitted -= 1;
@@ -433,6 +420,7 @@ export interface SpeakerView {
   readonly age: number;
   readonly first: boolean;
   readonly frame: number;
+  readonly rect?: Rect;
 }
 
 export const SPEAKER_RECT: Rect = {
@@ -472,10 +460,8 @@ export function drawSpeaker(
   view: SpeakerView,
 ): void {
   const enter = view.first ? Math.min(1, view.age / 0.16) : 1;
-  const rect = {
-    ...SPEAKER_RECT,
-    y: SPEAKER_RECT.y + Math.round((1 - enter) * 24),
-  };
+  const at = view.rect ?? SPEAKER_RECT;
+  const rect = { ...at, y: at.y + Math.round((1 - enter) * 24) };
   context.save();
   context.globalAlpha = enter * (view.hold ? 1 : 0.94);
   context.fillStyle = SHADOW;
@@ -1414,15 +1400,8 @@ export function drawTitle(
     "center",
   );
   text(context, t("title.howTo"), HUD_WIDTH / 2, 556, 18, "#9fb0d0", "center");
-  text(
-    context,
-    t("title.language", { language: localeName(currentLocale()) }),
-    HUD_WIDTH / 2,
-    620,
-    20,
-    GOLD,
-    "center",
-  );
+  text(context, t("title.language", { language: localeName(currentLocale()) }), HUD_WIDTH / 2, 620, 20, GOLD, "center");
+  text(context, t("title.tutorial"), HUD_WIDTH / 2, 656, 20, GOLD, "center");
   text(context, t("mastra.link"), HUD_WIDTH / 2, 730, 16, "#9fb0d0", "center");
 }
 

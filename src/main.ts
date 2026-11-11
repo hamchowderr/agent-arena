@@ -145,7 +145,7 @@ async function boot(): Promise<void> {
   hudCanvas.addEventListener("pointerup", endTouch);
   hudCanvas.addEventListener("pointercancel", endTouch);
   window.addEventListener("keydown", (event) => {
-    if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+    if ([" ", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
     }
     if (!event.repeat) {
@@ -170,6 +170,8 @@ async function boot(): Promise<void> {
     for (const button of frame.pressed) {
       if (button === PAD.confirm) {
         game.confirm();
+      } else if (button === PAD.back && game.skipTutorial()) {
+        continue;
       } else if (button === PAD.start || button === PAD.back) {
         tap(game.screen === "title" ? "enter" : "escape");
       } else if (button === PAD.reroll) {
