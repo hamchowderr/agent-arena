@@ -1,4 +1,5 @@
 import { setMusic } from "../audio/music";
+import { FRAME_FAILURES_BEFORE_RESET } from "./frame-loop";
 import { cueFor } from "../audio/score";
 import { Effects } from "../render/effects";
 import { ArenaRenderer } from "../render/world";
@@ -319,6 +320,13 @@ export class ArenaGame {
 
   notifyBrokenReplay(): void {
     this.notify(t("replay.broken"));
+  }
+
+  recoverFromFrameError(failures: number): void {
+    if (failures >= FRAME_FAILURES_BEFORE_RESET) {
+      this.toTitle();
+    }
+    this.notify(t("error.recovered"));
   }
 
   private newTutorial(active: boolean): Tutorial {

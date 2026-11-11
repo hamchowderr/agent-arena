@@ -88,6 +88,7 @@ export const zhHans = {
   "replay.hint": "[F] 速度    [P] 暂停",
   "replay.mismatch": "这段回放来自旧版本,所以过程会不一样。",
   "replay.broken": "这个回放链接坏了。",
+  "error.recovered": "刚才出了点错，游戏仍在继续。",
 
   "story.you": "你",
   "story.bossArrives": "{rival} 想让你租用他们的智能体",

@@ -88,6 +88,7 @@ export const ja = {
   "replay.hint": "[F] 速さ    [P] 一時停止",
   "replay.mismatch": "古いバージョンで記録されたため、展開が変わります。",
   "replay.broken": "このリプレイのリンクは壊れています。",
+  "error.recovered": "一瞬エラーが起きました。ゲームは続いています。",
 
   "story.you": "あなた",
   "story.bossArrives": "{rival}が自社のエージェントを貸そうとしている",
