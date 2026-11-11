@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { WORLDS } from "../sim/arena/content";
+import { DEFAULT_LOADOUT, WORLDS } from "../sim/arena/content";
 import { HUD_HEIGHT, HUD_WIDTH } from "./hud";
-import { DEFAULT_SETTINGS, Menu, menuRect, MENU_RECTS, PAGE_ROWS, parseCleared, parseSettings, unlockedWorlds, VOLUME_BAR, VOLUME_STEPS, type MenuPage } from "./menu";
+import { DEFAULT_SETTINGS, Menu, menuRect, MENU_RECTS, PAGE_ROWS, parseCleared, parseLoadout, parseSettings, unlockedWorlds, VOLUME_BAR, VOLUME_STEPS, type MenuPage } from "./menu";
 
-const PAGES: readonly MenuPage[] = ["home", "settings", "controls", "credits"];
+const PAGES: readonly MenuPage[] = ["home", "loadout", "settings", "controls", "credits"];
 
 function center(page: MenuPage, item: Parameters<typeof menuRect>[1]): { readonly x: number; readonly y: number } {
   const rect = menuRect(page, item);
@@ -155,5 +155,27 @@ describe("saved menu data", () => {
     expect(parseCleared("77")).toBe(WORLDS.length);
     expect(parseCleared("-1")).toBe(0);
     expect(parseCleared("1.5")).toBe(0);
+  });
+
+  it("picks the loadout on its own page before the run", () => {
+    const menu = new Menu(DEFAULT_SETTINGS, 0);
+    menu.move(0, 1);
+    expect(menu.focus).toBe("loadout");
+    expect(menu.activate()).toEqual({ kind: "page", page: "loadout" });
+    expect(menu.move(1, 0)).toEqual({ kind: "loadout", loadout: { context: "long", temperature: "balanced" } });
+    menu.move(0, 1);
+    expect(menu.move(1, 0)).toEqual({ kind: "loadout", loadout: { context: "long", temperature: "hot" } });
+    const temperature = center("loadout", "temperaturePrev");
+    expect(menu.click(temperature.x, temperature.y)).toEqual({ kind: "loadout", loadout: { context: "long", temperature: "balanced" } });
+    menu.back();
+    expect(menu.page).toBe("home");
+    expect(menu.focus).toBe("loadout");
+  });
+
+  it("reads a saved loadout and falls back to the default", () => {
+    expect(parseLoadout('{"context":"long","temperature":"cold"}')).toEqual({ context: "long", temperature: "cold" });
+    expect(parseLoadout('{"context":"huge","temperature":"lava"}')).toEqual(DEFAULT_LOADOUT);
+    expect(parseLoadout("not json")).toEqual(DEFAULT_LOADOUT);
+    expect(parseLoadout(null)).toEqual(DEFAULT_LOADOUT);
   });
 });
