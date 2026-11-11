@@ -1,5 +1,6 @@
 import { setMusic } from "../audio/music";
 import { FRAME_FAILURES_BEFORE_RESET } from "./frame-loop";
+import { JOURNAL_EVERY_FRAMES, JOURNAL_KEY, journalEntry } from "./run-journal";
 import { cueFor } from "../audio/score";
 import { Effects } from "../render/effects";
 import { ArenaRenderer } from "../render/world";
@@ -250,6 +251,7 @@ export class ArenaGame {
   private renderedTier: Tier = 1;
   private twistFloatAt = 0;
   private recording: Recording | null = null;
+  private slowestFrameMs = 0;
   private playback: Playback | null = null;
   private watched: { readonly mismatch: boolean } | null = null;
   private shareCode: string | null = null;
@@ -452,6 +454,7 @@ export class ArenaGame {
       return;
     }
     this.saveProgress();
+    this.closeJournal();
     this.playback = null;
     this.recording = null;
     this.story.clear();
@@ -469,6 +472,7 @@ export class ArenaGame {
   }
 
   private finishRun(): void {
+    this.closeJournal();
     this.saveProgress();
     if (this.tutorial.basicsDone || this.tutorial.finished) {
       this.memory.add(TUTORIAL_DONE);
@@ -957,6 +961,9 @@ export class ArenaGame {
 
   frame(): void {
     const now = this.hooks.now();
+    if (this.last !== 0) {
+      this.slowestFrameMs = Math.max(this.slowestFrameMs, now - this.last);
+    }
     const elapsed = this.last === 0 ? STEP_MS : Math.min(250, now - this.last);
     this.last = now;
     this.frameCount += 1;
@@ -1029,6 +1036,19 @@ export class ArenaGame {
     this.renderer.sync(this.state);
     this.renderer.render();
     this.drawHud(elapsed / 1000);
+    this.keepJournal(now);
+  }
+
+  private keepJournal(now: number): void {
+    if (!this.recording || this.screen !== "run" || this.frameCount % JOURNAL_EVERY_FRAMES !== 0) {
+      return;
+    }
+    this.hooks.saved?.write(JOURNAL_KEY, journalEntry(this.recording, this.state, { screen: this.screen, slowestFrameMs: Math.round(this.slowestFrameMs), savedAt: Math.round(now) }));
+    this.slowestFrameMs = 0;
+  }
+
+  private closeJournal(): void {
+    this.hooks.saved?.write(JOURNAL_KEY, "");
   }
 
   private cycleSpeed(playback: Playback): void {
