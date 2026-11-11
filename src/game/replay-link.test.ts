@@ -28,8 +28,8 @@ describe("replay links", () => {
       }
     }
     const code = await replayCode(recording, state);
-    const link = replayUrl("https://hamchowderr.github.io/agent-arena/?lang=ja#old", state.seed, code);
-    expect(link.startsWith("https://hamchowderr.github.io/agent-arena/?seed=2024#replay=")).toBe(true);
+    const link = replayUrl("https://arena.chowderr.dev/?lang=ja#old", state.seed, code);
+    expect(link.startsWith("https://arena.chowderr.dev/?seed=2024#replay=")).toBe(true);
     expect(link.length).toBeLessThan(8000);
     const read = await readReplayCode(replayCodeFrom(new URL(link).hash) ?? "");
     expect(read).not.toBeNull();

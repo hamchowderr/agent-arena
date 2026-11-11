@@ -8,9 +8,15 @@ const UNBUDGETED_LAZY_PREFIXES = ["strudel"];
 const dist = join(process.cwd(), "dist");
 const manifest = JSON.parse(readFileSync(join(dist, ".vite", "manifest.json"), "utf8"));
 
-const rootPaths = readFileSync(join(dist, "index.html"), "utf8").match(/(?:src|href)="\/(?!\/)[^"]*"/g) ?? [];
+const html = readFileSync(join(dist, "index.html"), "utf8");
+if (html.includes("%SITE_URL%")) {
+  console.error("dist/index.html still has %SITE_URL% in it. The site-url plugin in vite.config.ts did not run.");
+  process.exit(1);
+}
+
+const rootPaths = html.match(/(?:src|href)="\/(?!\/)[^"]*"/g) ?? [];
 if (rootPaths.length > 0) {
-  console.error(`dist/index.html links from the site root, which breaks GitHub Pages under /agent-arena/: ${rootPaths.join(", ")}`);
+  console.error(`dist/index.html links from the site root, which breaks the build whenever it is opened from a subpath or a file: ${rootPaths.join(", ")}`);
   process.exit(1);
 }
 
