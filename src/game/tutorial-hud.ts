@@ -3,7 +3,7 @@ import type { ArenaState } from "../sim/arena/sim";
 import { TICKS_PER_SECOND } from "../sim/arena/math";
 import { clock } from "./format";
 import { cardRects, fitSize, loadoutSlots, panel, rerollRect, skipRect, text, type Rect } from "./hud";
-import { fromStage, view } from "./layout";
+import { fromPopup, view, WIDE_STAGE } from "./layout";
 import { FIGHT_KILLS, tokenSeconds, type Device, type Goal, type Objective, type Spot } from "./tutorial";
 
 const GOLD = "#ffcd75";
@@ -25,7 +25,7 @@ export function tutorialSkipRect(): Rect {
 }
 
 export function lessonSpeakerRect(): Rect {
-  return fromStage(view().stage.portrait ? { x: 12, y: 12, w: 516, h: 200 } : { x: view().stage.width / 2 - 470, y: 34, w: 940, h: 150 });
+  return { x: WIDE_STAGE.width / 2 - 470, y: 34, w: 940, h: 150 };
 }
 
 const GOAL_KEYS: Readonly<Record<Goal, MessageKey>> = {
@@ -132,7 +132,7 @@ export function loadoutRect(state: ArenaState): Rect {
 }
 
 export function spotRects(spot: Spot, state: ArenaState): Rect[] {
-  const cards = cardRects(state.cards.length).map(fromStage);
+  const cards = cardRects(state.cards.length).map((rect) => fromPopup(rect));
   switch (spot) {
     case "cards":
       return cards.map((rect) => grow(rect, 8));
@@ -141,7 +141,7 @@ export function spotRects(spot: Spot, state: ArenaState): Rect[] {
     case "loadout":
       return [loadoutRect(state)];
     case "buttons":
-      return [grow(fromStage(rerollRect()), 6), grow(fromStage(skipRect()), 6)];
+      return [grow(fromPopup(rerollRect()), 6), grow(fromPopup(skipRect()), 6)];
     case "recommended": {
       const index = state.cards.findIndex((card) => card.recommended);
       const rect = cards[index];

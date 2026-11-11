@@ -5,8 +5,10 @@ import {
   InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
+  Group,
   Mesh,
   MeshBasicMaterial,
+  type Object3D,
   NearestFilter,
   OrthographicCamera,
   PerspectiveCamera,
@@ -22,6 +24,7 @@ import {
   WebGLRenderTarget,
   type Texture,
 } from "three";
+import { aimCamera, CAMERA_DISTANCE, DEPTH_STRETCH, PITCH } from "./camera";
 import {
   ENEMY_SHOT,
   HALLUCINATION,
@@ -53,8 +56,6 @@ import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, pat
 export const RENDER_WIDTH = 480;
 export const RENDER_HEIGHT = 270;
 const BASE_FOV = 32;
-const PITCH = (48 * Math.PI) / 180;
-const CAMERA_DISTANCE = 380;
 const TRAIL_LENGTH = 10;
 const SHAKE_UNITS = 6;
 const BOSS_RING_RADIUS = 40;
@@ -152,7 +153,7 @@ class SpriteBatch {
   private readonly frame: InstancedBufferAttribute | null;
   private readonly flip: InstancedBufferAttribute | null;
 
-  constructor(scene: Scene, texture: Texture, width: number, height: number, capacity: number, flat: boolean, shape: BatchShape = STILL) {
+  constructor(scene: Object3D, texture: Texture, width: number, height: number, capacity: number, flat: boolean, shape: BatchShape = STILL) {
     const geometry = new PlaneGeometry(width, height);
     if (flat) {
       geometry.translate(shape.lead === undefined ? 0 : shape.lead - width / 2, 0, 0);
@@ -160,6 +161,7 @@ class SpriteBatch {
     } else {
       geometry.translate(0, height / 2 - shape.sink, 0);
       geometry.rotateX(-(Math.PI / 2 - PITCH) * 0.5);
+      geometry.scale(1, 1, 1 / DEPTH_STRETCH);
     }
     const material = shape.glow
       ? new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: AdditiveBlending, toneMapped: false })
@@ -216,7 +218,7 @@ class SpriteBatch {
     }
   }
 
-  dispose(scene: Scene): void {
+  dispose(scene: Object3D): void {
     scene.remove(this.mesh);
     this.mesh.geometry.dispose();
     (this.mesh.material as MeshBasicMaterial).map?.dispose();
@@ -264,7 +266,7 @@ class ShadowBatch {
   private readonly scale = new Vector3();
   private readonly rotation = new Quaternion();
 
-  constructor(scene: Scene, capacity: number) {
+  constructor(scene: Object3D, capacity: number) {
     const geometry = new PlaneGeometry(1, 1);
     geometry.rotateX(-Math.PI / 2);
     const material = new MeshBasicMaterial({ map: circleTexture(16, "#000000", 0.42), transparent: true, depthWrite: false, toneMapped: false });
@@ -284,7 +286,7 @@ class ShadowBatch {
       return;
     }
     this.position.set(x, 0.2, z);
-    this.scale.set(width, 1, width * 0.5);
+    this.scale.set(width, 1, (width * 0.5) / DEPTH_STRETCH);
     this.matrix.compose(this.position, this.rotation, this.scale);
     this.mesh.setMatrixAt(this.count, this.matrix);
     this.count += 1;
@@ -359,6 +361,7 @@ function hash(seed: number, x: number, y: number, salt: number): number {
 export class ArenaRenderer {
   readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
+  private readonly world = new Group();
   private readonly camera = new PerspectiveCamera(BASE_FOV, RENDER_WIDTH / RENDER_HEIGHT, 10, 2000);
   private readonly target = new WebGLRenderTarget(RENDER_WIDTH, RENDER_HEIGHT, { magFilter: NearestFilter, minFilter: NearestFilter });
   private readonly postScene = new Scene();
@@ -448,6 +451,8 @@ export class ArenaRenderer {
     });
     this.postScene.add(new Mesh(new PlaneGeometry(2, 2), this.postMaterial));
 
+    this.world.scale.z = DEPTH_STRETCH;
+    this.scene.add(this.world);
     const look = WORLD_LOOKS[1];
     this.scene.background = new Color(look.fog);
     this.scene.fog = new Fog(look.fog, CAMERA_DISTANCE * 0.95, CAMERA_DISTANCE * 1.55);
@@ -457,7 +462,7 @@ export class ArenaRenderer {
     const groundMap = groundTexture(7, look.ground);
     groundMap.repeat.set(40, 40);
     this.ground = new Mesh(groundGeometry, new MeshBasicMaterial({ map: groundMap, toneMapped: false }));
-    this.scene.add(this.ground);
+    this.world.add(this.ground);
 
     const glowGeometry = new CircleGeometry(90, 40);
     glowGeometry.rotateX(-Math.PI / 2);
@@ -466,30 +471,30 @@ export class ArenaRenderer {
       new MeshBasicMaterial({ map: glowTexture(128, "#ffe2b0", 0.22), transparent: true, depthWrite: false, blending: AdditiveBlending, toneMapped: false }),
     );
     this.glow.position.y = 0.3;
-    this.scene.add(this.glow);
+    this.world.add(this.glow);
 
     const playerRingGeometry = new RingGeometry(PLAYER_RING_RADIUS - 2, PLAYER_RING_RADIUS, 32);
     playerRingGeometry.rotateX(-Math.PI / 2);
     this.playerRing = new Mesh(playerRingGeometry, new MeshBasicMaterial({ color: "#73eff7", transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }));
     this.playerRing.position.y = 0.4;
-    this.scene.add(this.playerRing);
+    this.world.add(this.playerRing);
 
     const slamGeometry = new CircleGeometry(1, 40);
     slamGeometry.rotateX(-Math.PI / 2);
     this.slamFill = new Mesh(slamGeometry, new MeshBasicMaterial({ color: "#ff3b3b", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
     this.slamFill.position.y = 0.4;
-    this.scene.add(this.slamFill);
+    this.world.add(this.slamFill);
     const slamRingGeometry = new RingGeometry(0.92, 1, 48);
     slamRingGeometry.rotateX(-Math.PI / 2);
     this.slamRing = new Mesh(slamRingGeometry, new MeshBasicMaterial({ color: "#ffe1a0", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
     this.slamRing.position.y = 0.5;
-    this.scene.add(this.slamRing);
+    this.world.add(this.slamRing);
     const bossRingGeometry = new RingGeometry(0.78, 1, 48);
     bossRingGeometry.rotateX(-Math.PI / 2);
     this.bossRing = new Mesh(bossRingGeometry, new MeshBasicMaterial({ color: "#ffcd75", transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, toneMapped: false }));
     this.bossRing.position.y = 0.45;
     this.bossRing.scale.setScalar(BOSS_RING_RADIUS);
-    this.scene.add(this.bossRing);
+    this.world.add(this.bossRing);
 
     const patchMaterial = (kind: GroundHazard) =>
       new MeshBasicMaterial({ map: patchTexture(PATCH_LOOKS[kind]), transparent: true, opacity: PATCH_OPACITY, alphaTest: 0.1, depthWrite: false, toneMapped: false });
@@ -501,12 +506,12 @@ export class ArenaRenderer {
       mesh.position.y = 0.25;
       mesh.visible = false;
       mesh.renderOrder = 0;
-      this.scene.add(mesh);
+      this.world.add(mesh);
       this.patches.push(mesh);
     }
 
-    this.shadows = new ShadowBatch(this.scene, 1400);
-    this.tools = new ToolFx(this.scene);
+    this.shadows = new ShadowBatch(this.world, 1400);
+    this.tools = new ToolFx(this.world);
     this.enemies = this.enemyBatches(WORLD_LOOKS[1], 1);
     this.elites = this.eliteBatches(WORLD_LOOKS[1], 1);
     this.walls = this.wallBatch(WORLD_LOOKS[1], 1);
@@ -567,14 +572,14 @@ export class ArenaRenderer {
       const mesh = new Mesh(geometry, new MeshBasicMaterial({ color: "#9ff6ff", transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, toneMapped: false }));
       mesh.position.y = 0.6;
       mesh.visible = false;
-      this.scene.add(mesh);
+      this.world.add(mesh);
       this.rings.push({ mesh, age: 0, life: 1, radius: 1 });
     }
   }
 
   private batch(layers: readonly Sprite[], scale: number, capacity: number, flat: boolean, faction: string = WORLD_LOOKS[this.tier].faction): SpriteBatch {
     const image = spriteImage(layers, faction);
-    return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
+    return new SpriteBatch(this.world, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, flat);
   }
 
   private buildArms(): void {
@@ -588,7 +593,7 @@ export class ArenaRenderer {
         const key = `${weapon}:${stage}`;
         const image = atlasImage(shotFrames(weapon, stage).map((frame) => shade([frame], faction)));
         const flat = place === "flat" || place === "wave";
-        const batch = new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width, image.height, capacity, flat, { frames: image.frames, sink: 0, lead: place === "flat" ? 2 : undefined });
+        const batch = new SpriteBatch(this.world, pixelTexture(image.canvas), image.width, image.height, capacity, flat, { frames: image.frames, sink: 0, lead: place === "flat" ? 2 : undefined });
         this.arms.set(key, place === "ground" ? batch : this.onTop(batch));
         if (place !== "flying" && place !== "flat") {
           continue;
@@ -617,13 +622,13 @@ export class ArenaRenderer {
   }
 
   private glowBatch(width: number, height: number, color: string, alpha: number, capacity: number, lead?: number): SpriteBatch {
-    const batch = new SpriteBatch(this.scene, glowTexture(64, color, alpha), width, height, capacity, true, { frames: 1, sink: 0, lead, glow: true });
+    const batch = new SpriteBatch(this.world, glowTexture(64, color, alpha), width, height, capacity, true, { frames: 1, sink: 0, lead, glow: true });
     batch.mesh.renderOrder = 2;
     return batch;
   }
 
   private atlasBatch(image: AtlasImage, scale: number, capacity: number, sink: number): SpriteBatch {
-    return new SpriteBatch(this.scene, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, false, { frames: image.frames, sink: sink * scale });
+    return new SpriteBatch(this.world, pixelTexture(image.canvas), image.width * scale, image.height * scale, capacity, false, { frames: image.frames, sink: sink * scale });
   }
 
   private enemyBatches(look: WorldLook, tier: Tier): Record<EnemyKind, SpriteBatch> {
@@ -658,7 +663,7 @@ export class ArenaRenderer {
 
   private markBatchFor(look: WorldLook): SpriteBatch {
     const image = atlasImage(markFrames(look.ground[0]));
-    const batch = new SpriteBatch(this.scene, pixelTexture(image.canvas), MARK_WIDTH, MARK_WIDTH, MARK_CAPACITY, true, { frames: image.frames, sink: 0 });
+    const batch = new SpriteBatch(this.world, pixelTexture(image.canvas), MARK_WIDTH, MARK_WIDTH, MARK_CAPACITY, true, { frames: image.frames, sink: 0 });
     const material = batch.mesh.material as MeshBasicMaterial;
     material.transparent = true;
     material.opacity = 0.85;
@@ -753,17 +758,17 @@ export class ArenaRenderer {
     material.map = map;
     material.needsUpdate = true;
     for (const batch of [...Object.values(this.enemies), ...Object.values(this.elites), ...Object.values(this.deaths), ...Object.values(this.eliteDeaths), this.walls]) {
-      batch.dispose(this.scene);
+      batch.dispose(this.world);
     }
     this.walls = this.wallBatch(look, tier);
     this.enemies = this.enemyBatches(look, tier);
     this.elites = this.eliteBatches(look, tier);
     this.deaths = this.deathBatches(look, tier, false);
     this.eliteDeaths = this.deathBatches(look, tier, true);
-    this.bossDeath.dispose(this.scene);
+    this.bossDeath.dispose(this.world);
     this.bossDeath = this.bossDeathBatch(tier);
     this.dying.length = 0;
-    this.markBatch.dispose(this.scene);
+    this.markBatch.dispose(this.world);
     this.markBatch = this.markBatchFor(look);
     this.stains.length = 0;
     this.sparks.length = 0;
@@ -927,7 +932,7 @@ export class ArenaRenderer {
   }
 
   project(x: number, y: number, height: number): { readonly x: number; readonly y: number } {
-    this.projector.set(x / SUB, height, y / SUB).project(this.camera);
+    this.projector.set(x / SUB, height, (y / SUB) * DEPTH_STRETCH).project(this.camera);
     return { x: (this.projector.x + 1) / 2, y: (1 - this.projector.y) / 2 };
   }
 
@@ -966,8 +971,7 @@ export class ArenaRenderer {
     const playerZ = state.player.y / SUB;
     const shakeX = (Math.random() - 0.5) * this.shake * SHAKE_UNITS;
     const shakeZ = (Math.random() - 0.5) * this.shake * SHAKE_UNITS;
-    this.camera.position.set(playerX + shakeX, Math.sin(PITCH) * CAMERA_DISTANCE, playerZ + shakeZ + Math.cos(PITCH) * CAMERA_DISTANCE);
-    this.camera.lookAt(playerX + shakeX, 0, playerZ + shakeZ);
+    aimCamera(this.camera, playerX + shakeX, playerZ + shakeZ);
     this.ground.position.set(Math.round(playerX / GROUND_TILE) * GROUND_TILE, 0, Math.round(playerZ / GROUND_TILE) * GROUND_TILE);
     this.glow.position.x = playerX;
     this.glow.position.z = playerZ;
@@ -1219,7 +1223,7 @@ export class ArenaRenderer {
       uniforms["letterbox"].value = this.letterbox;
     }
     this.renderer.setRenderTarget(this.target);
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.world, this.camera);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.postScene, this.postCamera);
   }

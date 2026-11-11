@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import html from "../../index.html?raw";
 import { cardRects, fitTextBlock, guideStripRect, loadoutSlots, pauseQuitRect, postRect, rerollRect, shareRect, skipRect, speakerRect, watchRect, type Rect } from "./hud";
-import { fitView, hudBacking, renderSize, setView, TALL_STAGE, view, WIDE_STAGE } from "./layout";
+import { fitView, fromPopup, hudBacking, popupPlacement, renderSize, setView, TALL_STAGE, view, WIDE_STAGE } from "./layout";
 import { lessonSpeakerRect, objectiveRect } from "./tutorial-hud";
 
 const SCREENS: readonly (readonly [string, number, number])[] = [
@@ -101,9 +101,9 @@ describe("fitTextBlock", () => {
 });
 
 describe.each(SCREENS)("HUD layout on %s", (_, width, height) => {
-  it("keeps the level-up cards, buttons and guide on the stage without overlap", () => {
+  it("keeps the level-up cards, buttons and guide in the wide layout without overlap", () => {
     setView(fitView(width, height));
-    const stage = view().stage;
+    const stage = WIDE_STAGE;
     const cards = cardRects(3);
     const buttons = [rerollRect(), skipRect()];
     const keyTabs = cards.map((card) => ({ x: card.x, y: card.y + card.h - 17, w: card.w, h: 33 }));
@@ -122,22 +122,38 @@ describe.each(SCREENS)("HUD layout on %s", (_, width, height) => {
     });
   });
 
-  it("keeps pause and results buttons on the stage", () => {
+  it("shows the level-up, pause and results pop-ups on screen at their desktop layout", () => {
     setView(fitView(width, height));
-    const stage = view().stage;
-    for (const rect of [pauseQuitRect(), shareRect(), postRect(), watchRect()]) {
-      within(rect, stage.width, stage.height);
+    const screen = view();
+    const popups = [...cardRects(3), rerollRect(), skipRect(), guideStripRect(), pauseQuitRect(), shareRect(), postRect(), watchRect()];
+    for (const rect of popups) {
+      within(rect, WIDE_STAGE.width, WIDE_STAGE.height);
+      within(fromPopup(rect), screen.width, screen.height);
     }
   });
 
   it("keeps the speaker box, tutorial card and loadout on screen", () => {
     setView(fitView(width, height, { top: 40, right: 0, bottom: 30, left: 0 }));
     const screen = view();
-    for (const rect of [speakerRect(), lessonSpeakerRect(), objectiveRect(), loadoutSlots(5, 6).bounds]) {
+    for (const rect of [speakerRect(), fromPopup(lessonSpeakerRect()), objectiveRect(), loadoutSlots(5, 6).bounds]) {
       within(rect, screen.width, screen.height);
     }
     expect(speakerRect().y + speakerRect().h).toBeLessThanOrEqual(screen.height - screen.safe.bottom);
     expect(objectiveRect().y).toBeGreaterThanOrEqual(screen.safe.top);
+  });
+});
+
+describe("popupPlacement", () => {
+  it("keeps three cards side by side on a phone held upright, scaled to fit", () => {
+    setView(fitView(390, 844));
+    const cards = cardRects(3).map((rect) => fromPopup(rect));
+    expect(new Set(cards.map((card) => card.y)).size).toBe(1);
+    expect(popupPlacement().scale).toBeLessThan(1);
+  });
+
+  it("leaves landscape screens at full size", () => {
+    setView(fitView(1920, 1080));
+    expect(popupPlacement()).toEqual({ x: 0, y: 0, scale: 1 });
   });
 });
 
