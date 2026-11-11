@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { LOADERS, LOCALES, t } from "../i18n";
 import { TICKS_PER_SECOND } from "../sim/arena/math";
+import { DEFAULT_LOADOUT } from "../sim/arena/content";
+import { pickRecommended } from "../sim/arena/bot";
+import { act } from "../sim/arena/replay";
 import { createArena, type ArenaState } from "../sim/arena/sim";
-import { HOW_TO_PLAY, introScene, type Scene } from "./story";
+import { HOW_TO_PLAY, introScene, KIT_LINE, THREAT, type Scene } from "./story";
 import { memoryOf, StoryPlayer } from "./story-player";
 import { BOSS_WARNING_SECONDS, FIGHT_KILLS, GOALS, LESSON_ID, MOVE_DISTANCE, NAG_SECONDS, pickLesson, staleLesson, Tutorial, type LessonLine } from "./tutorial";
 
@@ -34,6 +37,37 @@ function open(tutorial: Tutorial, state: ArenaState): void {
   tutorial.frame(state, 0.016, true);
   tutorial.frame(state, 0.016, false);
 }
+
+describe("starter crate opening", () => {
+  it("teaches walking to the crate, then the card lesson there, then dashing", () => {
+    const { tutorial, said, taught } = setup();
+    const state = createArena(7, 0, DEFAULT_LOADOUT, true);
+    open(tutorial, state);
+    expect(tutorial.goal).toBe("move");
+    expect(tutorial.objective(state)?.progress).toBeNull();
+    while (state.kit !== null) {
+      act(state, null, { kind: "step", input: { moveX: 1, moveY: 0, dash: false } });
+      tutorial.see(state, state.events);
+      tutorial.frame(state, 1 / 60, false);
+    }
+    tutorial.frame(state, 1 / 60, false);
+    expect(tutorial.goal).toBe("pick");
+    expect(taught.map((scene) => scene.id)).toEqual([LESSON_ID]);
+    pickRecommended(state);
+    tutorial.frame(state, 1 / 60, false);
+    expect(tutorial.goal).toBe("dash");
+    expect(said()).toContain("tutorial.dash.say");
+  });
+
+  it("sets up the boss as a threat and ends the intro pointing at the crate", () => {
+    const scene = introScene("hustlr", true, true);
+    const keys = scene.lines.map((line) => line.key);
+    expect(keys).toEqual(expect.arrayContaining(THREAT.map((line) => line.key)));
+    expect(keys[keys.length - 1]).toBe(KIT_LINE.key);
+    expect(keys).not.toContain("story.hustlr.rival");
+    expect(scene.brief?.map((line) => line.key)).toContain(KIT_LINE.key);
+  });
+});
 
 describe("first-run tutorial", () => {
   it("does nothing when the player has already finished it", () => {

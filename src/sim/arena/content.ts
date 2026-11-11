@@ -322,13 +322,14 @@ export interface WaveRow {
 }
 
 export const WAVES: readonly WaveRow[] = [
-  { fromSecond: 0, weights: [8, 1, 0, 0, 0], interval: 45, batch: 2 },
+  { fromSecond: 0, weights: [8, 1, 0, 0, 0], interval: 70, batch: 2 },
   { fromSecond: 30, weights: [5, 2, 1, 0, 0], interval: 39, batch: 3 },
   { fromSecond: 60, weights: [3, 2, 2, 1, 0], interval: 33, batch: 4 },
   { fromSecond: 90, weights: [3, 2, 2, 1, 1], interval: 27, batch: 5 },
 ];
 
 export const OPENING_PACK = 8;
+export const OPENING_SECOND = 2;
 export const WALL_RING_SECOND = 30;
 export const LOOT_RUNNER_SECOND = 45;
 export const ELITE_SECOND = 60;

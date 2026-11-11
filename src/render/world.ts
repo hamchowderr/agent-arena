@@ -393,6 +393,7 @@ export class ArenaRenderer {
   private lastPlayerZ = 0;
   private agentFlip = false;
   private readonly chests: Readonly<Record<ChestKind, SpriteBatch>>;
+  private readonly kitCrate: SpriteBatch;
   private readonly agent: SpriteBatch[];
   private readonly ghosts: SpriteBatch[];
   private readonly trail: { x: number; z: number }[] = [];
@@ -521,6 +522,7 @@ export class ArenaRenderer {
     this.sparkBatch = this.onTop(this.atlasBatch(atlasImage(sparkFrames()), 1, SPARK_CAPACITY, 0));
     this.markBatch = this.markBatchFor(WORLD_LOOKS[1]);
     this.chests = { elite: this.batch([CHEST_SPRITES.elite], 2, 4, false), boss: this.batch([CHEST_SPRITES.boss], 2, 2, false) };
+    this.kitCrate = this.batch([CHEST_SPRITES.boss], 1, 1, false);
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
       const batch = this.atlasBatch(atlasImage(agentClips(tier)), 1, 1, 0);
       batch.mesh.renderOrder = 11;
@@ -1027,8 +1029,11 @@ export class ArenaRenderer {
     for (const glow of Object.values(this.glows)) {
       glow.begin();
     }
-    for (const batch of [...Object.values(this.tokens), ...Object.values(this.chests)]) {
+    for (const batch of [...Object.values(this.tokens), ...Object.values(this.chests), this.kitCrate]) {
       batch.begin();
+    }
+    if (state.kit !== null) {
+      this.kitCrate.add(state.kit.x / SUB, Math.abs(Math.sin(state.tick / 14)) * 2.5, state.kit.y / SUB);
     }
     for (const gem of state.gems) {
       if (!gem.chest && gem.life < GEM_FADE_TICKS && Math.floor(gem.life / 6) % 2 === 0) {
@@ -1044,7 +1049,7 @@ export class ArenaRenderer {
       this.tokens[tier].add(gem.x / SUB, bob, gem.y / SUB);
       this.glows[tier].add(gem.x / SUB, 0.6, gem.y / SUB);
     }
-    for (const batch of [...Object.values(this.tokens), ...Object.values(this.chests)]) {
+    for (const batch of [...Object.values(this.tokens), ...Object.values(this.chests), this.kitCrate]) {
       batch.commit();
     }
 

@@ -59,6 +59,20 @@ export const INTRO: readonly StoryLine[] = [
 
 export const INTRO_AGAIN: readonly StoryLine[] = [guide("story.intro.again", "grin")];
 
+export const THREAT: readonly StoryLine[] = [
+  guide("story.intro.coming", "serious"),
+  you("story.intro.why"),
+  guide("story.intro.seat", "smirk"),
+];
+
+export const KIT_LINE: StoryLine = guide("story.intro.crate", "grin");
+
+export const KIT_NUDGES: readonly { readonly afterSeconds: number; readonly line: StoryLine }[] = [
+  { afterSeconds: 10, line: guide("story.crate.openIt", "smirk") },
+  { afterSeconds: 20, line: guide("story.crate.rightThere", "serious") },
+  { afterSeconds: 30, line: guide("story.crate.stillComing", "shocked") },
+];
+
 export const WORLD_BEATS: Readonly<Record<WorldId, WorldBeats>> = {
   hustlr: {
     arrival: [rival("story.hustlr.rival"), guide("story.hustlr.arrival", "smirk")],
@@ -103,9 +117,20 @@ export const ENDING: readonly StoryLine[] = [guide("story.ending.look", "smile")
 
 export const HOW_TO_PLAY: readonly MessageKey[] = ["story.intro.move", "story.intro.tokens"];
 
-export function introScene(world: WorldId, teaching = false): Scene {
+export function introScene(world: WorldId, teaching = false, kit = false): Scene {
   const intro = teaching ? INTRO.filter((line) => !HOW_TO_PLAY.includes(line.key)) : INTRO;
-  return { id: "intro", mode: "hold", world, lines: [...intro, ...WORLD_BEATS[world].arrival], repeat: teaching ? "always" : "brief", brief: [...INTRO_AGAIN, ...WORLD_BEATS[world].arrival.slice(0, 1)] };
+  const repeat = teaching ? "always" : "brief";
+  if (kit) {
+    const named = intro.filter((line) => line.key !== "story.intro.move" && line.key !== "story.intro.tokens");
+    const howTo = intro.filter((line) => line.key === "story.intro.move" || line.key === "story.intro.tokens");
+    return { id: "intro", mode: "hold", world, lines: [...named, ...THREAT, ...howTo, KIT_LINE], repeat, brief: [...INTRO_AGAIN, KIT_LINE] };
+  }
+  return { id: "intro", mode: "hold", world, lines: [...intro, ...WORLD_BEATS[world].arrival], repeat, brief: [...INTRO_AGAIN, ...WORLD_BEATS[world].arrival.slice(0, 1)] };
+}
+
+export function kitNudgeScene(world: WorldId, index: number): Scene | null {
+  const nudge = KIT_NUDGES[index];
+  return nudge ? { id: `crate.nudge.${index}`, mode: "auto", world, lines: [nudge.line], repeat: "always" } : null;
 }
 
 export function arrivalScene(world: WorldId): Scene {

@@ -70,6 +70,8 @@ import {
   endingScene,
   GUIDE_COLOR,
   introScene,
+  KIT_NUDGES,
+  kitNudgeScene,
   payoffScene,
   readingSeconds,
   RIVAL_COLOR,
@@ -98,6 +100,7 @@ import {
   drawChestSpin,
   drawBossMarker,
   drawFloats,
+  drawKitMarker,
   drawLevelUp,
   drawNotice,
   drawPause,
@@ -234,6 +237,7 @@ export class ArenaGame {
   private readonly memory: StoryMemory;
   private tutorial: Tutorial;
   private lesson: readonly LessonLine[] = [];
+  private kitNudges = 0;
   private device: Device = "keys";
   private teachNext = false;
   private ending = false;
@@ -287,7 +291,7 @@ export class ArenaGame {
       return;
     }
     this.begin(seed, false, world);
-    this.recording = startRecording(seed, this.state.startWorld, this.state.loadout);
+    this.recording = startRecording(seed, this.state.startWorld, this.state.loadout, this.state.kit !== null);
     this.lastRecording = this.recording;
     this.lastWatched = null;
     this.shareCode = null;
@@ -299,7 +303,7 @@ export class ArenaGame {
       return;
     }
     const speed = this.playback?.speed ?? 1;
-    this.begin(replay.seed, true, replay.startWorld, replay.loadout);
+    this.begin(replay.seed, true, replay.startWorld, replay.loadout, replay.opening);
     this.recording = null;
     this.lastWatched = replay;
     this.playback = { replay, index: 0, speed, hold: 0, desynced: false };
@@ -369,13 +373,13 @@ export class ArenaGame {
     return this.story.speech?.scene.id === LESSON_ID;
   }
 
-  private begin(seed: number, watching: boolean, world: number, loadout = this.menu.loadout): void {
+  private begin(seed: number, watching: boolean, world: number, loadout = this.menu.loadout, opening = !watching): void {
     this.playback = null;
     this.watched = null;
     this.hover = -1;
     this.accumulator = 0;
     const startWorld = clampStartWorld(world);
-    this.state = createArena(seed, startWorld, loadout);
+    this.state = createArena(seed, startWorld, loadout, opening);
     this.renderer.setWorld(this.state.tier, seed);
     this.renderedTier = this.state.tier;
     this.floats = [];
@@ -399,8 +403,9 @@ export class ArenaGame {
     this.teachNext = false;
     this.tutorial = this.newTutorial(teaching);
     this.lesson = [];
+    this.kitNudges = 0;
     if (firstWorld) {
-      this.story.play(introScene(firstWorld.id, teaching), watching);
+      this.story.play(introScene(firstWorld.id, teaching, this.state.kit !== null), watching);
     }
   }
 
@@ -1011,6 +1016,7 @@ export class ArenaGame {
         this.memory.add(TUTORIAL_DONE);
       }
     }
+    this.nudgeToKit();
     if (this.lessonShowing()) {
       this.tour.hush(this.state.cards);
     } else {
@@ -1313,6 +1319,11 @@ export class ArenaGame {
           this.effects.spawn("pow", event.x, event.y);
           this.renderer.mark(event.x, event.y, "large");
           break;
+        case "kitOpened":
+          this.effects.spawn("spark", event.x, event.y);
+          this.renderer.shake = Math.max(this.renderer.shake, 0.3);
+          this.tell(arrivalScene(currentWorld(this.state).id));
+          break;
         case "eliteArrives":
           this.renderer.shake = Math.max(this.renderer.shake, 0.5);
           this.banner = {
@@ -1423,6 +1434,20 @@ export class ArenaGame {
       );
     }
     this.syncMusic();
+  }
+
+  private nudgeToKit(): void {
+    if (this.screen !== "run" || this.state.kit === null || this.state.status !== "playing" || this.story.busy) {
+      return;
+    }
+    const due = KIT_NUDGES[this.kitNudges];
+    if (due && this.state.heldTicks >= due.afterSeconds * TICKS_PER_SECOND) {
+      const scene = kitNudgeScene(currentWorld(this.state).id, this.kitNudges);
+      this.kitNudges += 1;
+      if (scene) {
+        this.tell(scene);
+      }
+    }
   }
 
   private tell(scene: Parameters<StoryPlayer["play"]>[0]): void {
@@ -1648,6 +1673,10 @@ export class ArenaGame {
     }
     this.floats = this.floats.filter((float) => float.age < 40);
     drawFloats(context, this.floats, project);
+    const kit = this.state.kit;
+    if (kit !== null && this.screen === "run") {
+      drawKitMarker(context, this.projectToHud(kit.x, kit.y), t("story.crate.label"), this.frameCount, view().width / this.renderer.width);
+    }
     const player = this.projectToHud(this.state.player.x, this.state.player.y);
     const boss = this.state.enemies.find(
       (enemy) => enemy.id === this.state.bossId,

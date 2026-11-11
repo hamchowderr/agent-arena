@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { kitingBot } from "./bot";
 import { seconds } from "./math";
-import { act, codeInput, decodeReplay, encodeReplay, inputCode, playReplay, REPLAY_VERSION, startRecording, stateCheck, type Recording } from "./replay";
+import { DEFAULT_LOADOUT } from "./content";
+import { act, codeInput, decodeReplay, encodeReplay, inputCode, playReplay, REPLAY_VERSION, startRecording, stateCheck, type Action, type Recording } from "./replay";
 import { createArena, type ArenaState, type Input } from "./sim";
 
 function recordBotRun(seed: number, maxTicks: number, startWorld = 0): { readonly state: ArenaState; readonly recording: Recording } {
@@ -72,7 +73,7 @@ describe("replays", () => {
   it("still reads links made before runs could start at a later world", () => {
     const { state, recording } = recordBotRun(99, seconds(20));
     const bytes = encodeReplay(recording, state);
-    const firstVersion = Uint8Array.from([1, bytes[1] ?? 0, ...bytes.slice(4)]);
+    const firstVersion = Uint8Array.from([1, bytes[1] ?? 0, ...bytes.slice(5)]);
     expect(bytes[2]).toBe(0);
     const replay = decodeReplay(firstVersion);
     expect(replay?.startWorld).toBe(0);
@@ -82,10 +83,38 @@ describe("replays", () => {
   it("still reads links made before the loadout was picked before the run", () => {
     const { state, recording } = recordBotRun(99, seconds(20));
     const bytes = encodeReplay(recording, state);
-    const secondVersion = Uint8Array.from([2, bytes[1] ?? 0, bytes[2] ?? 0, ...bytes.slice(4)]);
+    const secondVersion = Uint8Array.from([2, bytes[1] ?? 0, bytes[2] ?? 0, ...bytes.slice(5)]);
     const replay = decodeReplay(secondVersion);
     expect(replay?.loadout).toEqual(recording.loadout);
     expect(replay && playReplay(replay).matches).toBe(true);
+  });
+
+  it("still reads links made before runs opened on the starter crate", () => {
+    const { state, recording } = recordBotRun(99, seconds(20));
+    const bytes = encodeReplay(recording, state);
+    const thirdVersion = Uint8Array.from([3, ...bytes.slice(1, 4), ...bytes.slice(5)]);
+    const replay = decodeReplay(thirdVersion);
+    expect(replay?.opening).toBe(false);
+    expect(replay && playReplay(replay).matches).toBe(true);
+  });
+
+  it("replays a run that opens on the starter crate", () => {
+    const state = createArena(41, 0, DEFAULT_LOADOUT, true);
+    const recording = startRecording(41, 0, DEFAULT_LOADOUT, true);
+    const right: Action = { kind: "step", input: { moveX: 1, moveY: 0, dash: false } };
+    while (state.tick < seconds(30) && state.status !== "dead") {
+      act(state, recording, state.status === "levelUp" ? { kind: "choose", index: 0 } : right);
+    }
+    const replay = decodeReplay(encodeReplay(recording, state));
+    expect(replay?.opening).toBe(true);
+    expect(replay && playReplay(replay).matches).toBe(true);
+  });
+
+  it("refuses an opening flag that isn't 0 or 1", () => {
+    const { state, recording } = recordBotRun(99, seconds(5));
+    const bytes = encodeReplay(recording, state);
+    bytes[4] = 2;
+    expect(decodeReplay(bytes)).toBeNull();
   });
 
   it("refuses a loadout that doesn't exist", () => {
@@ -149,6 +178,6 @@ describe("replays", () => {
     expect(decodeReplay(Uint8Array.from([REPLAY_VERSION + 1, 1, 1, 1]))).toBeNull();
     expect(decodeReplay(Uint8Array.from([REPLAY_VERSION, 0x80]))).toBeNull();
     expect(decodeReplay(Uint8Array.from([REPLAY_VERSION, 1, 1, 1, 200]))).toBeNull();
-    expect(decodeReplay(Uint8Array.from([REPLAY_VERSION, 1, 1, 1, 1, 0, 0xff, 0xff, 0xff, 0x7f]), 1000)).toBeNull();
+    expect(decodeReplay(Uint8Array.from([REPLAY_VERSION, 1, 1, 1, 0, 1, 0, 0xff, 0xff, 0xff, 0x7f]), 1000)).toBeNull();
   });
 });

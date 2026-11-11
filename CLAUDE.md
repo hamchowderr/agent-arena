@@ -9,6 +9,7 @@ Every merge to `main` deploys the build to GitHub Pages at https://arena.chowder
 - `npm run dev`: local dev server
 - `npm run balance`: the balance bots play 1000 seeded runs of the old turn-based stage loop and print clear rates per stage. The targets in `src/sim/run.ts` (`BALANCE_TARGETS`) are tested in CI.
 - `npm run arena-balance`: the kiting bot plays seeded real-time arena runs (`src/sim/arena/`) and prints survival time, level, kills and bosses per run. Set `RUNS` to change the count.
+- `npm run opening-pace`: the kiting bot plays seeded runs and prints enemies alive and level at checkpoints over the first two minutes, plus when the first five level-ups land. Use it when tuning how calm the opening feels.
 - `npm run art-sheet`: renders every enemy on every world's ground to `art-sheet/enemies.png`. CI uploads it as the `art-sheet` artifact on every PR.
 - `npm run check`: lint, typecheck, tests, build, and size budget. It must pass before every push.
 
