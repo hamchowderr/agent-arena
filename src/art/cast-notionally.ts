@@ -46,12 +46,12 @@ function duplicateRabbit(frame: number, act: Act = "walk"): Sprite {
 }
 
 function contextLeech(frame: number, act: Act = "walk"): Sprite {
-  const r = new Raster(18, 12);
+  const r = new Raster(18, 13);
   const waves = [0, 1, 1, 0, -1, -1];
   for (let i = 0; i < 5; i += 1) {
-    r.ellipse(2 + i * 3, 7 + (waves[(i + frame) % waves.length] ?? 0), 2.5, 2.5, magenta.base);
+    r.ellipse(2 + i * 3, 7 + (waves[(i + frame) % waves.length] ?? 0), 3, 3.2, magenta.base);
   }
-  r.ellipse(15, 6, 2.5, 2.5, magenta.base);
+  r.ellipse(15, 6, 3, 3.2, magenta.base);
   light(r, magenta);
   for (let i = 1; i < 5; i += 2) {
     r.rect(2 + i * 3, 6 + (waves[(i + frame) % waves.length] ?? 0), 1, 3, magenta.shadow);

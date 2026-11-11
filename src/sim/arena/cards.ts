@@ -1,5 +1,5 @@
-import { EVOLUTIONS, MAX_PASSIVES, MERGES, MAX_WEAPONS, PASSIVES, WEAPONS, type PassiveId, type PassiveStat, type WeaponDefinition, type WeaponId, type WeaponKind } from "./content";
-import { BASE_CRIT, hallucinationPercent, maxHealth, statTotal, type ArenaState } from "./sim";
+import { EVOLUTIONS, MAX_PASSIVES, MAX_WEAPONS, MERGES, PASSIVES, WEAPONS, type PassiveId, type PassiveStat, type WeaponDefinition, type WeaponId, type WeaponKind } from "./content";
+import { critPercent, hallucinationPercent, maxHealth, PROJECTILES_EVERY_LEVELS, statTotal, type ArenaState } from "./sim";
 
 export const CARDS_PER_DRAFT = 3;
 
@@ -68,18 +68,31 @@ function weaponChanges(id: WeaponId, fromLevel: number, toLevel: number): CardCh
   return changes;
 }
 
+export const PASSIVE_WEIGHT = 8;
+
+function projectilesAt(level: number): number {
+  return Math.trunc((level + PROJECTILES_EVERY_LEVELS - 1) / PROJECTILES_EVERY_LEVELS);
+}
+
 function passiveChanges(state: ArenaState, id: PassiveId, fromLevel: number): CardChange[] {
   const passive = PASSIVES[id];
+  if (passive.stat === "projectiles") {
+    return [{ stat: "projectiles", unit: "plain", before: projectilesAt(fromLevel), after: projectilesAt(fromLevel + 1) }];
+  }
   const base: Record<typeof passive.stat, number> = {
     maxHealth: maxHealth(state) - statTotal(state, "maxHealth"),
     damage: 0,
-    crit: BASE_CRIT,
+    crit: critPercent(state) - statTotal(state, "crit"),
     hallucination: hallucinationPercent(state) - statTotal(state, "hallucination"),
+    recheck: 0,
     cooldown: 0,
+    dash: 0,
     pickup: 0,
+    xp: 0,
     speed: 0,
     regen: 0,
     armor: 0,
+    area: 0,
   };
   const start = base[passive.stat];
   const unit: ChangeUnit =
@@ -142,7 +155,7 @@ function candidates(state: ArenaState): Candidate[] {
       continue;
     }
     const pairsWithOwned = EVOLUTIONS.some((evolution) => evolution.passive === id && state.weapons.some((weapon) => weapon.id === evolution.weapon));
-    list.push({ kind: "passive", id, toLevel: owned + 1, weight: 18, priority: pairsWithOwned ? 70 : 30 + owned });
+    list.push({ kind: "passive", id, toLevel: owned + 1, weight: PASSIVE_WEIGHT, priority: pairsWithOwned ? 70 : 30 + owned });
   }
   return list;
 }

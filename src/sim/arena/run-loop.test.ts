@@ -4,7 +4,7 @@ import { kitingBot, pickRecommended } from "./bot";
 import { ENEMIES, WORLDS } from "./content";
 import { px, seconds } from "./math";
 import { isTerminal, nextPhase, RUN_EVENTS, RUN_LOOP, RUN_PHASES, runLoopMermaid, type RunPhase } from "./run-loop";
-import { exploreModel, modelKey, statesThatCanReach } from "./run-loop-model";
+import { exploreModel, INITIAL_MODEL_STATE, modelKey, statesThatCanReach } from "./run-loop-model";
 import { createArena, freeOrder, step, IDLE, type ArenaState } from "./sim";
 
 function finalBossDiesAsPlayerIsHit(): ArenaState {
@@ -58,20 +58,39 @@ describe("run loop model check", () => {
     expect(states.filter((state) => state.phase === "won" && state.bossesDown !== WORLDS.length)).toEqual([]);
   });
 
-  it("never skips a boss: the count rises by one, only when an active boss falls", () => {
+  it("never skips a boss inside a run: the count rises by one, only when an active boss falls", () => {
     for (const [key, edges] of graph.edges) {
       const from = graph.states.get(key);
       for (const edge of edges) {
-        if (from && edge.to.bossesDown > from.bossesDown) {
+        if (!from) {
+          continue;
+        }
+        if (edge.action === "start" || edge.action === "toTitle") {
+          expect(edge.to.bossesDown).toBe(edge.to.startWorld);
+          continue;
+        }
+        expect(edge.to.startWorld).toBe(from.startWorld);
+        if (edge.to.bossesDown !== from.bossesDown) {
           expect(edge.action).toBe("bossDown");
           expect(from.bossActive).toBe(true);
           expect(edge.to.bossesDown).toBe(from.bossesDown + 1);
         }
-        if (from && edge.to.bossesDown < from.bossesDown) {
-          expect(["start", "toTitle"]).toContain(edge.action);
-        }
       }
     }
+  });
+
+  it("can start a run at every world, and each of those runs can still be won", () => {
+    const starts = (graph.edges.get(modelKey(INITIAL_MODEL_STATE)) ?? []).filter((edge) => edge.action === "start");
+    expect(starts.map((edge) => edge.to.startWorld).sort()).toEqual(WORLDS.map((_, index) => index));
+    const canWin = statesThatCanReach(graph, (state) => state.phase === "won");
+    for (const edge of starts) {
+      expect(canWin.has(modelKey(edge.to))).toBe(true);
+    }
+  });
+
+  it("lets a paused run quit to the title", () => {
+    expect(nextPhase("pausedPlaying", "toTitle")).toBe("title");
+    expect(nextPhase("pausedLevelUp", "toTitle")).toBe("title");
   });
 
   it("leaves a finished run only by starting over or going to the title", () => {

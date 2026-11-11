@@ -49,6 +49,8 @@ describe("format", () => {
     expect(changeValue({ stat: "crit", unit: "percent", before: 5, after: 11 }, 11)).toBe("11%");
     expect(changeValue({ stat: "damage", unit: "bonusPercent", before: 0, after: 10 }, 10)).toBe("+10%");
     expect(changeValue({ stat: "damage", unit: "bonusPercent", before: 0, after: 10 }, 0)).toBe("0%");
+    expect(changeValue({ stat: "cooldown", unit: "bonusPercent", before: 0, after: -7 }, -7)).toBe("-7%");
+    expect(changeValue({ stat: "dash", unit: "bonusPercent", before: -12, after: -24 }, -24)).toBe("-24%");
     expect(changeValue({ stat: "regen", unit: "regen", before: 0, after: 1 }, 1)).toBe("1 HP/2s");
     expect(changeValue({ stat: "damage", unit: "plain", before: null, after: 10 }, null)).toBe("-");
   });

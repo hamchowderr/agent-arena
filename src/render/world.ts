@@ -43,7 +43,7 @@ import { agentClips } from "../art/clips";
 import { agentBody } from "../art/agent";
 import { isEvolvedWeapon, REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, seesThroughFakes, weaponStats, type ArenaState } from "../sim/arena/sim";
+import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, ownedStats, seesThroughFakes, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import { dronePhase } from "../sim/arena/tools";
 import { CODER_DRONE } from "../art/tool-art";
@@ -92,6 +92,7 @@ const MARK_BY_TIER = { fodder: "small", mid: "medium", heavy: "large", boss: "cr
 const FACING_DEADZONE = px(3);
 const DEATH_TICKS_PER_FRAME = TICKS_PER_SECOND / DEATH_FPS;
 const WINDUP_TICKS_PER_FRAME = 4;
+const PLAYER_RING_RADIUS = 13;
 const MAX_HAZARD_SPRITES = 40;
 const HAZARD_PIXELS = 13;
 const BIG_HAZARD_SCALE = 18 / 13;
@@ -336,6 +337,7 @@ export class ArenaRenderer {
   private readonly slamFill: Mesh<CircleGeometry, MeshBasicMaterial>;
   private readonly slamRing: Mesh<RingGeometry, MeshBasicMaterial>;
   private readonly bossRing: Mesh<RingGeometry, MeshBasicMaterial>;
+  private readonly playerRing: Mesh<RingGeometry, MeshBasicMaterial>;
   private readonly shadows: ShadowBatch;
   private enemies: Record<EnemyKind, SpriteBatch>;
   private elites: Record<RegularKind, SpriteBatch>;
@@ -429,6 +431,12 @@ export class ArenaRenderer {
     );
     this.glow.position.y = 0.3;
     this.scene.add(this.glow);
+
+    const playerRingGeometry = new RingGeometry(PLAYER_RING_RADIUS - 2, PLAYER_RING_RADIUS, 32);
+    playerRingGeometry.rotateX(-Math.PI / 2);
+    this.playerRing = new Mesh(playerRingGeometry, new MeshBasicMaterial({ color: "#73eff7", transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }));
+    this.playerRing.position.y = 0.4;
+    this.scene.add(this.playerRing);
 
     const slamGeometry = new CircleGeometry(1, 40);
     slamGeometry.rotateX(-Math.PI / 2);
@@ -880,6 +888,8 @@ export class ArenaRenderer {
     this.ground.position.set(Math.round(playerX / GROUND_TILE) * GROUND_TILE, 0, Math.round(playerZ / GROUND_TILE) * GROUND_TILE);
     this.glow.position.x = playerX;
     this.glow.position.z = playerZ;
+    this.playerRing.position.x = playerX;
+    this.playerRing.position.z = playerZ;
     this.placeProps(playerX, playerZ);
 
     this.shadows.begin();
@@ -1003,7 +1013,7 @@ export class ArenaRenderer {
       if (WEAPONS[owned.id].kind !== "seeker") {
         continue;
       }
-      const count = weaponStats(owned.id, owned.level).count;
+      const count = ownedStats(state, owned).count;
       for (let index = 0; index < count; index += 1) {
         const drone = dronePosition(state, index, count, dronePhase(owned.id));
         const lift = 8 + Math.sin(state.tick / 7 + index) * 1.5;
@@ -1021,7 +1031,7 @@ export class ArenaRenderer {
         continue;
       }
       const key = this.arm(owned.id);
-      const count = weaponStats(owned.id, owned.level).count;
+      const count = ownedStats(state, owned).count;
       for (let index = 0; index < count; index += 1) {
         const blade = orbitPosition(state, owned, index);
         this.arms.get(key)?.add(blade.x / SUB, 4, blade.y / SUB);

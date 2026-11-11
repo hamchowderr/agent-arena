@@ -23,6 +23,10 @@ import {
   PASSIVES,
   WEAPONS,
   WORLDS,
+  CONTEXT_WINDOWS,
+  DEFAULT_LOADOUT,
+  TEMPERATURES,
+  type ArenaLoadout,
   type BossPattern,
   type EnemyKind,
   type GroundHazard,
@@ -33,6 +37,7 @@ import {
   type PassiveStat,
   type WeaponDefinition,
   type WeaponId,
+  type WeaponLevel,
   type WeaponKind,
   type World,
 } from "./content";
@@ -351,6 +356,8 @@ export interface Killer {
 
 export interface ArenaState {
   readonly seed: number;
+  readonly startWorld: number;
+  readonly loadout: ArenaLoadout;
   readonly rng: Rng;
   tick: number;
   status: Status;
@@ -363,6 +370,7 @@ export interface ArenaState {
   readonly passives: Map<PassiveId, number>;
   readonly banished: Set<string>;
   xp: number;
+  xpCarry: number;
   level: number;
   pendingLevelUps: number;
   cards: Card[];
@@ -395,17 +403,28 @@ export interface ArenaState {
   events: ArenaEvent[];
 }
 
-export function createArena(seed: number): ArenaState {
+export const HEAD_START_CARDS_PER_WORLD = 4;
+
+export function clampStartWorld(world: number): number {
+  return Number.isInteger(world) ? Math.max(0, Math.min(WORLDS.length - 1, world)) : 0;
+}
+
+export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = DEFAULT_LOADOUT): ArenaState {
+  const context = CONTEXT_WINDOWS[loadout.context];
+  const startWorld = clampStartWorld(startAt);
+  const tier = WORLDS[startWorld]?.tier ?? 1;
   return {
     seed,
+    startWorld,
+    loadout,
     rng: createRng(mixSeed(seed, 77)),
     tick: 0,
     status: "playing",
-    tier: 1,
+    tier,
     player: {
       x: 0,
       y: 0,
-      health: BASE_HEALTH,
+      health: BASE_HEALTH + HEALTH_PER_TIER * (tier - 1) + context.maxHealth,
       facingX: UNIT,
       facingY: 0,
       dashTicks: 0,
@@ -425,13 +444,14 @@ export function createArena(seed: number): ArenaState {
     passives: new Map(),
     banished: new Set(),
     xp: 0,
-    level: 1,
-    pendingLevelUps: 0,
+    xpCarry: 0,
+    level: 1 + startWorld * HEAD_START_CARDS_PER_WORLD,
+    pendingLevelUps: startWorld * HEAD_START_CARDS_PER_WORLD,
     cards: [],
     rerolls: RUN_REROLLS,
     skips: RUN_SKIPS,
     kills: 0,
-    bossesDown: 0,
+    bossesDown: startWorld,
     bossId: null,
     nextBossTick: seconds(BOSS_EVERY_SECONDS),
     slam: null,
@@ -474,12 +494,13 @@ export function statTotal(state: ArenaState, stat: PassiveStat): number {
 }
 
 export function maxHealth(state: ArenaState): number {
-  return BASE_HEALTH + HEALTH_PER_TIER * (state.tier - 1) + statTotal(state, "maxHealth");
+  return BASE_HEALTH + HEALTH_PER_TIER * (state.tier - 1) + CONTEXT_WINDOWS[state.loadout.context].maxHealth + statTotal(state, "maxHealth");
 }
 
 export function hallucinationPercent(state: ArenaState): number {
   const doubt = bossPenalty(state, "fakes") ? CONFIDENT_EXPERT_HALLUCINATION : 0;
-  return Math.max(0, BASE_HALLUCINATION - HALLUCINATION_PER_TIER * (state.tier - 1) + statTotal(state, "hallucination") + doubt);
+  const temperature = TEMPERATURES[state.loadout.temperature].hallucination;
+  return Math.max(0, BASE_HALLUCINATION - HALLUCINATION_PER_TIER * (state.tier - 1) + temperature + statTotal(state, "hallucination") + doubt);
 }
 
 export function bossCheckPassed(state: ArenaState): boolean {
@@ -492,7 +513,7 @@ export function bossPenalty(state: ArenaState, pattern: BossPattern): boolean {
 }
 
 export function critPercent(state: ArenaState): number {
-  return Math.min(100, BASE_CRIT + statTotal(state, "crit"));
+  return Math.max(0, Math.min(100, BASE_CRIT + TEMPERATURES[state.loadout.temperature].crit + statTotal(state, "crit")));
 }
 
 export function twistCounterLevel(state: ArenaState): number {
@@ -551,10 +572,28 @@ export function inDarkWater(state: ArenaState): boolean {
 }
 
 export function playerSpeed(state: ArenaState): number {
-  return percentOf(PLAYER_SPEED, 100 + statTotal(state, "speed"));
+  return percentOf(PLAYER_SPEED, 100 + CONTEXT_WINDOWS[state.loadout.context].speed + statTotal(state, "speed"));
 }
 
-export function weaponStats(id: WeaponId, owned: number) {
+export const PROJECTILES_EVERY_LEVELS = 3;
+
+export function extraProjectiles(state: ArenaState): number {
+  return Math.trunc((statTotal(state, "projectiles") + PROJECTILES_EVERY_LEVELS - 1) / PROJECTILES_EVERY_LEVELS);
+}
+
+export function dashRecharge(state: ArenaState): number {
+  return Math.max(seconds(1), percentOf(DASH_RECHARGE, 100 + statTotal(state, "dash")));
+}
+
+export function ownedStats(state: ArenaState, owned: { readonly id: WeaponId; readonly level: number }): WeaponLevel {
+  const stats = weaponStats(owned.id, owned.level);
+  const kind = WEAPONS[owned.id].kind;
+  const count = kind === "pulse" ? stats.count : stats.count + extraProjectiles(state);
+  const radius = kind === "pulse" || kind === "orbit" || kind === "bomb" || kind === "mine" || kind === "chain" ? percentOf(stats.radius, 100 + statTotal(state, "area")) : stats.radius;
+  return { ...stats, count, radius };
+}
+
+export function weaponStats(id: WeaponId, owned: number): WeaponLevel {
   const levels = WEAPONS[id].levels;
   return levels[Math.min(owned, levels.length) - 1] ?? levels[0];
 }
@@ -643,7 +682,7 @@ function movePlayer(state: ArenaState, input: Input): void {
   if (input.dash && player.dashCharges > 0 && player.dashTicks === 0) {
     player.dashCharges -= 1;
     player.dashTicks = DASH_TICKS;
-    player.dashRecharge = DASH_RECHARGE;
+    player.dashRecharge = dashRecharge(state);
     state.events.push({ kind: "dash" });
   }
   if (player.dashTicks > 0) {
@@ -1116,7 +1155,7 @@ function fireWeapons(state: ArenaState): void {
   const range = inDarkWater(state) ? DARK_TARGET_RANGE : TARGET_RANGE;
   for (const owned of state.weapons) {
     const definition: WeaponDefinition = WEAPONS[owned.id];
-    const stats = weaponStats(owned.id, owned.level);
+    const stats = ownedStats(state, owned);
     if (definition.kind === "orbit") {
       orbitHits(state, owned);
       continue;
@@ -1153,7 +1192,7 @@ function fireWeapons(state: ArenaState): void {
       continue;
     }
     for (let shot = 0; shot < stats.count; shot += 1) {
-      const hallucinated = state.rng.chancePercent(hallucinationPercent(state));
+      const hallucinated = state.rng.chancePercent(hallucinationPercent(state)) && !caughtBySelfCheck(state);
       const drone = definition.kind === "seeker";
       const from = drone ? dronePosition(state, shot, stats.count, dronePhase(owned.id)) : { x: state.player.x, y: state.player.y - px(4) };
       const fan = definition.kind === "homing" ? 28 : 10;
@@ -1182,6 +1221,11 @@ function fireWeapons(state: ArenaState): void {
   }
 }
 
+function caughtBySelfCheck(state: ArenaState): boolean {
+  const recheck = statTotal(state, "recheck");
+  return recheck > 0 && state.rng.chancePercent(recheck);
+}
+
 export const DRONE_RADIUS = px(30);
 
 export function dronePosition(state: ArenaState, index: number, count: number, phase = 0): { readonly x: number; readonly y: number } {
@@ -1194,7 +1238,7 @@ export function dronePosition(state: ArenaState, index: number, count: number, p
 }
 
 export function orbitPosition(state: ArenaState, owned: OwnedWeapon, index: number): { readonly x: number; readonly y: number } {
-  const stats = weaponStats(owned.id, owned.level);
+  const stats = ownedStats(state, owned);
   const angle = Math.trunc((state.tick * WEAPONS[owned.id].speed) / 2) + Math.trunc((index * ANGLE_STEPS) / stats.count);
   const radius = px(stats.radius);
   return {
@@ -1204,7 +1248,7 @@ export function orbitPosition(state: ArenaState, owned: OwnedWeapon, index: numb
 }
 
 function orbitHits(state: ArenaState, owned: OwnedWeapon): void {
-  const stats = weaponStats(owned.id, owned.level);
+  const stats = ownedStats(state, owned);
   const reach = BLADE_REACH;
   for (let index = 0; index < stats.count; index += 1) {
     const blade = orbitPosition(state, owned, index);
@@ -1297,7 +1341,7 @@ function bladeTouching(state: ArenaState, x: number, y: number): boolean {
     if (WEAPONS[owned.id].kind !== "orbit") {
       continue;
     }
-    const count = weaponStats(owned.id, owned.level).count;
+    const count = ownedStats(state, owned).count;
     for (let index = 0; index < count; index += 1) {
       const blade = orbitPosition(state, owned, index);
       if (distanceSquared(blade.x, blade.y, x, y) <= reach * reach) {
@@ -1500,7 +1544,7 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   }
   state.tier = Math.min(5, state.tier + 1) as Tier;
   state.player.health = Math.min(maxHealth(state), state.player.health + percentOf(maxHealth(state), 40));
-  state.nextBossTick = Math.max(seconds(BOSS_EVERY_SECONDS * (state.bossesDown + 1)), state.tick + seconds(20));
+  state.nextBossTick = Math.max(seconds(BOSS_EVERY_SECONDS * (bossesBeaten(state) + 1)), state.tick + seconds(20));
   state.events.push({ kind: "tierUp", tier: state.tier });
 }
 
@@ -1734,7 +1778,10 @@ function collectGems(state: ArenaState): void {
 }
 
 function gainXp(state: ArenaState, amount: number): void {
-  state.xp += amount;
+  state.xpCarry += amount * statTotal(state, "xp");
+  const bonus = Math.trunc(state.xpCarry / 100);
+  state.xpCarry -= bonus * 100;
+  state.xp += amount + bonus;
   while (state.xp >= xpToNext(state.level)) {
     state.xp -= xpToNext(state.level);
     state.level += 1;
@@ -1895,8 +1942,12 @@ function applyCard(state: ArenaState, card: Card): void {
   }
 }
 
+export function bossesBeaten(state: ArenaState): number {
+  return state.bossesDown - state.startWorld;
+}
+
 export function score(state: ArenaState): number {
-  return state.kills * 10 + state.level * 100 + state.bossesDown * 1000 + Math.trunc(state.tick / TICKS_PER_SECOND);
+  return state.kills * 10 + state.level * 100 + bossesBeaten(state) * 1000 + Math.trunc(state.tick / TICKS_PER_SECOND);
 }
 
 export function elapsedSeconds(state: ArenaState): number {

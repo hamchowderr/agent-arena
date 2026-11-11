@@ -75,7 +75,7 @@ export function changeValue(change: CardChange, value: number | null): string {
     case "percent":
       return `${Math.max(0, value)}%`;
     case "bonusPercent":
-      return value > 0 ? `+${value}%` : `${Math.max(0, value)}%`;
+      return value > 0 ? `+${value}%` : `${value}%`;
     case "regen":
       return t("unit.regen", { value: Math.max(0, value) });
   }

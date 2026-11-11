@@ -4,7 +4,7 @@ import { type Act, moodFor, eye, eyes, light, mouth, RAMPS, tinted } from "./for
 import { Raster } from "./raster";
 import type { Sprite } from "./sprites";
 
-const { paper, blue, yellow, green, purple, charcoal, teal, steel, coral, magenta, orange, red } = RAMPS;
+const { paper, blue, yellow, green, purple, charcoal, teal, steel, coral, magenta, orange, red, lime } = RAMPS;
 
 function hallucinationJelly(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(18, 18);
@@ -51,10 +51,10 @@ function confidentParrot(frame: number, act: Act = "walk"): Sprite {
   const windup = act === "windup";
   const talk = windup ? 2 : frame % 2;
   const chest = windup ? 1 + (frame % 2) : 0;
-  r.polygon([[6, 15], [1, 25], [4, 25], [8, 18]], green.shadow);
-  r.ellipse(10, 15, 6 + chest, 7, green.base).ellipse(13, 7, 5, 5, green.base);
-  light(r, green);
-  r.polygon([[6, 13], [11, 12], [12, 19], [7, 20]], green.shadow);
+  r.polygon([[6, 15], [1, 25], [4, 25], [8, 18]], lime.shadow);
+  r.ellipse(10, 15, 6 + chest, 7, lime.base).ellipse(13, 7, 5, 5, lime.base);
+  light(r, lime);
+  r.polygon([[6, 13], [11, 12], [12, 19], [7, 20]], lime.shadow);
   r.polygon([[17, 6], [21, 8], [19, 11 + talk], [17, 10]], yellow.base);
   light(r, yellow);
   r.line(17, 9, 19, 9 + talk, "k");

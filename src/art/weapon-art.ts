@@ -47,7 +47,7 @@ export const BRICK: Sprite = [
   "kooyoooooook",
   "kowooyyyyook",
   "kooooooooook",
-  "krrrrrrrrrrk",
+  "kooyooooyook",
   "kkkkkkkkkkkk",
 ];
 

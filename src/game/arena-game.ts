@@ -6,6 +6,7 @@ import { WORLDS, type SignatureWave } from "../sim/arena/content";
 import type { StagedEvent } from "../sim/arena/formations";
 import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
 import {
+  clampStartWorld,
   createArena,
   currentWorld,
   elapsedSeconds,
@@ -30,6 +31,7 @@ import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
 import {
   currentLocale,
+  LOCALES,
   nextLocale,
   setLocale,
   t,
@@ -55,6 +57,8 @@ import {
   tierStage,
 } from "./format";
 import { agentCanvas, bossCanvas, guideCanvas } from "./portraits";
+import { DEFAULT_SETTINGS, Menu, MENU_LINKS, parseCleared, parseLoadout, parseSettings, type MenuCommand, type MenuSettings } from "./menu";
+import { drawMenu, type MenuDevice } from "./menu-hud";
 import {
   acquisitionScene,
   arrivalScene,
@@ -103,10 +107,10 @@ import {
   ENTRANCE_SECONDS,
   ENTRANCE_SLAM_SECONDS,
   guideAccent,
-  drawTitle,
   HUD_HEIGHT,
   HUD_WIDTH,
   inside,
+  PAUSE_QUIT_RECT,
   POST_RECT,
   REROLL_RECT,
   SHARE_RECT,
@@ -183,12 +187,29 @@ export interface GameHooks {
   readonly share?: (request: ShareRequest) => Promise<ShareOutcome>;
   readonly storyMemory?: StoryMemory;
   readonly blip?: (blip: Blip) => void;
+  readonly saved?: SavedStore;
+  readonly openLink?: (url: string) => void;
+}
+
+export interface SavedStore {
+  read(key: string): string | null;
+  write(key: string, value: string): void;
+}
+
+export const SETTINGS_KEY = "agent-arena.settings";
+export const LOADOUT_KEY = "agent-arena.loadout";
+export const CLEARED_KEY = "agent-arena.cleared";
+
+function stepLocale(code: LocaleCode, step: 1 | -1): LocaleCode {
+  const index = LOCALES.findIndex((entry) => entry.code === code);
+  return LOCALES[(index + step + LOCALES.length) % LOCALES.length]?.code ?? code;
 }
 
 const LOW_HEALTH_PERCENT = 35;
 const BLINK_EVERY = 3.4;
 const BLINK_SECONDS = 0.12;
 const MOUTH_SECONDS = 0.09;
+const ANGRY_LINE = /\.(bossTaunt|bossCheck|bossAcquire)$/;
 
 function runOver(state: ArenaState): boolean {
   return state.status === "dead" || state.status === "won";
@@ -222,7 +243,12 @@ export class ArenaGame {
   private voicedLine = "";
   private voicedShown = 0;
   private tourCards: readonly Card[] | null = null;
-  private musicOn = false;
+  readonly menu: Menu;
+  private audioReady = false;
+  private mutedMusic = DEFAULT_SETTINGS.music;
+  private menuDevice: MenuDevice = "keys";
+  private padHeld: Direction = STILL;
+  private padRepeat = 0;
   private renderedTier: Tier = 1;
   private twistFloatAt = 0;
   private recording: Recording | null = null;
@@ -242,16 +268,26 @@ export class ArenaGame {
     this.memory = hooks.storyMemory ?? memoryOf();
     this.story = new StoryPlayer(this.memory, { text: (line) => this.lineText(line), spaced: () => usesSpaces(currentLocale()) });
     this.tutorial = this.newTutorial(false);
-    this.state = createArena(hooks.newSeed());
-    this.renderer.setWorld(1, this.state.seed);
+    this.menu = new Menu(
+      parseSettings(hooks.saved?.read(SETTINGS_KEY) ?? null),
+      parseCleared(hooks.saved?.read(CLEARED_KEY) ?? null),
+      parseLoadout(hooks.saved?.read(LOADOUT_KEY) ?? null),
+    );
+    this.state = createArena(hooks.newSeed(), this.menu.world);
+    this.renderedTier = this.state.tier;
+    this.renderer.setWorld(this.state.tier, this.state.seed);
   }
 
-  start(seed = this.hooks.newSeed()): void {
+  get settings(): MenuSettings {
+    return this.menu.settings;
+  }
+
+  start(seed = this.hooks.newSeed(), world = this.menu.world): void {
     if (!this.allows("start")) {
       return;
     }
-    this.begin(seed, false);
-    this.recording = startRecording(seed);
+    this.begin(seed, false, world);
+    this.recording = startRecording(seed, this.state.startWorld, this.state.loadout);
     this.lastRecording = this.recording;
     this.lastWatched = null;
     this.shareCode = null;
@@ -263,7 +299,7 @@ export class ArenaGame {
       return;
     }
     const speed = this.playback?.speed ?? 1;
-    this.begin(replay.seed, true);
+    this.begin(replay.seed, true, replay.startWorld, replay.loadout);
     this.recording = null;
     this.lastWatched = replay;
     this.playback = { replay, index: 0, speed, hold: 0, desynced: false };
@@ -326,23 +362,24 @@ export class ArenaGame {
     return this.story.speech?.scene.id === LESSON_ID;
   }
 
-  private begin(seed: number, watching: boolean): void {
+  private begin(seed: number, watching: boolean, world: number, loadout = this.menu.loadout): void {
     this.playback = null;
     this.watched = null;
     this.hover = -1;
     this.accumulator = 0;
-    this.state = createArena(seed);
-    this.renderer.setWorld(1, seed);
-    this.renderedTier = 1;
+    const startWorld = clampStartWorld(world);
+    this.state = createArena(seed, startWorld, loadout);
+    this.renderer.setWorld(this.state.tier, seed);
+    this.renderedTier = this.state.tier;
     this.floats = [];
     this.spins = [];
     this.effects.clear();
-    const firstWorld = WORLDS[0];
+    const firstWorld = WORLDS[startWorld];
     this.banner = firstWorld
       ? {
           title: rivalName(firstWorld),
           subtitle: t("story.worldBanner", {
-            world: 1,
+            world: startWorld + 1,
             stage: tierStage(firstWorld.tier),
           }),
           age: 0,
@@ -351,7 +388,7 @@ export class ArenaGame {
       : null;
     this.ending = false;
     this.story.clear();
-    const teaching = !watching && (this.teachNext || !this.memory.has(TUTORIAL_DONE));
+    const teaching = !watching && startWorld === 0 && (this.teachNext || !this.memory.has(TUTORIAL_DONE));
     this.teachNext = false;
     this.tutorial = this.newTutorial(teaching);
     this.lesson = [];
@@ -394,7 +431,40 @@ export class ArenaGame {
     }
   }
 
+  private saveProgress(): void {
+    if (this.playback || this.watched) {
+      return;
+    }
+    const before = this.menu.bossesCleared;
+    this.menu.setCleared(this.state.bossesDown);
+    if (this.menu.bossesCleared > before) {
+      this.hooks.saved?.write(CLEARED_KEY, String(this.menu.bossesCleared));
+    }
+  }
+
+  private toTitle(): void {
+    if (!this.allows("toTitle")) {
+      return;
+    }
+    this.saveProgress();
+    this.playback = null;
+    this.recording = null;
+    this.story.clear();
+    this.tutorial = this.newTutorial(false);
+    this.banner = null;
+    this.spins = [];
+    this.floats = [];
+    this.effects.clear();
+    this.ending = false;
+    this.state = createArena(this.state.seed, this.menu.world);
+    this.renderedTier = this.state.tier;
+    this.renderer.setWorld(this.state.tier, this.state.seed);
+    this.menu.open("home");
+    this.setScreen("title");
+  }
+
   private finishRun(): void {
+    this.saveProgress();
     if (this.tutorial.basicsDone || this.tutorial.finished) {
       this.memory.add(TUTORIAL_DONE);
     }
@@ -479,19 +549,18 @@ export class ArenaGame {
   keyDown(key: string): void {
     const lower = key.toLowerCase();
     this.held.add(lower);
+    this.wakeAudio();
     if (lower === "m") {
       this.toggleMusic();
       return;
     }
     if (this.screen === "title") {
-      if (lower === "enter" || lower === " ") {
-        this.start();
-      } else if (lower === "h") {
-        this.teachNext = true;
-        this.start();
-      } else if (lower === "l") {
-        void this.changeLocale(nextLocale(currentLocale()));
-      }
+      this.menuDevice = "keys";
+      this.titleKey(lower);
+      return;
+    }
+    if (this.screen === "paused" && lower === "q") {
+      this.toTitle();
       return;
     }
     if (this.screen === "results") {
@@ -503,8 +572,8 @@ export class ArenaGame {
         this.share("x");
       } else if (lower === "w") {
         this.watchAgain();
-      } else if (lower === "t" && this.allows("toTitle")) {
-        this.setScreen("title");
+      } else if (lower === "t" || lower === "escape") {
+        this.toTitle();
       }
       return;
     }
@@ -563,13 +632,116 @@ export class ArenaGame {
     }
   }
 
+  private titleKey(key: string): void {
+    const moves: Readonly<Record<string, readonly [number, number]>> = {
+      arrowup: [0, -1],
+      w: [0, -1],
+      arrowdown: [0, 1],
+      s: [0, 1],
+      arrowleft: [-1, 0],
+      a: [-1, 0],
+      arrowright: [1, 0],
+      d: [1, 0],
+    };
+    const move = moves[key];
+    if (move) {
+      this.runMenu(this.menu.move(move[0], move[1]));
+    } else if (key === "enter" || key === " ") {
+      this.runMenu(this.menu.activate());
+    } else if (key === "escape" || key === "backspace") {
+      this.runMenu(this.menu.back());
+    } else if (key === "h") {
+      this.runMenu({ kind: "tutorial" });
+    } else if (key === "l") {
+      void this.changeLocale(nextLocale(currentLocale()));
+    }
+  }
+
+  private runMenu(command: MenuCommand | null): void {
+    if (!command) {
+      return;
+    }
+    switch (command.kind) {
+      case "start":
+        this.start(this.hooks.newSeed(), command.world);
+        return;
+      case "tutorial":
+        this.teachNext = true;
+        this.menu.world = 0;
+        this.start(this.hooks.newSeed(), 0);
+        return;
+      case "locked": {
+        const gate = WORLDS[command.world - 1];
+        this.notify(t("menu.lockedNotice", { boss: gate ? bossName(gate) : "" }));
+        return;
+      }
+      case "world": {
+        const world = WORLDS[command.world];
+        if (world) {
+          this.state = createArena(this.state.seed, command.world);
+          this.renderedTier = this.state.tier;
+          this.renderer.setWorld(world.tier, this.state.seed);
+        }
+        return;
+      }
+      case "locale":
+        void this.changeLocale(stepLocale(currentLocale(), command.step));
+        return;
+      case "settings":
+        this.applySettings(command.settings);
+        return;
+      case "loadout":
+        this.hooks.saved?.write(LOADOUT_KEY, JSON.stringify(command.loadout));
+        return;
+      case "open":
+        this.hooks.openLink?.(MENU_LINKS[command.link]);
+        return;
+      case "page":
+        return;
+    }
+  }
+
+  private applySettings(settings: MenuSettings): void {
+    this.menu.settings = settings;
+    this.hooks.saved?.write(SETTINGS_KEY, JSON.stringify(settings));
+    this.syncMusic();
+  }
+
+  private wakeAudio(): void {
+    if (!this.audioReady) {
+      this.audioReady = true;
+      this.syncMusic();
+    }
+  }
+
+  back(): void {
+    if (this.screen === "title") {
+      this.menuDevice = "pad";
+      this.runMenu(this.menu.back());
+      return;
+    }
+    this.keyDown("escape");
+    this.keyUp("escape");
+  }
+
   keyUp(key: string): void {
     this.held.delete(key.toLowerCase());
   }
 
   pointer(x: number, y: number, pressed: boolean): void {
-    if (this.screen === "title" && pressed) {
-      this.start();
+    if (pressed) {
+      this.wakeAudio();
+    }
+    if (this.screen === "title") {
+      if (pressed) {
+        this.runMenu(this.menu.click(x, y));
+      } else {
+        this.menu.hover(x, y);
+      }
+      return;
+    }
+    if (this.screen === "paused" && pressed && inside(PAUSE_QUIT_RECT, x, y)) {
+      this.toTitle();
       return;
     }
     if (this.screen === "results" && pressed) {
@@ -620,15 +792,19 @@ export class ArenaGame {
   }
 
   toggleMusic(): boolean {
-    this.musicOn = !this.musicOn;
-    this.syncMusic();
-    return this.musicOn;
+    const music = this.menu.settings.music;
+    if (music > 0) {
+      this.mutedMusic = music;
+    }
+    this.applySettings({ ...this.menu.settings, music: music > 0 ? 0 : this.mutedMusic || DEFAULT_SETTINGS.music });
+    return this.menu.settings.music > 0;
   }
 
   private syncMusic(): void {
     const { tier, bossesDown, bossId } = this.state;
+    const volume = this.menu.settings.music;
     setMusic(
-      this.musicOn
+      this.audioReady && volume > 0
         ? cueFor({
             onTitle: this.screen === "title" || this.screen === "results",
             tier,
@@ -636,6 +812,7 @@ export class ArenaGame {
             bossId,
           })
         : null,
+      volume / DEFAULT_SETTINGS.music,
     );
   }
 
@@ -679,6 +856,21 @@ export class ArenaGame {
       this.device = "pad";
     }
     this.padDirection = direction;
+    if (this.screen !== "title") {
+      this.padHeld = STILL;
+      return;
+    }
+    const still = direction.moveX === 0 && direction.moveY === 0;
+    const changed = direction.moveX !== this.padHeld.moveX || direction.moveY !== this.padHeld.moveY;
+    this.padHeld = direction;
+    if (still) {
+      return;
+    }
+    this.padRepeat = changed ? 0 : this.padRepeat + 1;
+    if (changed || (this.padRepeat > 24 && this.padRepeat % 8 === 0)) {
+      this.menuDevice = "pad";
+      this.runMenu(this.menu.move(direction.moveY !== 0 ? 0 : direction.moveX, direction.moveY));
+    }
   }
 
   dash(): void {
@@ -704,6 +896,12 @@ export class ArenaGame {
 
   confirm(): void {
     this.device = "pad";
+    this.wakeAudio();
+    if (this.screen === "title") {
+      this.menuDevice = "pad";
+      this.runMenu(this.menu.activate());
+      return;
+    }
     if (this.screen === "run" && this.playback) {
       return;
     }
@@ -1253,8 +1451,17 @@ export class ArenaGame {
       case "you":
         return agentCanvas(this.state.tier);
       case "rival":
-      case "boss":
-        return bossCanvas(speech.scene.world);
+      case "boss": {
+        const blink =
+          (speech.age + (this.state.seed % 5)) % BLINK_EVERY < BLINK_SECONDS;
+        const talking =
+          speech.typing && Math.floor(speech.age / MOUTH_SECONDS) % 2 === 0;
+        return bossCanvas(speech.scene.world, {
+          flicker: blink ? 3 : 0,
+          angry: speech.line.voice === "boss" && ANGRY_LINE.test(speech.line.key),
+          talking,
+        });
+      }
     }
   }
 
@@ -1264,7 +1471,7 @@ export class ArenaGame {
       this.voicedLine = key;
       this.voicedShown = 0;
       if (this.entering(speech)) {
-        this.hooks.blip?.(entranceBoom(speech.scene.world));
+        this.playBlip(entranceBoom(speech.scene.world));
       }
     }
     const chars = [...speech.text];
@@ -1272,7 +1479,14 @@ export class ArenaGame {
     this.voicedShown = Math.max(this.voicedShown, speech.shown);
     const last = due[due.length - 1];
     if (last !== undefined && !this.playback) {
-      this.hooks.blip?.(blipFor(speech.line.voice, speech.scene.world, chars[last] ?? "a"));
+      this.playBlip(blipFor(speech.line.voice, speech.scene.world, chars[last] ?? "a"));
+    }
+  }
+
+  private playBlip(blip: Blip): void {
+    const sound = this.menu.settings.sound;
+    if (sound > 0) {
+      this.hooks.blip?.({ ...blip, gain: (blip.gain * sound) / DEFAULT_SETTINGS.sound });
     }
   }
 
@@ -1408,7 +1622,8 @@ export class ArenaGame {
     context.imageSmoothingEnabled = false;
     const project = (x: number, y: number) => this.projectToHud(x, y);
     if (this.screen === "title") {
-      drawTitle(context, this.frameCount);
+      this.menu.tick();
+      drawMenu(context, this.menu, this.frameCount, this.menuDevice);
       this.drawNotice();
       return;
     }

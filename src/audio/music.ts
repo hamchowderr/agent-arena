@@ -14,18 +14,19 @@ function loadStrudel(): Promise<StrudelModule> {
   return strudel;
 }
 
-export function setMusic(cue: MusicCue | null): void {
-  const key = cue ? cueKey(cue) : null;
+export function setMusic(cue: MusicCue | null, volume = 1): void {
+  const level = Math.round(Math.max(0, volume) * 100) / 100;
+  const key = cue ? `${cueKey(cue)}@${level}` : null;
   if (key === playing) {
     return;
   }
   playing = key;
-  queue = queue.then(() => (cue ? play(cue) : stop())).catch(() => undefined);
+  queue = queue.then(() => (cue ? play(cue, level) : stop())).catch(() => undefined);
 }
 
-async function play(cue: MusicCue): Promise<void> {
+async function play(cue: MusicCue, level: number): Promise<void> {
   const { evaluate } = await loadStrudel();
-  await evaluate(scoreFor(cue));
+  await evaluate(`${scoreFor(cue)}.postgain(${level})`);
 }
 
 async function stop(): Promise<void> {

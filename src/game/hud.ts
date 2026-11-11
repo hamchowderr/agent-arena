@@ -25,7 +25,7 @@ import {
   type ArenaState,
 } from "../sim/arena/sim";
 import { spriteImage } from "../render/textures";
-import { currentLocale, localeName, t, usesSpaces } from "../i18n";
+import { currentLocale, t, usesSpaces } from "../i18n";
 import {
   cardBlurb,
   cardName,
@@ -431,6 +431,7 @@ export const SPEAKER_RECT: Rect = {
 };
 const PORTRAIT_BOX = 126;
 const SPEAKER_SIZES = [25, 22, 20, 18] as const;
+const PLATE_SIZES = [18, 16, 14, 12] as const;
 
 function pill(
   context: CanvasRenderingContext2D,
@@ -522,12 +523,14 @@ export function drawSpeaker(
   );
 
   const textX = frameX + PORTRAIT_BOX + 24;
-  const plateWidth = Math.min(380, measure(context, view.name, 18) + 28);
+  const plateMax = rect.w - (textX - rect.x) - 24;
+  const plateSize = PLATE_SIZES.find((size) => measure(context, view.name, size) + 28 <= plateMax) ?? 12;
+  const plateWidth = Math.min(plateMax, measure(context, view.name, plateSize) + 28);
   context.fillStyle = SHADOW;
   context.fillRect(textX - 2, rect.y - 20, plateWidth + 4, 36);
   context.fillStyle = view.color;
   context.fillRect(textX, rect.y - 18, plateWidth, 32);
-  text(context, view.name, textX + 14, rect.y - 11, 18, SHADOW);
+  text(context, view.name, textX + 14, rect.y - 2 - Math.round(plateSize / 2), plateSize, SHADOW);
 
   const textWidth = rect.x + rect.w - textX - 28;
   const size =
@@ -1133,6 +1136,8 @@ function drawCard(
   );
 }
 
+export const PAUSE_QUIT_RECT: Rect = { x: HUD_WIDTH / 2 - 180, y: 736, w: 360, h: 58 };
+
 export function drawPause(
   context: CanvasRenderingContext2D,
   state: ArenaState,
@@ -1203,6 +1208,7 @@ export function drawPause(
     text(context, label, right.x + 28, y, 18, "#c8cfe0");
     text(context, value, right.x + right.w - 28, y, 18, INK, "right");
   });
+  drawButton(context, PAUSE_QUIT_RECT, t("pause.quit"), true);
 }
 
 export const SHARE_RECT: Rect = {
@@ -1377,32 +1383,6 @@ export function drawNotice(
   panel(context, rect, GOLD);
   text(context, notice, HUD_WIDTH / 2, rect.y + 14, size, INK, "center");
   context.globalAlpha = 1;
-}
-
-export function drawTitle(
-  context: CanvasRenderingContext2D,
-  pulse: number,
-): void {
-  context.fillStyle = "rgba(8, 10, 18, 0.45)";
-  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  text(context, t("game.title"), HUD_WIDTH / 2, 170, 96, GOLD, "center");
-  text(context, t("title.tagline"), HUD_WIDTH / 2, 300, 22, INK, "center");
-  context.globalAlpha = 0.6 + 0.4 * Math.sin(pulse / 12);
-  text(context, t("title.start"), HUD_WIDTH / 2, 430, 34, INK, "center");
-  context.globalAlpha = 1;
-  text(
-    context,
-    t("title.controls"),
-    HUD_WIDTH / 2,
-    520,
-    18,
-    "#9fb0d0",
-    "center",
-  );
-  text(context, t("title.howTo"), HUD_WIDTH / 2, 556, 18, "#9fb0d0", "center");
-  text(context, t("title.language", { language: localeName(currentLocale()) }), HUD_WIDTH / 2, 620, 20, GOLD, "center");
-  text(context, t("title.tutorial"), HUD_WIDTH / 2, 656, 20, GOLD, "center");
-  text(context, t("mastra.link"), HUD_WIDTH / 2, 730, 16, "#9fb0d0", "center");
 }
 
 export function inside(rect: Rect, x: number, y: number): boolean {
