@@ -3,7 +3,7 @@ import { FRAME_FAILURES_BEFORE_RESET } from "./frame-loop";
 import { cueFor } from "../audio/score";
 import { Effects } from "../render/effects";
 import { ArenaRenderer } from "../render/world";
-import { inStage, renderSize, setView, toStage, view, type View } from "./layout";
+import { inPopup, renderSize, setView, toPopup, toStage, view, type View } from "./layout";
 import { SHOT_GLOW } from "../art/weapon-art";
 import { WORLDS, type SignatureWave } from "../sim/arena/content";
 import type { StagedEvent } from "../sim/arena/formations";
@@ -43,10 +43,8 @@ import {
 } from "../i18n";
 import type { MessageKey } from "../i18n/locales/en";
 import {
-  STICK_RADIUS,
   STILL,
   stickDirection,
-  stickKnob,
   type Direction,
   type Stick,
 } from "./controls";
@@ -740,6 +738,7 @@ export class ArenaGame {
       this.wakeAudio();
     }
     const stage = toStage(x, y);
+    const popup = toPopup(x, y);
     if (this.screen === "title") {
       if (pressed) {
         this.runMenu(this.menu.click(stage.x, stage.y));
@@ -748,16 +747,16 @@ export class ArenaGame {
       }
       return;
     }
-    if (this.screen === "paused" && pressed && inside(pauseQuitRect(), stage.x, stage.y)) {
+    if (this.screen === "paused" && pressed && inside(pauseQuitRect(), popup.x, popup.y)) {
       this.toTitle();
       return;
     }
     if (this.screen === "results" && pressed) {
-      if (inside(shareRect(), stage.x, stage.y)) {
+      if (inside(shareRect(), popup.x, popup.y)) {
         this.share("sheet");
-      } else if (inside(postRect(), stage.x, stage.y)) {
+      } else if (inside(postRect(), popup.x, popup.y)) {
         this.share("x");
-      } else if (inside(watchRect(), stage.x, stage.y)) {
+      } else if (inside(watchRect(), popup.x, popup.y)) {
         this.watchAgain();
       } else {
         this.playAgain();
@@ -784,7 +783,7 @@ export class ArenaGame {
       return;
     }
     this.hover = cardRects(this.state.cards.length).findIndex((rect) =>
-      inside(rect, stage.x, stage.y),
+      inside(rect, popup.x, popup.y),
     );
     if (!pressed) {
       return;
@@ -792,9 +791,9 @@ export class ArenaGame {
     if (this.hover >= 0) {
       this.act({ kind: "choose", index: this.hover });
       this.hover = -1;
-    } else if (inside(rerollRect(), stage.x, stage.y)) {
+    } else if (inside(rerollRect(), popup.x, popup.y)) {
       this.act({ kind: "reroll" });
-    } else if (inside(skipRect(), stage.x, stage.y)) {
+    } else if (inside(skipRect(), popup.x, popup.y)) {
       this.act({ kind: "skip" });
     }
   }
@@ -956,34 +955,6 @@ export class ArenaGame {
     return { ...chosen, dash };
   }
 
-  private drawStick(context: CanvasRenderingContext2D): void {
-    if (!this.touch || !this.wantsStick()) {
-      return;
-    }
-    const knob = stickKnob(this.touch);
-    context.save();
-    context.globalAlpha = 0.35;
-    context.fillStyle = "#0d0f14";
-    context.beginPath();
-    context.arc(
-      this.touch.originX,
-      this.touch.originY,
-      STICK_RADIUS,
-      0,
-      Math.PI * 2,
-    );
-    context.fill();
-    context.globalAlpha = 0.6;
-    context.strokeStyle = "#f4f1e8";
-    context.lineWidth = 4;
-    context.stroke();
-    context.fillStyle = "#f4f1e8";
-    context.beginPath();
-    context.arc(knob.x, knob.y, STICK_RADIUS * 0.4, 0, Math.PI * 2);
-    context.fill();
-    context.restore();
-  }
-
   frame(): void {
     const now = this.hooks.now();
     const elapsed = this.last === 0 ? STEP_MS : Math.min(250, now - this.last);
@@ -1058,7 +1029,6 @@ export class ArenaGame {
     this.renderer.sync(this.state);
     this.renderer.render();
     this.drawHud(elapsed / 1000);
-    this.drawStick(this.hud);
   }
 
   private cycleSpeed(playback: Playback): void {
@@ -1700,27 +1670,28 @@ export class ArenaGame {
       const state = this.state;
       const hover = this.lessonShowing() ? -1 : this.shownCard().index;
       const guide = this.lessonShowing() ? null : this.levelUpGuide();
-      inStage(context, () => drawLevelUp(context, state, hover, guide));
+      inPopup(context, () => drawLevelUp(context, state, hover, guide));
       const speech = this.story.speech;
       if (speech && this.lessonShowing()) {
         const spot = this.lesson[speech.index]?.spot;
         if (spot) {
           drawSpotlight(context, spotRects(spot, this.state), this.frameCount);
         }
-        this.drawStory(lessonSpeakerRect());
+        const lessonRect = lessonSpeakerRect();
+        inPopup(context, () => this.drawStory(lessonRect));
       }
     }
     const spinning = this.spins[0];
     if (this.screen === "run" && spinning) {
       const frame = this.frameCount;
-      inStage(context, () => drawChestSpin(context, spinning, frame));
+      inPopup(context, () => drawChestSpin(context, spinning, frame));
     }
     if (this.playback && this.screen !== "results") {
       drawReplayHud(context, this.playback.speed);
     }
     if (this.screen === "paused") {
       const state = this.state;
-      inStage(context, () => drawPause(context, state));
+      inPopup(context, () => drawPause(context, state));
     }
     if (this.screen === "results") {
       const state = this.state;
@@ -1729,7 +1700,7 @@ export class ArenaGame {
         mismatch: this.watched?.mismatch ?? false,
         shareReady: this.shareCode !== null && this.hooks.share !== undefined,
       };
-      inStage(context, () => drawResults(context, state, results));
+      inPopup(context, () => drawResults(context, state, results));
       if (results.replay) {
         drawReplayTag(context, t("replay.tag"));
       }

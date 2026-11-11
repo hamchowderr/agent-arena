@@ -111,3 +111,44 @@ export function hudBacking(cssWidth: number, cssHeight: number, pixelRatio: numb
   const ratio = Math.min(wanted, Math.sqrt(HUD_MAX_PIXELS / (width * height)));
   return { width: Math.max(1, Math.round(width * ratio)), height: Math.max(1, Math.round(height * ratio)) };
 }
+
+export interface Placement {
+  readonly x: number;
+  readonly y: number;
+  readonly scale: number;
+}
+
+export const POPUP_CROP = 1200;
+
+export function popupPlacement(v: View = current): Placement {
+  if (!v.portrait) {
+    return { x: v.stageX, y: v.stageY, scale: 1 };
+  }
+  const scale = v.width / POPUP_CROP;
+  return { x: (v.width - WIDE_STAGE.width * scale) / 2, y: (v.height - WIDE_STAGE.height * scale) / 2, scale };
+}
+
+export function toPopup(x: number, y: number): { readonly x: number; readonly y: number } {
+  const place = popupPlacement();
+  return { x: (x - place.x) / place.scale, y: (y - place.y) / place.scale };
+}
+
+export function fromPopup<T extends { readonly x: number; readonly y: number; readonly w: number; readonly h: number }>(rect: T): T {
+  const place = popupPlacement();
+  return { ...rect, x: place.x + rect.x * place.scale, y: place.y + rect.y * place.scale, w: rect.w * place.scale, h: rect.h * place.scale };
+}
+
+export function inPopup(context: CanvasRenderingContext2D, draw: () => void): void {
+  const place = popupPlacement();
+  context.save();
+  context.translate(place.x, place.y);
+  context.scale(place.scale, place.scale);
+  draw();
+  context.restore();
+}
+
+export function fillBehindPopup(context: CanvasRenderingContext2D, color: string): void {
+  const place = popupPlacement();
+  context.fillStyle = color;
+  context.fillRect(-place.x / place.scale - 2, -place.y / place.scale - 2, current.width / place.scale + 4, current.height / place.scale + 4);
+}

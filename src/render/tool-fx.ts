@@ -1,4 +1,4 @@
-import { AdditiveBlending, CanvasTexture, Mesh, MeshBasicMaterial, NearestFilter, PlaneGeometry, RingGeometry, SRGBColorSpace, type Scene } from "three";
+import { AdditiveBlending, CanvasTexture, Mesh, MeshBasicMaterial, NearestFilter, PlaneGeometry, RingGeometry, SRGBColorSpace, type Object3D } from "three";
 import { PALETTE, type PaletteKey } from "../art/palette";
 import { BOLT_PROFILES, RAY_PROFILES, type BoltLook, type RayLook } from "../art/tool-art";
 import type { WeaponId } from "../sim/arena/content";
@@ -89,7 +89,7 @@ export class ToolFx {
   private readonly boltMaterials: Readonly<Record<BoltLook, MeshBasicMaterial>>;
   private readonly bolts: Bolt[] = [];
 
-  constructor(scene: Scene) {
+  constructor(scene: Object3D) {
     this.rayMaterials = { fileReader: band(bandTexture(RAY_PROFILES.fileReader)), mapReduce: band(bandTexture(RAY_PROFILES.mapReduce)) };
     this.rayGlowMaterials = {
       fileReader: new MeshBasicMaterial({ color: PALETTE.r, transparent: true, opacity: 0.12, depthWrite: false, depthTest: false, blending: AdditiveBlending, toneMapped: false }),
