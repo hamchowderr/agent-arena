@@ -57,7 +57,7 @@ import {
   tierStage,
 } from "./format";
 import { agentCanvas, bossCanvas, guideCanvas } from "./portraits";
-import { DEFAULT_SETTINGS, Menu, MENU_LINKS, parseCleared, parseSettings, type MenuCommand, type MenuSettings } from "./menu";
+import { DEFAULT_SETTINGS, Menu, MENU_LINKS, parseCleared, parseLoadout, parseSettings, type MenuCommand, type MenuSettings } from "./menu";
 import { drawMenu, type MenuDevice } from "./menu-hud";
 import {
   acquisitionScene,
@@ -197,6 +197,7 @@ export interface SavedStore {
 }
 
 export const SETTINGS_KEY = "agent-arena.settings";
+export const LOADOUT_KEY = "agent-arena.loadout";
 export const CLEARED_KEY = "agent-arena.cleared";
 
 function stepLocale(code: LocaleCode, step: 1 | -1): LocaleCode {
@@ -267,7 +268,11 @@ export class ArenaGame {
     this.memory = hooks.storyMemory ?? memoryOf();
     this.story = new StoryPlayer(this.memory, { text: (line) => this.lineText(line), spaced: () => usesSpaces(currentLocale()) });
     this.tutorial = this.newTutorial(false);
-    this.menu = new Menu(parseSettings(hooks.saved?.read(SETTINGS_KEY) ?? null), parseCleared(hooks.saved?.read(CLEARED_KEY) ?? null));
+    this.menu = new Menu(
+      parseSettings(hooks.saved?.read(SETTINGS_KEY) ?? null),
+      parseCleared(hooks.saved?.read(CLEARED_KEY) ?? null),
+      parseLoadout(hooks.saved?.read(LOADOUT_KEY) ?? null),
+    );
     this.state = createArena(hooks.newSeed(), this.menu.world);
     this.renderedTier = this.state.tier;
     this.renderer.setWorld(this.state.tier, this.state.seed);
@@ -282,7 +287,7 @@ export class ArenaGame {
       return;
     }
     this.begin(seed, false, world);
-    this.recording = startRecording(seed, this.state.startWorld);
+    this.recording = startRecording(seed, this.state.startWorld, this.state.loadout);
     this.lastRecording = this.recording;
     this.lastWatched = null;
     this.shareCode = null;
@@ -294,7 +299,7 @@ export class ArenaGame {
       return;
     }
     const speed = this.playback?.speed ?? 1;
-    this.begin(replay.seed, true, replay.startWorld);
+    this.begin(replay.seed, true, replay.startWorld, replay.loadout);
     this.recording = null;
     this.lastWatched = replay;
     this.playback = { replay, index: 0, speed, hold: 0, desynced: false };
@@ -357,13 +362,13 @@ export class ArenaGame {
     return this.story.speech?.scene.id === LESSON_ID;
   }
 
-  private begin(seed: number, watching: boolean, world: number): void {
+  private begin(seed: number, watching: boolean, world: number, loadout = this.menu.loadout): void {
     this.playback = null;
     this.watched = null;
     this.hover = -1;
     this.accumulator = 0;
     const startWorld = clampStartWorld(world);
-    this.state = createArena(seed, startWorld);
+    this.state = createArena(seed, startWorld, loadout);
     this.renderer.setWorld(this.state.tier, seed);
     this.renderedTier = this.state.tier;
     this.floats = [];
@@ -684,6 +689,9 @@ export class ArenaGame {
         return;
       case "settings":
         this.applySettings(command.settings);
+        return;
+      case "loadout":
+        this.hooks.saved?.write(LOADOUT_KEY, JSON.stringify(command.loadout));
         return;
       case "open":
         this.hooks.openLink?.(MENU_LINKS[command.link]);

@@ -29,7 +29,8 @@ type Bitmap = readonly string[];
 
 const STEPPER_LABEL_WIDTH = 226;
 
-const ICONS: Readonly<Record<"gear" | "help" | "star" | "lock" | "check" | "play" | "link" | "keys" | "pad" | "touch" | "sound" | "music" | "globe" | "arrow", Bitmap>> = {
+const ICONS: Readonly<Record<"chip" | "gear" | "help" | "star" | "lock" | "check" | "play" | "link" | "keys" | "pad" | "touch" | "sound" | "music" | "globe" | "arrow", Bitmap>> = {
+  chip: [" # # # ", "#######", "#     #", "# ### #", "#     #", "#######", " # # # "],
   gear: [" # # # ", "#######", " ## ## ", "##   ##", " ## ## ", "#######", " # # # "],
   help: [" ##### ", "##   ##", "    ## ", "   ##  ", "   ##  ", "       ", "   ##  "],
   star: ["   #   ", "  ###  ", "#######", " ##### ", "  ###  ", " ## ## ", "##   ##"],
@@ -367,6 +368,7 @@ function drawShade(context: CanvasRenderingContext2D): void {
 function drawHome(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
   drawLogo(context, frame);
   drawStart(context, menu, frame);
+  menuButton(context, menu, "loadout", t("menu.loadout"), ICONS.chip, frame);
   menuButton(context, menu, "settings", t("menu.settings"), ICONS.gear, frame);
   menuButton(context, menu, "howTo", t("menu.howTo"), ICONS.help, frame);
   menuButton(context, menu, "credits", t("menu.credits"), ICONS.star, frame);
@@ -450,6 +452,43 @@ function drawSettings(context: CanvasRenderingContext2D, menu: Menu, frame: numb
   menuButton(context, menu, "done", t("settings.done"), null, frame);
 }
 
+function loadoutRow(
+  context: CanvasRenderingContext2D,
+  menu: Menu,
+  item: "context" | "temperature",
+  label: string,
+  value: string,
+  glyph: Bitmap,
+  frame: number,
+): void {
+  const row = settingRow(context, menu, item, label, glyph, frame);
+  const hot = menu.focus === item;
+  const prev = MENU_RECTS[item === "context" ? "contextPrev" : "temperaturePrev"];
+  const next = MENU_RECTS[item === "context" ? "contextNext" : "temperatureNext"];
+  chevron(context, prev, -1, true, hot, frame);
+  chevron(context, next, 1, true, hot, frame);
+  const left = prev.x + prev.w;
+  const width = next.x - left;
+  text(context, value, left + width / 2, row.y + row.h / 2 - 12, fitSize(context, value, width - 20, 24), TITLE_INK, "center");
+}
+
+function drawLoadout(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
+  pagePanel(context, SETTINGS_PANEL, t("loadout.title"), ICONS.chip);
+  const { context: window, temperature } = menu.loadout;
+  loadoutRow(context, menu, "context", t("loadout.context"), t(`loadout.context.${window}`), ICONS.chip, frame);
+  loadoutRow(context, menu, "temperature", t("loadout.temperature"), t(`loadout.temperature.${temperature}`), ICONS.star, frame);
+  const notes = [t(`loadout.effect.${window}`), t(`loadout.effect.${temperature}`)];
+  const top = MENU_RECTS.temperature.y + MENU_RECTS.temperature.h + 22;
+  notes.forEach((note, index) => {
+    text(context, note, SETTINGS_PANEL.x + SETTINGS_PANEL.w / 2, top + index * 32, fitSize(context, note, SETTINGS_PANEL.w - 80, 20), index === 0 ? GOLD : GOOD, "center");
+  });
+  const spaced = usesSpaces(currentLocale());
+  wrapLines(t("loadout.hint"), SETTINGS_PANEL.w - 100, spaced, (line) => measure(context, line, 16))
+    .slice(0, 2)
+    .forEach((line, index) => text(context, line, SETTINGS_PANEL.x + SETTINGS_PANEL.w / 2, top + 84 + index * 24, 16, MUTED, "center"));
+  menuButton(context, menu, "done", t("settings.done"), null, frame);
+}
+
 const CONTROL_ROWS: readonly (readonly [MessageKey, MessageKey, MessageKey, MessageKey | null])[] = [
   ["controls.move", "tutorial.hint.move.keys", "tutorial.hint.move.pad", "tutorial.hint.move.touch"],
   ["controls.dash", "tutorial.hint.dash.keys", "tutorial.hint.dash.pad", "tutorial.hint.dash.touch"],
@@ -523,7 +562,9 @@ export function drawMenu(context: CanvasRenderingContext2D, menu: Menu, frame: n
     drawLogo(context, frame);
     context.globalAlpha = 1;
   }
-  if (menu.page === "settings") {
+  if (menu.page === "loadout") {
+    drawLoadout(context, menu, frame);
+  } else if (menu.page === "settings") {
     drawSettings(context, menu, frame);
   } else if (menu.page === "controls") {
     drawControls(context, menu, frame);

@@ -43,7 +43,7 @@ import { agentClips } from "../art/clips";
 import { agentBody } from "../art/agent";
 import { isEvolvedWeapon, REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type GroundHazard, type RegularKind, type WeaponId, type WorldId } from "../sim/arena/content";
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, seesThroughFakes, weaponStats, type ArenaState } from "../sim/arena/sim";
+import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, ownedStats, seesThroughFakes, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
 import type { Tier } from "../sim/tiers";
 import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, patchTexture, pixelTexture, spriteImage, type AtlasImage, type PatchLook } from "./textures";
@@ -1002,7 +1002,7 @@ export class ArenaRenderer {
       if (WEAPONS[owned.id].kind !== "seeker") {
         continue;
       }
-      const count = weaponStats(owned.id, owned.level).count;
+      const count = ownedStats(state, owned).count;
       for (let index = 0; index < count; index += 1) {
         const drone = dronePosition(state, index, count);
         const lift = 8 + Math.sin(state.tick / 7 + index) * 1.5;
@@ -1017,7 +1017,7 @@ export class ArenaRenderer {
         continue;
       }
       const key = this.arm(owned.id);
-      const count = weaponStats(owned.id, owned.level).count;
+      const count = ownedStats(state, owned).count;
       for (let index = 0; index < count; index += 1) {
         const blade = orbitPosition(state, owned, index);
         this.arms.get(key)?.add(blade.x / SUB, 4, blade.y / SUB);

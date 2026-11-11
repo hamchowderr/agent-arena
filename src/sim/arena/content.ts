@@ -107,7 +107,21 @@ export const WEAPONS = {
 
 export type WeaponId = keyof typeof WEAPONS;
 
-export type PassiveStat = "maxHealth" | "damage" | "crit" | "hallucination" | "cooldown" | "pickup" | "speed" | "regen" | "armor";
+export type PassiveStat =
+  | "maxHealth"
+  | "damage"
+  | "crit"
+  | "hallucination"
+  | "recheck"
+  | "cooldown"
+  | "dash"
+  | "pickup"
+  | "xp"
+  | "speed"
+  | "regen"
+  | "armor"
+  | "area"
+  | "projectiles";
 
 export interface PassiveDefinition {
   readonly stat: PassiveStat;
@@ -117,18 +131,47 @@ export interface PassiveDefinition {
 }
 
 export const PASSIVES = {
-  longContext: { stat: "maxHealth", perLevel: 20, tier: 1, maxLevel: 5 },
   fewShot: { stat: "damage", perLevel: 10, tier: 1, maxLevel: 5 },
-  hotTemperature: { stat: "crit", perLevel: 6, tier: 1, maxLevel: 5 },
-  guardrails: { stat: "hallucination", perLevel: -6, tier: 2, maxLevel: 5 },
-  planner: { stat: "cooldown", perLevel: -7, tier: 3, maxLevel: 5 },
-  vectorMemory: { stat: "pickup", perLevel: 25, tier: 1, maxLevel: 5 },
+  verifier: { stat: "crit", perLevel: 6, tier: 1, maxLevel: 5 },
+  compaction: { stat: "maxHealth", perLevel: 20, tier: 1, maxLevel: 5 },
+  logsAndTraces: { stat: "pickup", perLevel: 25, tier: 1, maxLevel: 5 },
+  vectorMemory: { stat: "xp", perLevel: 10, tier: 1, maxLevel: 5 },
   loopRunner: { stat: "speed", perLevel: 8, tier: 1, maxLevel: 5 },
+  toolRouter: { stat: "cooldown", perLevel: -7, tier: 1, maxLevel: 5 },
+  conversationBuffer: { stat: "area", perLevel: 8, tier: 1, maxLevel: 5 },
+  guardrails: { stat: "hallucination", perLevel: -6, tier: 2, maxLevel: 5 },
+  selfCheck: { stat: "recheck", perLevel: 15, tier: 2, maxLevel: 5 },
   sandbox: { stat: "regen", perLevel: 1, tier: 2, maxLevel: 5 },
+  mcpConnector: { stat: "projectiles", perLevel: 1, tier: 2, maxLevel: 5 },
+  planner: { stat: "dash", perLevel: -12, tier: 3, maxLevel: 5 },
   autoTestHook: { stat: "armor", perLevel: 1, tier: 3, maxLevel: 5 },
 } as const satisfies Readonly<Record<string, PassiveDefinition>>;
 
 export type PassiveId = keyof typeof PASSIVES;
+
+export type ContextWindow = "standard" | "long";
+export type Temperature = "cold" | "balanced" | "hot";
+
+export interface ArenaLoadout {
+  readonly context: ContextWindow;
+  readonly temperature: Temperature;
+}
+
+export const DEFAULT_LOADOUT: ArenaLoadout = { context: "standard", temperature: "balanced" };
+
+export const CONTEXT_WINDOWS: Readonly<Record<ContextWindow, { readonly maxHealth: number; readonly speed: number }>> = {
+  standard: { maxHealth: 0, speed: 0 },
+  long: { maxHealth: 40, speed: -8 },
+};
+
+export const TEMPERATURES: Readonly<Record<Temperature, { readonly crit: number; readonly hallucination: number }>> = {
+  cold: { crit: -5, hallucination: -8 },
+  balanced: { crit: 0, hallucination: 0 },
+  hot: { crit: 15, hallucination: 10 },
+};
+
+export const CONTEXT_ORDER: readonly ContextWindow[] = ["standard", "long"];
+export const TEMPERATURE_ORDER: readonly Temperature[] = ["cold", "balanced", "hot"];
 
 export interface Evolution {
   readonly weapon: WeaponId;

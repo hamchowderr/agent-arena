@@ -1,10 +1,17 @@
-import { WORLDS } from "../sim/arena/content";
+import { CONTEXT_ORDER, DEFAULT_LOADOUT, TEMPERATURE_ORDER, WORLDS, type ArenaLoadout, type ContextWindow, type Temperature } from "../sim/arena/content";
 import type { Rect } from "./hud";
 
-export type MenuPage = "home" | "settings" | "controls" | "credits";
+export type MenuPage = "home" | "loadout" | "settings" | "controls" | "credits";
 
 export type MenuItem =
   | "start"
+  | "loadout"
+  | "context"
+  | "temperature"
+  | "contextPrev"
+  | "contextNext"
+  | "temperaturePrev"
+  | "temperatureNext"
   | "settings"
   | "howTo"
   | "credits"
@@ -50,6 +57,7 @@ export type MenuCommand =
   | { readonly kind: "world"; readonly world: number }
   | { readonly kind: "locale"; readonly step: 1 | -1 }
   | { readonly kind: "settings"; readonly settings: MenuSettings }
+  | { readonly kind: "loadout"; readonly loadout: ArenaLoadout }
   | { readonly kind: "open"; readonly link: MenuLink }
   | { readonly kind: "page"; readonly page: MenuPage };
 
@@ -73,9 +81,16 @@ export const VOLUME_BAR = (row: Rect): Rect => ({ x: STEPPER_LEFT + 78, y: row.y
 
 export const MENU_RECTS: Readonly<Record<MenuItem, Rect>> = {
   start: { x: HOME_X, y: 300, w: HOME_W, h: 92 },
-  settings: { x: HOME_X, y: 414, w: HOME_W, h: 64 },
-  howTo: { x: HOME_X, y: 492, w: HOME_W, h: 64 },
-  credits: { x: HOME_X, y: 570, w: HOME_W, h: 64 },
+  loadout: { x: HOME_X, y: 406, w: HOME_W, h: 60 },
+  settings: { x: HOME_X, y: 478, w: HOME_W, h: 60 },
+  howTo: { x: HOME_X, y: 550, w: HOME_W, h: 60 },
+  credits: { x: HOME_X, y: 622, w: HOME_W, h: 60 },
+  context: SETTING_ROW(0),
+  temperature: SETTING_ROW(1),
+  contextPrev: stepper(SETTING_ROW(0), "left"),
+  contextNext: stepper(SETTING_ROW(0), "right"),
+  temperaturePrev: stepper(SETTING_ROW(1), "left"),
+  temperatureNext: stepper(SETTING_ROW(1), "right"),
   mastra: { x: HOME_X, y: 690, w: HOME_W + 120, h: 50 },
   worldPrev: { x: WORLD_CARD.x - 58, y: WORLD_CARD.y + 160, w: 50, h: 96 },
   worldNext: { x: WORLD_CARD.x + WORLD_CARD.w + 8, y: WORLD_CARD.y + 160, w: 50, h: 96 },
@@ -102,22 +117,43 @@ export function menuRect(page: MenuPage, item: MenuItem): Rect {
 }
 
 export const PAGE_ROWS: Readonly<Record<MenuPage, readonly (readonly MenuItem[])[]>> = {
-  home: [["start"], ["settings"], ["howTo"], ["credits"], ["mastra"]],
+  home: [["start"], ["loadout"], ["settings"], ["howTo"], ["credits"], ["mastra"]],
+  loadout: [["context"], ["temperature"], ["done"]],
   settings: [["language"], ["music"], ["sound"], ["controls"], ["done"]],
   controls: [["back"]],
   credits: [["mastra", "source"], ["back"]],
 };
 
 const PAGE_CLICKS: Readonly<Record<MenuPage, readonly MenuItem[]>> = {
-  home: ["start", "settings", "howTo", "credits", "mastra", "worldPrev", "worldNext", "worldCard"],
+  home: ["start", "loadout", "settings", "howTo", "credits", "mastra", "worldPrev", "worldNext", "worldCard"],
+  loadout: ["contextPrev", "contextNext", "temperaturePrev", "temperatureNext", "context", "temperature", "done"],
   settings: ["languagePrev", "languageNext", "musicDown", "musicUp", "soundDown", "soundUp", "language", "music", "sound", "controls", "done"],
   controls: ["back"],
   credits: ["mastra", "source", "back"],
 };
 
-const PARENT: Readonly<Record<MenuPage, MenuPage | null>> = { home: null, settings: "home", controls: "settings", credits: "home" };
+const PARENT: Readonly<Record<MenuPage, MenuPage | null>> = { home: null, loadout: "home", settings: "home", controls: "settings", credits: "home" };
 
-const HOME_FOCUS: Readonly<Partial<Record<MenuPage, MenuItem>>> = { settings: "settings", credits: "credits", controls: "controls" };
+const HOME_FOCUS: Readonly<Partial<Record<MenuPage, MenuItem>>> = { loadout: "loadout", settings: "settings", credits: "credits", controls: "controls" };
+
+function stepOf<T>(order: readonly T[], current: T, step: 1 | -1): T {
+  return order[(order.indexOf(current) + step + order.length) % order.length] ?? current;
+}
+
+export function parseLoadout(raw: string | null): ArenaLoadout {
+  try {
+    const saved: unknown = raw ? JSON.parse(raw) : null;
+    if (saved && typeof saved === "object") {
+      const fields = saved as Record<string, unknown>;
+      const context = CONTEXT_ORDER.find((entry) => entry === fields["context"]) ?? DEFAULT_LOADOUT.context;
+      const temperature = TEMPERATURE_ORDER.find((entry) => entry === fields["temperature"]) ?? DEFAULT_LOADOUT.temperature;
+      return { context, temperature };
+    }
+  } catch {
+    return DEFAULT_LOADOUT;
+  }
+  return DEFAULT_LOADOUT;
+}
 
 export function clampVolume(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(VOLUME_STEPS, Math.round(value))) : 0;
@@ -168,6 +204,7 @@ export class Menu {
   constructor(
     public settings: MenuSettings,
     private cleared: number,
+    public loadout: ArenaLoadout = DEFAULT_LOADOUT,
   ) {
     this.world = this.unlocked - 1;
   }
@@ -265,6 +302,18 @@ export class Menu {
     return { kind: "settings", settings: this.settings };
   }
 
+  stepContext(step: 1 | -1): MenuCommand {
+    const context: ContextWindow = stepOf(CONTEXT_ORDER, this.loadout.context, step);
+    this.loadout = { ...this.loadout, context };
+    return { kind: "loadout", loadout: this.loadout };
+  }
+
+  stepTemperature(step: 1 | -1): MenuCommand {
+    const temperature: Temperature = stepOf(TEMPERATURE_ORDER, this.loadout.temperature, step);
+    this.loadout = { ...this.loadout, temperature };
+    return { kind: "loadout", loadout: this.loadout };
+  }
+
   move(dx: number, dy: number): MenuCommand | null {
     if (dy !== 0) {
       const rows = PAGE_ROWS[this.page];
@@ -282,6 +331,12 @@ export class Menu {
     }
     if (focus === "language") {
       return { kind: "locale", step };
+    }
+    if (focus === "context") {
+      return this.stepContext(step);
+    }
+    if (focus === "temperature") {
+      return this.stepTemperature(step);
     }
     if (focus === "music" || focus === "sound") {
       return this.changeVolume(focus, step);
@@ -303,10 +358,21 @@ export class Menu {
         return { kind: "start", world: this.world };
       case "howTo":
         return { kind: "tutorial" };
+      case "loadout":
       case "settings":
       case "controls":
       case "credits":
         return this.open(item);
+      case "context":
+      case "contextNext":
+        return this.stepContext(1);
+      case "contextPrev":
+        return this.stepContext(-1);
+      case "temperature":
+      case "temperatureNext":
+        return this.stepTemperature(1);
+      case "temperaturePrev":
+        return this.stepTemperature(-1);
       case "done":
       case "back":
         return this.back();
