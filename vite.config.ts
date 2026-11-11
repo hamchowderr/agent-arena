@@ -1,10 +1,20 @@
 import { defineConfig } from "vitest/config";
+import { DOMAIN, fillSiteUrl } from "./src/site/site-url";
 
 const STRUDEL_PACKAGES = /node_modules\/(@strudel|@kabelsalat|superdough|fraction\.js|nanostores|supradough)\//;
 const THREE_PACKAGE = /node_modules\/three\//;
 
 export default defineConfig({
   base: "./",
+  plugins: [
+    {
+      name: "site-url",
+      transformIndexHtml: (html) => fillSiteUrl(html),
+      generateBundle() {
+        this.emitFile({ type: "asset", fileName: "CNAME", source: `${DOMAIN}\n` });
+      },
+    },
+  ],
   resolve: {
     alias: {
       "pixelfx/core": new URL("./vendor/pixelfx/src/core/index.js", import.meta.url).pathname,
