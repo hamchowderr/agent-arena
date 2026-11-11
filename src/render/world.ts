@@ -23,10 +23,7 @@ import {
   type Texture,
 } from "three";
 import {
-  BIG_GEM,
-  CHEST,
   ENEMY_SHOT,
-  GEM,
   HALLUCINATION,
   HAZARD,
   PROPS,
@@ -34,7 +31,8 @@ import {
 } from "../art/arena-sprites";
 import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FPS, DEATH_FRAMES, HURT_FRAMES, WALK_FRAMES, WINDUP_FRAMES } from "../art/animate";
 import { ENEMY_ART_TIER, RENDER_SCALE } from "../art/art-rules";
-import { MARK_SIZES, MARK_WIDTH, markFrameIndex, markFrames, SPARK_FRAMES, sparkFrames, type MarkSize } from "../art/impacts";
+import { CHEST_SPRITES, chestKind, TOKEN_SPRITES, tokenTier, type ChestKind, type TokenTier } from "../art/loot";
+import { MARK_SIZES, MARK_WIDTH, markFrameIndex, markFrames, SPARK_BY_WEAPON, SPARK_FRAMES, sparkFrameIndex, sparkFrames, type MarkSize, type SparkStyle } from "../art/impacts";
 import { WEAPON_STAGES, weaponSprite, weaponStage, type WeaponStage } from "../art/weapon-art";
 import { BOSS_CLIP_START, bossClips, enemyClips, WALK_FPS, wallClips } from "../art/clips";
 import { WORLD_LOOKS, type WorldLook } from "../art/world-looks";
@@ -212,6 +210,7 @@ interface Spark {
   readonly x: number;
   readonly z: number;
   readonly height: number;
+  readonly style: SparkStyle;
   readonly start: number;
 }
 
@@ -357,16 +356,15 @@ export class ArenaRenderer {
   private lastPlayerX = 0;
   private lastPlayerZ = 0;
   private agentFlip = false;
-  private readonly chests: SpriteBatch;
+  private readonly chests: Readonly<Record<ChestKind, SpriteBatch>>;
   private readonly agent: SpriteBatch[];
   private readonly ghosts: SpriteBatch[];
   private readonly trail: { x: number; z: number }[] = [];
-  private readonly gems: SpriteBatch;
-  private readonly bigGems: SpriteBatch;
+  private readonly tokens: Readonly<Record<TokenTier, SpriteBatch>>;
   private readonly arms = new Map<string, SpriteBatch>();
   private readonly armGlows = new Map<string, SpriteBatch>();
   private readonly levels = new Map<WeaponId, number>();
-  private readonly glows: Readonly<Record<"token" | "bigToken", SpriteBatch>>;
+  private readonly glows: Readonly<Record<TokenTier, SpriteBatch>>;
   private readonly drones: SpriteBatch;
   private readonly coderDrones: SpriteBatch;
   private readonly hallucinations: SpriteBatch;
@@ -479,7 +477,7 @@ export class ArenaRenderer {
     this.bossDeath = this.bossDeathBatch(1);
     this.sparkBatch = this.onTop(this.atlasBatch(atlasImage(sparkFrames()), 1, SPARK_CAPACITY, 0));
     this.markBatch = this.markBatchFor(WORLD_LOOKS[1]);
-    this.chests = this.batch([CHEST], 2, 4, false);
+    this.chests = { elite: this.batch([CHEST_SPRITES.elite], 2, 4, false), boss: this.batch([CHEST_SPRITES.boss], 2, 2, false) };
     this.agent = ([1, 2, 3, 4, 5] as const).map((tier) => {
       const batch = this.atlasBatch(atlasImage(agentClips(tier)), 1, 1, 0);
       batch.mesh.renderOrder = 11;
@@ -495,12 +493,18 @@ export class ArenaRenderer {
       material.depthWrite = false;
       return batch;
     });
-    this.gems = this.batch([GEM], 1, 900, false);
-    this.bigGems = this.batch([BIG_GEM], 1, 200, false);
+    this.tokens = {
+      0: this.batch([TOKEN_SPRITES[0]], 1, 900, false),
+      1: this.batch([TOKEN_SPRITES[1]], 1, 200, false),
+      2: this.batch([TOKEN_SPRITES[2]], 1, 60, false),
+      3: this.batch([TOKEN_SPRITES[3]], 1, 20, false),
+    };
     this.buildArms();
     this.glows = {
-      token: this.glowBatch(14, 10, "#ffcd75", 0.4, 900),
-      bigToken: this.glowBatch(22, 14, "#fff1a8", 0.55, 200),
+      0: this.glowBatch(14, 10, "#ffcd75", 0.4, 900),
+      1: this.glowBatch(22, 14, "#fff1a8", 0.55, 200),
+      2: this.glowBatch(28, 16, "#fff1a8", 0.6, 60),
+      3: this.glowBatch(40, 22, "#c8fff8", 0.7, 20),
     };
     this.drones = this.batch([DRONE], 1, 12, false);
     this.coderDrones = this.batch([CODER_DRONE], 1, 12, false);
@@ -637,11 +641,11 @@ export class ArenaRenderer {
     return batch;
   }
 
-  spark(x: number, y: number, boss: boolean): void {
+  spark(x: number, y: number, boss: boolean, weapon: WeaponId): void {
     if (this.sparks.length >= SPARK_CAPACITY) {
       this.sparks.shift();
     }
-    this.sparks.push({ x: x / SUB, z: y / SUB, height: boss ? BOSS_SPARK_HEIGHT : SPARK_HEIGHT, start: this.tick });
+    this.sparks.push({ x: x / SUB, z: y / SUB, height: boss ? BOSS_SPARK_HEIGHT : SPARK_HEIGHT, style: SPARK_BY_WEAPON[WEAPONS[weapon].kind], start: this.tick });
   }
 
   mark(x: number, y: number, size: MarkSize): void {
@@ -660,7 +664,7 @@ export class ArenaRenderer {
         this.sparks.splice(index, 1);
         continue;
       }
-      this.sparkBatch.add(spark.x, spark.height - 7, spark.z + 1, false, null, frame);
+      this.sparkBatch.add(spark.x, spark.height - 7, spark.z + 1, false, null, sparkFrameIndex(spark.style, frame));
     }
     this.sparkBatch.commit();
     this.markBatch.begin();
@@ -940,23 +944,26 @@ export class ArenaRenderer {
     for (const glow of Object.values(this.glows)) {
       glow.begin();
     }
-    this.gems.begin();
-    this.bigGems.begin();
-    this.chests.begin();
+    for (const batch of [...Object.values(this.tokens), ...Object.values(this.chests)]) {
+      batch.begin();
+    }
     for (const gem of state.gems) {
       if (!gem.chest && gem.life < GEM_FADE_TICKS && Math.floor(gem.life / 6) % 2 === 0) {
         continue;
       }
       const hop = gem.settle > 0 ? Math.sin((gem.settle / GEM_SETTLE_TICKS) * Math.PI) * 9 : 0;
       const bob = Math.sin((state.tick + gem.x) / 9) * 1.2 + 1.5 + hop;
-      (gem.chest ? this.chests : gem.value > 1 ? this.bigGems : this.gems).add(gem.x / SUB, bob, gem.y / SUB);
-      if (!gem.chest) {
-        (gem.value > 1 ? this.glows.bigToken : this.glows.token).add(gem.x / SUB, 0.6, gem.y / SUB);
+      if (gem.chest) {
+        this.chests[chestKind(gem.prizes)].add(gem.x / SUB, bob, gem.y / SUB);
+        continue;
       }
+      const tier = tokenTier(gem.value);
+      this.tokens[tier].add(gem.x / SUB, bob, gem.y / SUB);
+      this.glows[tier].add(gem.x / SUB, 0.6, gem.y / SUB);
     }
-    this.gems.commit();
-    this.bigGems.commit();
-    this.chests.commit();
+    for (const batch of [...Object.values(this.tokens), ...Object.values(this.chests)]) {
+      batch.commit();
+    }
 
     this.levels.clear();
     for (const owned of state.weapons) {

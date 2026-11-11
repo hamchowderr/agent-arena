@@ -1116,7 +1116,7 @@ export class ArenaGame {
               age: 0,
             });
           }
-          this.renderer.spark(event.x, event.y, event.boss);
+          this.renderer.spark(event.x, event.y, event.boss, event.weapon);
           if (event.crit) {
             this.effects.spawn("spark", event.x, event.y);
           }

@@ -293,7 +293,7 @@ export const BOSS_CHEST_PRIZES = 3;
 const GEM_SCATTER = px(10);
 
 export type ArenaEvent =
-  | { readonly kind: "damage"; readonly x: number; readonly y: number; readonly amount: number; readonly crit: boolean; readonly boss: boolean }
+  | { readonly kind: "damage"; readonly x: number; readonly y: number; readonly amount: number; readonly crit: boolean; readonly boss: boolean; readonly weapon: WeaponId }
   | { readonly kind: "kill"; readonly x: number; readonly y: number; readonly enemy: EnemyKind; readonly elite: boolean }
   | { readonly kind: "hurt"; readonly amount: number; readonly source: EnemyKind }
   | { readonly kind: "hallucinated"; readonly x: number; readonly y: number }
@@ -1466,7 +1466,7 @@ export function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapo
   enemy.knockX += away.x;
   enemy.knockY += away.y;
   state.damageByWeapon.set(weapon, (state.damageByWeapon.get(weapon) ?? 0) + amount);
-  state.events.push({ kind: "damage", x: enemy.x, y: enemy.y, amount, crit, boss: enemy.kind === "boss" });
+  state.events.push({ kind: "damage", x: enemy.x, y: enemy.y, amount, crit, boss: enemy.kind === "boss", weapon });
   if (enemy.kind === "lootRunner") {
     dropGem(state, enemy, LOOT_GEM_EVERY_HIT, 0);
   }
