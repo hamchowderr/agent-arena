@@ -9,6 +9,7 @@ import {
   MAX_SILHOUETTE_OVERLAP,
   MAX_SPRITE_COLORS,
   MIN_ENEMY_COLORS,
+  MIN_BOSS_GROUND_CONTRAST,
   MIN_GROUND_CONTRAST,
   MIN_HUE_GAP_IN_WORLD,
   MIN_TELEGRAPH_SECONDS,
@@ -63,7 +64,7 @@ function passes(kind: EnemyKind, check: EnemyCheck): boolean {
         return count >= MIN_ENEMY_COLORS && count <= MAX_SPRITE_COLORS;
       }
       case "contrast":
-        return groundContrast(grid, scene.ground[0]) >= MIN_GROUND_CONTRAST;
+        return groundContrast(grid, scene.ground[0]) >= (kind === "boss" ? MIN_BOSS_GROUND_CONTRAST : MIN_GROUND_CONTRAST);
     }
   });
 }

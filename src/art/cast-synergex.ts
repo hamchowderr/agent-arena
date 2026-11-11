@@ -38,10 +38,10 @@ function branchStick(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(26, 20);
   const sway = frame % 2;
   for (const [x, side] of [[6, -1], [11, 1], [16, -1]] as const) {
-    r.line(x, 11, x + side * 2 * (frame % 2 ? 1 : -1), 19, green.shadow);
+    r.line(x, 11, x + side * 2 * (frame % 2 ? 1 : -1), 19, green.light).line(x + 1, 11, x + 1 + side * 2 * (frame % 2 ? 1 : -1), 19, green.light);
   }
-  r.rect(2, 9, 18, 3, green.base).rect(19, 8, 5, 3, green.base);
-  r.line(10, 9, 14, 3 - sway, green.base).line(14, 3 - sway, 18, 1 - sway, green.base).line(14, 3 - sway, 16, 6 - sway, green.base);
+  r.rect(2, 8, 18, 4, green.base).rect(19, 7, 5, 4, green.base);
+  r.line(10, 9, 14, 3 - sway, green.base).line(11, 9, 15, 3 - sway, green.base).line(14, 3 - sway, 18, 1 - sway, green.base).line(14, 3 - sway, 16, 6 - sway, green.base);
   r.set(18, 1 - sway, olive()).set(16, 6 - sway, olive()).set(19, 1 - sway, RAMPS.olive.shadow).set(17, 7 - sway, RAMPS.olive.base).set(18, 0, yellow.light);
   lightAll(r, green);
   for (const x of [5, 9, 13]) {

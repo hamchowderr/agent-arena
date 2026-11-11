@@ -24,6 +24,7 @@ const RAMP_COLORS = {
   umber: ["#e0a878", "#b87850", "#8a5434", "#5e3420", "#22100a"],
   peach: ["#fff4ea", "#ffdcc4", "#f4b898", "#c07a68", "#4a2228"],
   navy: ["#a8b8e8", "#6878b8", "#3e4a8a", "#28305e", "#0e1028"],
+  lime: ["#eaffc8", "#b4f27a", "#7cd456", "#3f9a44", "#123018"],
 } as const;
 
 export type RampName = keyof typeof RAMP_COLORS;

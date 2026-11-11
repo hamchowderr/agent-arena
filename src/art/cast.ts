@@ -5,7 +5,7 @@ import type { Sprite } from "./sprites";
 
 export type Pose = (frame: number, act?: Act) => Sprite;
 
-const { paper, stamp, blue, yellow, green, purple, charcoal, teal, red, steel, wood } = RAMPS;
+const { paper, stamp, blue, yellow, purple, charcoal, teal, red, steel, wood, lime } = RAMPS;
 
 function spamRoach(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(18, 13);
@@ -15,12 +15,12 @@ function spamRoach(frame: number, act: Act = "walk"): Sprite {
   });
   r.ellipse(8, 7, 7, 3.5, charcoal.base).ellipse(14.5, 8, 2.5, 2.5, charcoal.base);
   if (frame % 2 === 1) {
-    r.polygon([[2, 3], [11, 3], [7, 1]], paper.base);
+    r.polygon([[1, 2], [13, 2], [7, 0]], paper.base);
   }
-  r.rect(2, 3, 11, 5, paper.base);
-  r.rect(9, 3, 2, 2, stamp.base);
+  r.rect(1, 2, 13, 6, paper.base);
+  r.rect(10, 3, 2, 2, stamp.base);
   lightAll(r, charcoal, paper, stamp);
-  r.line(2, 3, 6, 5, paper.shadow).line(11, 3, 7, 5, paper.shadow);
+  r.line(1, 2, 6, 5, paper.shadow).line(13, 2, 8, 5, paper.shadow);
   eye(r, 14, 7, moodFor(act, "bright"));
   r.set(14, 10, "w").set(16, 10, "w");
   const wiggle = frame % 2;
@@ -80,12 +80,12 @@ function engagementLocust(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(26, 22);
   const crouch = frame === 1 || frame === 3 ? 1 : 0;
   const y = crouch;
-  r.line(14, 15 + y, 13, 21, green.shadow).line(18, 15 + y, 19, 21, green.shadow);
-  r.ellipse(11, 14 + y, 8, 3.5, green.base).ellipse(20, 12 + y, 3.5, 4, green.base);
-  r.polygon([[11, 14 + y], [8, 16 + y], [4, 7 + y * 2], [6, 6 + y * 2]], green.base);
-  lightAll(r, green);
-  r.line(4, 7 + y * 2, 1, 21, green.shadow).line(5, 8 + y * 2, 2, 21, green.shadow);
-  r.line(8, 13 + y, 14, 13 + y, green.shadow);
+  r.line(14, 15 + y, 13, 21, lime.shadow).line(18, 15 + y, 19, 21, lime.shadow);
+  r.ellipse(11, 14 + y, 8, 3.5, lime.base).ellipse(20, 12 + y, 3.5, 4, lime.base);
+  r.polygon([[11, 14 + y], [8, 16 + y], [4, 7 + y * 2], [6, 6 + y * 2]], lime.base);
+  lightAll(r, lime);
+  r.line(4, 7 + y * 2, 1, 21, lime.shadow).line(5, 8 + y * 2, 2, 21, lime.shadow);
+  r.line(8, 13 + y, 14, 13 + y, lime.shadow);
   r.rect(15, 7 + y, 9, 1, yellow.base).rect(17, 4 + y, 5, 3, yellow.base);
   light(r, yellow);
   r.rect(17, 6 + y, 5, 1, red.base);
@@ -95,7 +95,7 @@ function engagementLocust(frame: number, act: Act = "walk"): Sprite {
   r.line(24 + sway, 3, 24, 21, wood.base);
   light(r, wood);
   r.rect(23 + sway, 1, 3, 1, steel.base).set(23 + sway, 0, steel.light).set(25 + sway, 0, steel.light);
-  r.line(19, 16 + y, 23, 15, green.light);
+  r.line(19, 16 + y, 23, 15, lime.light);
   return tinted(r);
 }
 
