@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARK_SIZES, markFrameIndex, markFrames, SPARK_FRAMES, sparkFrames } from "./impacts";
+import { MARK_SIZES, markFrameIndex, markFrames, SPARK_BY_WEAPON, SPARK_FRAMES, SPARK_STYLES, sparkFrameIndex, sparkFrames } from "./impacts";
 import { WORLD_LOOKS } from "./world-looks";
 import type { ColorGrid } from "./shade";
 
@@ -12,12 +12,27 @@ function brightness(color: string): number {
 }
 
 describe("hit sparks", () => {
-  it("burst out and then fade to embers", () => {
-    const frames = sparkFrames();
-    expect(frames).toHaveLength(SPARK_FRAMES);
+  const frames = sparkFrames();
+
+  it("has every frame of every style at one size", () => {
+    expect(frames).toHaveLength(SPARK_STYLES.length * SPARK_FRAMES);
     expect(new Set(frames.map((frame) => frame.length))).toEqual(new Set([frames[0]?.length]));
     expect(frames.every((frame) => filled(frame) > 0)).toBe(true);
-    expect(filled(frames[1] ?? [])).toBeGreaterThan(filled(frames[0] ?? []));
+  });
+
+  it.each(SPARK_STYLES)("%s bursts out from its first frame", (style) => {
+    expect(filled(frames[sparkFrameIndex(style, 1)] ?? [])).toBeGreaterThan(filled(frames[sparkFrameIndex(style, 0)] ?? []));
+  });
+
+  it("gives every style its own burst and its own colors", () => {
+    const bursts = SPARK_STYLES.map((style) => JSON.stringify(frames[sparkFrameIndex(style, 1)]));
+    expect(new Set(bursts).size).toBe(SPARK_STYLES.length);
+    const palettes = SPARK_STYLES.map((style) => [...new Set(frames[sparkFrameIndex(style, 1)]?.flat().filter((color) => color !== null))].sort().join());
+    expect(new Set(palettes).size).toBe(SPARK_STYLES.length);
+  });
+
+  it("uses every style for some weapon", () => {
+    expect(new Set(Object.values(SPARK_BY_WEAPON))).toEqual(new Set(SPARK_STYLES));
   });
 });
 
