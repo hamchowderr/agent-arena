@@ -45,6 +45,9 @@ import { isEvolvedWeapon, REGULAR_KINDS, WEAPONS, WORLDS, type EnemyKind, type G
 import { px, SUB, TICKS_PER_SECOND } from "../sim/arena/math";
 import { CHARGE_WINDUP, GEM_FADE_TICKS, GEM_SETTLE_TICKS, HIT_FLASH_TICKS, dronePosition, inDarkWater, orbitPosition, PATCH_CAP, PATCH_WARMUP, ownedStats, seesThroughFakes, type ArenaState } from "../sim/arena/sim";
 import { mixSeed } from "../sim/rng";
+import { dronePhase } from "../sim/arena/tools";
+import { CODER_DRONE } from "../art/tool-art";
+import { ToolFx } from "./tool-fx";
 import type { Tier } from "../sim/tiers";
 import { atlasImage, circleTexture, glowTexture, groundTexture, GROUND_TILE, patchTexture, pixelTexture, spriteImage, type AtlasImage, type PatchLook } from "./textures";
 
@@ -365,6 +368,7 @@ export class ArenaRenderer {
   private readonly levels = new Map<WeaponId, number>();
   private readonly glows: Readonly<Record<"token" | "bigToken", SpriteBatch>>;
   private readonly drones: SpriteBatch;
+  private readonly coderDrones: SpriteBatch;
   private readonly hallucinations: SpriteBatch;
   private readonly shots: SpriteBatch;
   private readonly seenFakes: SpriteBatch;
@@ -372,6 +376,7 @@ export class ArenaRenderer {
   private readonly bigHazards: SpriteBatch;
   private readonly props: SpriteBatch[];
   private readonly rings: Ring[] = [];
+  readonly tools: ToolFx;
   private readonly heading = new Quaternion();
   private readonly up = new Vector3(0, 1, 0);
   private readonly projector = new Vector3();
@@ -465,6 +470,7 @@ export class ArenaRenderer {
     }
 
     this.shadows = new ShadowBatch(this.scene, 1400);
+    this.tools = new ToolFx(this.scene);
     this.enemies = this.enemyBatches(WORLD_LOOKS[1], 1);
     this.elites = this.eliteBatches(WORLD_LOOKS[1], 1);
     this.walls = this.wallBatch(WORLD_LOOKS[1], 1);
@@ -497,6 +503,7 @@ export class ArenaRenderer {
       bigToken: this.glowBatch(22, 14, "#fff1a8", 0.55, 200),
     };
     this.drones = this.batch([DRONE], 1, 12, false);
+    this.coderDrones = this.batch([CODER_DRONE], 1, 12, false);
     this.hallucinations = this.batch([HALLUCINATION], 1, 100, true);
     this.shots = this.batch([ENEMY_SHOT], 2, MAX_SHOT_SPRITES, false);
     this.shots.mesh.renderOrder = 12;
@@ -512,7 +519,7 @@ export class ArenaRenderer {
     this.bigHazards = this.hazardBatch(BIG_HAZARD_SCALE);
     this.props = PROPS.map((sprite) => this.batch([sprite], 1, PROPS_PER_CHUNK * 25, false));
 
-    for (let index = 0; index < 12; index += 1) {
+    for (let index = 0; index < 28; index += 1) {
       const geometry = new RingGeometry(0.86, 1, 40);
       geometry.rotateX(-Math.PI / 2);
       const mesh = new Mesh(geometry, new MeshBasicMaterial({ color: "#9ff6ff", transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, toneMapped: false }));
@@ -540,6 +547,9 @@ export class ArenaRenderer {
       { weapon: "computerUse", stages: [0], flat: false, capacity: 16, glow: "#73eff7" },
       { weapon: "shell", stages: WEAPON_STAGES, flat: false, capacity: 40, glow: "#94b0c2" },
       { weapon: "ciPipeline", stages: [0], flat: false, capacity: 40, glow: "#ffcd75" },
+      { weapon: "coderSubagent", stages: WEAPON_STAGES, flat: false, capacity: 60, glow: "#ef7d57" },
+      { weapon: "agentNetwork", stages: [0], flat: false, capacity: 100, glow: "#41a6f6" },
+      { weapon: "durableAgentTeam", stages: [0], flat: false, capacity: 120, glow: "#ffcd75" },
     ];
     for (const look of looks) {
       for (const stage of look.stages) {
@@ -998,19 +1008,23 @@ export class ArenaRenderer {
     this.bigHazards.commit();
 
     this.drones.begin();
+    this.coderDrones.begin();
     for (const owned of state.weapons) {
       if (WEAPONS[owned.id].kind !== "seeker") {
         continue;
       }
       const count = ownedStats(state, owned).count;
       for (let index = 0; index < count; index += 1) {
-        const drone = dronePosition(state, index, count);
+        const drone = dronePosition(state, index, count, dronePhase(owned.id));
         const lift = 8 + Math.sin(state.tick / 7 + index) * 1.5;
-        this.drones.add(drone.x / SUB, lift, drone.y / SUB);
+        const coder = owned.id === "coderSubagent" || (owned.id !== "subagents" && index % 2 === 1);
+        (coder ? this.coderDrones : this.drones).add(drone.x / SUB, lift, drone.y / SUB);
         this.shadows.add(drone.x / SUB, drone.y / SUB, 6);
       }
     }
     this.drones.commit();
+    this.coderDrones.commit();
+    this.tools.sync(state);
 
     for (const owned of state.weapons) {
       if (WEAPONS[owned.id].kind !== "orbit") {

@@ -9,6 +9,7 @@ import {
   ELITE_SLOT,
   ENEMIES,
   EVOLUTIONS,
+  MERGES,
   LOOT_RUNNER_ESCAPE_SECONDS,
   LOOT_RUNNER_SECOND,
   OPENING_PACK,
@@ -42,6 +43,7 @@ import {
 } from "./content";
 import { openingPack, signatureWave, SPIRAL_TURN, swarmStream, wallRing, type EnemyOrder, type FormationSpawn, type StagedEvent } from "./formations";
 import { Grid } from "./grid";
+import { dronePhase, fireTool, splashFrom, updateTools, type Mine, type Ray, type ToolEvent } from "./tools";
 import { isSimPhase, nextPhase, type RunEvent, type SimPhase } from "./run-loop";
 import { ANGLE_STEPS, cosStep, distanceSquared, isqrt, percentOf, px, scaleToLength, seconds, sinStep, SUB, TICKS_PER_SECOND, UNIT } from "./math";
 
@@ -296,6 +298,7 @@ export type ArenaEvent =
   | { readonly kind: "hurt"; readonly amount: number; readonly source: EnemyKind }
   | { readonly kind: "hallucinated"; readonly x: number; readonly y: number }
   | { readonly kind: "pulse"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
+  | { readonly kind: "interrupted"; readonly x: number; readonly y: number }
   | { readonly kind: "levelUp"; readonly level: number }
   | { readonly kind: "bossArrives"; readonly world: number }
   | { readonly kind: "bossDown"; readonly world: number; readonly x: number; readonly y: number }
@@ -317,7 +320,8 @@ export type ArenaEvent =
   | { readonly kind: "burn"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
   | { readonly kind: "leeched" }
   | { readonly kind: "metered"; readonly x: number; readonly y: number }
-  | { readonly kind: "rooted" };
+  | { readonly kind: "rooted" }
+  | ToolEvent;
 
 export type Status = SimPhase;
 
@@ -394,6 +398,8 @@ export interface ArenaState {
   nextId: number;
   killedBy: Killer | null;
   readonly damageByWeapon: Map<WeaponId, number>;
+  readonly rays: Ray[];
+  readonly mines: Mine[];
   readonly grid: Grid<Enemy>;
   events: ArenaEvent[];
 }
@@ -466,6 +472,8 @@ export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = D
     nextId: 1,
     killedBy: null,
     damageByWeapon: new Map(),
+    rays: [],
+    mines: [],
     grid: new Grid<Enemy>(),
     events: [],
   };
@@ -582,7 +590,7 @@ export function ownedStats(state: ArenaState, owned: { readonly id: WeaponId; re
   const stats = weaponStats(owned.id, owned.level);
   const kind = WEAPONS[owned.id].kind;
   const count = kind === "pulse" ? stats.count : stats.count + extraProjectiles(state);
-  const radius = kind === "pulse" || kind === "orbit" || kind === "bomb" ? percentOf(stats.radius, 100 + statTotal(state, "area")) : stats.radius;
+  const radius = kind === "pulse" || kind === "orbit" || kind === "bomb" || kind === "mine" || kind === "chain" ? percentOf(stats.radius, 100 + statTotal(state, "area")) : stats.radius;
   return { ...stats, count, radius };
 }
 
@@ -637,6 +645,7 @@ export function step(state: ArenaState, input: Input): void {
   fireWeapons(state);
   moveProjectiles(state);
   burnFlames(state);
+  updateTools(state);
   updateSlam(state);
   updateBossFight(state);
   moveShots(state);
@@ -1124,7 +1133,7 @@ function explode(state: ArenaState, enemy: Enemy): void {
   }
 }
 
-function nearestEnemy(state: ArenaState, x: number, y: number, maxDistance: number): Enemy | null {
+export function nearestEnemy(state: ArenaState, x: number, y: number, maxDistance: number): Enemy | null {
   const found: { enemy: Enemy | null; distance: number } = { enemy: null, distance: maxDistance * maxDistance };
   const grounded = seesThroughFakes(state);
   for (let radius = px(48); found.enemy === null && radius < maxDistance * 2; radius *= 2) {
@@ -1163,6 +1172,13 @@ function fireWeapons(state: ArenaState): void {
     if (throttle > 0) {
       owned.cooldown = percentOf(owned.cooldown, 100 + throttle);
     }
+    const tool = fireTool(state, owned, stats, range);
+    if (tool !== "none") {
+      if (tool === "idle") {
+        owned.cooldown = 4;
+      }
+      continue;
+    }
     if (definition.kind === "pulse") {
       pulse(state, owned.id, px(stats.radius), effectiveDamage(state, stats.damage));
       continue;
@@ -1179,7 +1195,7 @@ function fireWeapons(state: ArenaState): void {
     for (let shot = 0; shot < stats.count; shot += 1) {
       const hallucinated = state.rng.chancePercent(hallucinationPercent(state)) && !caughtBySelfCheck(state);
       const drone = definition.kind === "seeker";
-      const from = drone ? dronePosition(state, shot, stats.count) : { x: state.player.x, y: state.player.y - px(4) };
+      const from = drone ? dronePosition(state, shot, stats.count, dronePhase(owned.id)) : { x: state.player.x, y: state.player.y - px(4) };
       const fan = definition.kind === "homing" ? 28 : 10;
       const spread = drone ? 0 : (shot - Math.trunc(stats.count / 2)) * fan;
       const speed = px(definition.speed);
@@ -1213,8 +1229,8 @@ function caughtBySelfCheck(state: ArenaState): boolean {
 
 export const DRONE_RADIUS = px(30);
 
-export function dronePosition(state: ArenaState, index: number, count: number): { readonly x: number; readonly y: number } {
-  const angle = Math.trunc(state.tick / 3) + Math.trunc((index * ANGLE_STEPS) / Math.max(1, count)) + ANGLE_STEPS / 4;
+export function dronePosition(state: ArenaState, index: number, count: number, phase = 0): { readonly x: number; readonly y: number } {
+  const angle = Math.trunc(state.tick / 3) + Math.trunc((index * ANGLE_STEPS) / Math.max(1, count)) + ANGLE_STEPS / 4 + phase;
   const radius = DRONE_RADIUS + Math.trunc((sinStep(state.tick * 2 + index * 40) * px(4)) / UNIT);
   return {
     x: state.player.x + Math.trunc((cosStep(angle) * radius) / UNIT),
@@ -1337,8 +1353,20 @@ function bladeTouching(state: ArenaState, x: number, y: number): boolean {
   return false;
 }
 
+function interruptShots(state: ArenaState, radius: number): void {
+  for (const shot of state.shots) {
+    if (shot.life > 0 && distanceSquared(state.player.x, state.player.y, shot.x, shot.y) <= radius * radius) {
+      shot.life = 0;
+      state.events.push({ kind: "interrupted", x: shot.x, y: shot.y });
+    }
+  }
+}
+
 function pulse(state: ArenaState, weapon: WeaponId, radius: number, damage: number): void {
   state.events.push({ kind: "pulse", x: state.player.x, y: state.player.y, radius, weapon });
+  if ("interrupts" in WEAPONS[weapon]) {
+    interruptShots(state, radius);
+  }
   state.grid.forEachNear(state.player.x, state.player.y, radius + px(20), (enemy) => {
     if (enemy.health <= 0) {
       return;
@@ -1389,6 +1417,7 @@ function moveProjectiles(state: ArenaState): void {
       projectile.hit.add(enemy.id);
       projectile.pierce -= 1;
       damageEnemy(state, enemy, projectile.damage, projectile.weapon);
+      splashFrom(state, projectile.weapon, enemy, projectile.damage);
     });
     if (projectile.pierce <= 0) {
       projectile.life = 0;
@@ -1396,7 +1425,7 @@ function moveProjectiles(state: ArenaState): void {
   }
 }
 
-function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: WeaponId): void {
+export function damageEnemy(state: ArenaState, enemy: Enemy, base: number, weapon: WeaponId): void {
   const fight = enemy.id === state.bossId ? state.fight : null;
   if (fight && fight.transition > 0) {
     return;
@@ -1657,7 +1686,7 @@ function bossAttack(state: ArenaState, boss: Enemy, fight: BossFight, pattern: B
   }
 }
 
-function bossInReach(state: ArenaState, range: number): Enemy | null {
+export function bossInReach(state: ArenaState, range: number): Enemy | null {
   if (state.fight === null || state.fight.transition > 0) {
     return null;
   }
@@ -1914,6 +1943,15 @@ function applyCard(state: ArenaState, card: Card): void {
   const index = state.weapons.findIndex((weapon) => weapon.id === evolution?.weapon);
   if (evolution && index >= 0) {
     state.weapons[index] = { id: evolution.result, level: 1, cooldown: 10, orbitHits: new Map() };
+  }
+  const merge = MERGES.find((candidate) => candidate.result === card.id);
+  const first = state.weapons.findIndex((weapon) => weapon.id === merge?.weapons[0]);
+  if (merge && first >= 0) {
+    state.weapons[first] = { id: merge.result, level: 1, cooldown: 10, orbitHits: new Map() };
+    const second = state.weapons.findIndex((weapon) => weapon.id === merge.weapons[1]);
+    if (second >= 0) {
+      state.weapons.splice(second, 1);
+    }
   }
 }
 

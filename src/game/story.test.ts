@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { guidePortrait, PORTRAIT_FACES, PORTRAIT_SIZE } from "../art/portraits";
 import { LOADERS, LOCALES, t, usesSpaces, type MessageKey } from "../i18n";
-import { EVOLUTIONS, PASSIVES, WEAPONS, WORLDS, type PassiveId, type WeaponId } from "../sim/arena/content";
+import { EVOLUTIONS, MERGES, PASSIVES, WEAPONS, WORLDS, type PassiveId, type WeaponId } from "../sim/arena/content";
 import { partGuide, passiveName, weaponName } from "./format";
 import {
   acquisitionScene,
@@ -113,6 +113,17 @@ describe("part guide", () => {
       const keys: MessageKey[] = [...weaponIds.map((id): MessageKey => `weapon.${id}.guide`), ...passiveIds.map((id): MessageKey => `passive.${id}.guide`), "card.restore.guide"];
       const bad = keys.filter((key) => messages[key].trim() === "" || [...messages[key]].length > limit);
       expect(bad, code).toEqual([]);
+    }
+  });
+
+  it("tells you how every merge is made, from both weapons and the result", () => {
+    for (const merge of MERGES) {
+      const [first, second] = merge.weapons;
+      const result = partGuide({ kind: "evolve", id: merge.result, toLevel: 1, recommended: false, changes: [] });
+      expect(partGuide({ kind: "weapon", id: first, toLevel: 1, recommended: false, changes: [] })).toContain(weaponName(second));
+      expect(partGuide({ kind: "weapon", id: second, toLevel: 1, recommended: false, changes: [] })).toContain(weaponName(merge.result));
+      expect(result).toContain(weaponName(first));
+      expect(result).toContain(weaponName(second));
     }
   });
 

@@ -146,7 +146,17 @@ export const WEAPON_NOTES: Readonly<Record<WeaponId, WeaponNote>> = {
   ragSearch: { concept: "Evolved web search: a swarm of grounded searches.", guide: "Evolved Kunai", read: "Longer yellow-green darts.", questions: ["Only a recolor of the base dart. Evolutions should change shape, not just color."] },
   codeInterpreter: { concept: "Evolved code exec: sandboxed bombs with big fire zones.", guide: "Evolved Molotov", read: "A terminal window projectile.", questions: [] },
   computerUse: { concept: "Evolved browser: six fast cursors.", guide: "Evolved Guardian", read: "Cursor with a double cyan outline.", questions: ["Recolor of the base cursor. A hand cursor or a cursor with a trail would make the evolution feel earned."] },
+  realtimeVoice: { concept: "Evolved voice: a bigger wave that talks over rivals and cuts their shots out of the air.", guide: "Evolved Forcefield", read: "A gold ring pulse twice as wide; enemy shots inside it pop.", questions: ["Still no sprite of its own. A waveform ring texture would sell realtime audio."] },
   ciPipeline: { concept: "Evolved shell: a barrage of huge bricks.", guide: "Evolved Brick", read: "Brick with gold and orange outlines.", questions: ["Recolor again. A pipeline of bricks chained together would read as CI."] },
+  fileReader: { concept: "Reads a file straight through every rival on its line.", guide: "Laser", read: "A warm page-colored beam from the agent to the nearest rival; level ups add a fan of beams.", questions: ["The beam has no source frame. A small open-file glyph at the agent end would name it."] },
+  apiCall: { concept: "A request that jumps from rival to rival.", guide: "Lightning (chain)", read: "A jagged cyan bolt with a hot white core that links each rival it hits.", questions: ["Bolts are drawn by the renderer. A request and response pair of colors could show the round trip."] },
+  scheduledJob: { concept: "A ring of timed jobs that go off one after another.", guide: "Mines", read: "Clock mines drop in a ring; their ground ring turns red and blinks before each blast.", questions: ["The order is shown only by timing. Numbering the mines 1, 2, 3 would make the schedule read."] },
+  coderSubagent: { concept: "A coder drone that fires missiles that splash.", guide: "Drone B (missiles)", read: "A yellow mini agent flies opposite the researcher and fires code missiles that burst.", questions: [] },
+  mapReduce: { concept: "Evolved file reader: a wide fan of reads that reduce into one blast.", guide: "Evolved Laser", read: "Five beams fan out; the middle one ends in a blast when the read is done.", questions: [] },
+  mcpServer: { concept: "Evolved API call: three chains that never hit the same rival twice.", guide: "Evolved Lightning", read: "Thicker violet bolts, three at once.", questions: [] },
+  durableWorkflow: { concept: "Evolved scheduled job: mines that go off three times each.", guide: "Evolved Mines", read: "Steel clock mines that rearm after each blast.", questions: [] },
+  agentNetwork: { concept: "Researcher and coder merged: a squad of drones with splash missiles.", guide: "Drone A + Drone B merge", read: "Six drones on one ring, firing larger network missiles.", questions: [] },
+  durableAgentTeam: { concept: "Agent network with a loop runner: a team that never stops.", guide: "Evolved drones", read: "Eight drones and the biggest team missiles.", questions: [] },
 };
 
 export interface TierNote {
