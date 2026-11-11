@@ -26,7 +26,7 @@ import {
 } from "../sim/arena/sim";
 import { spriteImage } from "../render/textures";
 import { currentLocale, t, usesSpaces } from "../i18n";
-import { fillBehindStage, view, view as currentView } from "./layout";
+import { fillBehindPopup, view, view as currentView, WIDE_STAGE } from "./layout";
 import {
   cardBlurb,
   cardName,
@@ -725,33 +725,23 @@ export function drawBossMarker(
 }
 
 export function cardRects(count: number): Rect[] {
-  if (view().stage.portrait) {
-    return Array.from({ length: count }, (_, index) => ({
-      x: TALL_CARD.x,
-      y: TALL_CARD.y + index * TALL_CARD.step,
-      w: TALL_CARD.w,
-      h: TALL_CARD.h,
-    }));
-  }
   const width = 360;
   const gap = 36;
   const total = count * width + (count - 1) * gap;
   return Array.from({ length: count }, (_, index) => ({
-    x: (view().stage.width - total) / 2 + index * (width + gap),
+    x: (WIDE_STAGE.width - total) / 2 + index * (width + gap),
     y: 236,
     w: width,
     h: 392,
   }));
 }
 
-const TALL_CARD = { x: 12, y: 226, w: 516, h: 214, step: 266 } as const;
-
 export function rerollRect(): Rect {
-  return view().stage.portrait ? { x: 24, y: 1000, w: 234, h: 60 } : { x: view().stage.width / 2 - 330, y: 670, w: 300, h: 60 };
+  return { x: WIDE_STAGE.width / 2 - 330, y: 670, w: 300, h: 60 };
 }
 
 export function skipRect(): Rect {
-  return view().stage.portrait ? { x: 282, y: 1000, w: 234, h: 60 } : { x: view().stage.width / 2 + 30, y: 670, w: 300, h: 60 };
+  return { x: WIDE_STAGE.width / 2 + 30, y: 670, w: 300, h: 60 };
 }
 
 export interface LevelUpGuide {
@@ -763,7 +753,7 @@ export interface LevelUpGuide {
 }
 
 export function guideStripRect(): Rect {
-  return view().stage.portrait ? { x: 12, y: 66, w: 516, h: 124 } : { x: view().stage.width / 2 - 590, y: 88, w: 1180, h: 96 };
+  return { x: WIDE_STAGE.width / 2 - 590, y: 88, w: 1180, h: 96 };
 }
 
 const GUIDE_SIZES = [18, 16, 15, 14, 13, 12, 11] as const;
@@ -845,17 +835,16 @@ export function drawLevelUp(
   hover: number,
   guide: LevelUpGuide | null = null,
 ): void {
-  fillBehindStage(context, "rgba(8, 10, 18, 0.62)");
-  const stage = view().stage;
-  const middle = stage.width / 2;
+  fillBehindPopup(context, "rgba(8, 10, 18, 0.62)");
+  const middle = WIDE_STAGE.width / 2;
   const title = t("levelUp.title", { level: state.level });
   if (guide) {
-    text(context, title, middle, stage.portrait ? 14 : 28, fitSize(context, title, stage.width - 40, stage.portrait ? 40 : 46), GOLD, "center");
+    text(context, title, middle, 28, fitSize(context, title, WIDE_STAGE.width - 40, 46), GOLD, "center");
     drawGuideStrip(context, guide);
   } else {
-    text(context, title, middle, stage.portrait ? 70 : 92, fitSize(context, title, stage.width - 40, 60), GOLD, "center");
+    text(context, title, middle, 92, fitSize(context, title, WIDE_STAGE.width - 40, 60), GOLD, "center");
     const hint = t("levelUp.hint");
-    text(context, hint, middle, stage.portrait ? 144 : 166, fitSize(context, hint, stage.width - 40, 20), "#9fb0d0", "center");
+    text(context, hint, middle, 166, fitSize(context, hint, WIDE_STAGE.width - 40, 20), "#9fb0d0", "center");
   }
   const rects = cardRects(state.cards.length);
   state.cards.forEach((card, index) => {
@@ -901,10 +890,10 @@ export function drawChestSpin(
   spin: ChestSpin,
   frame: number,
 ): void {
-  fillBehindStage(context, "rgba(8, 10, 18, 0.62)");
-  const stage = view().stage;
+  fillBehindPopup(context, "rgba(8, 10, 18, 0.62)");
+  const stage = WIDE_STAGE;
   const middle = stage.width / 2;
-  const top = stage.portrait ? 150 : 0;
+  const top = 0;
   const landed = spin.age >= CHEST_SPIN_FRAMES;
   const progress = Math.min(1, spin.age / CHEST_SPIN_FRAMES);
   const eased = 1 - (1 - progress) ** 3;
@@ -1075,8 +1064,7 @@ function drawCard(
   index: number,
   hovered: boolean,
 ): void {
-  const tall = rect.w > rect.h;
-  const lift = hovered ? (tall ? -6 : -12) : 0;
+  const lift = hovered ? -12 : 0;
   const box = { ...rect, y: rect.y + lift };
   const accent = cardAccent(card);
   context.fillStyle = SHADOW;
@@ -1090,7 +1078,7 @@ function drawCard(
   context.fillStyle = CARD_FACE;
   context.fillRect(box.x, box.y, box.w, box.h);
   context.fillStyle = accent;
-  context.fillRect(box.x, box.y, box.w, tall ? 32 : 40);
+  context.fillRect(box.x, box.y, box.w, 40);
   const kindLabel =
     card.kind === "evolve"
       ? t("card.evolve")
@@ -1099,8 +1087,8 @@ function drawCard(
         : card.kind === "restore"
           ? t("card.restore.kind")
           : t("card.passive");
-  const tagSize = tall ? 16 : 18;
-  const tagY = tall ? box.y + 8 : box.y + 11;
+  const tagSize = 18;
+  const tagY = box.y + 11;
   text(context, kindLabel, box.x + 18, tagY, tagSize, SHADOW);
   const badge =
     card.kind === "evolve" || card.kind === "restore"
@@ -1123,11 +1111,7 @@ function drawCard(
     context.fillRect(box.x + box.w / 2 - width / 2, box.y - 28, width, 26);
     text(context, label, box.x + box.w / 2, box.y - 23, 15, SHADOW, "center");
   }
-  if (tall) {
-    drawTallCardBody(context, card, box, accent);
-  } else {
-    drawWideCardBody(context, card, box, accent);
-  }
+  drawCardBody(context, card, box, accent);
   const key = {
     x: box.x + box.w / 2 - 18,
     y: box.y + box.h - 14,
@@ -1149,7 +1133,7 @@ function drawCard(
   );
 }
 
-function drawWideCardBody(context: CanvasRenderingContext2D, card: Card, box: Rect, accent: string): void {
+function drawCardBody(context: CanvasRenderingContext2D, card: Card, box: Rect, accent: string): void {
   const tile = { x: box.x + box.w / 2 - 56, y: box.y + 58, w: 112, h: 112 };
   iconTile(context, tile, accent);
   drawIcon(
@@ -1208,31 +1192,6 @@ function drawWideCardBody(context: CanvasRenderingContext2D, card: Card, box: Re
   });
 }
 
-function drawTallCardBody(context: CanvasRenderingContext2D, card: Card, box: Rect, accent: string): void {
-  const tile = { x: box.x + 14, y: box.y + 46, w: 84, h: 84 };
-  iconTile(context, tile, accent);
-  drawIcon(context, cardIcon(card), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 72);
-  const left = tile.x + tile.w + 14;
-  const width = box.x + box.w - 14 - left;
-  const middle = left + width / 2;
-  const name = cardName(card);
-  text(context, name, middle, box.y + 44, fitSize(context, name, width, 24), INK, "center");
-  if (card.kind !== "evolve" && card.kind !== "restore") {
-    drawPips(context, card, middle, box.y + 78);
-  }
-  wrap(context, cardBlurb(card), width, 14)
-    .slice(0, 2)
-    .forEach((line, lineIndex) => text(context, line, middle, box.y + 100 + lineIndex * 18, 14, "#c8cfe0", "center"));
-  const inset = { x: box.x + 14, y: box.y + 140, w: box.w - 28, h: box.h - 154 };
-  context.fillStyle = CARD_INSET;
-  context.fillRect(inset.x, inset.y, inset.w, inset.h);
-  card.changes.slice(0, 3).forEach((change, lineIndex) => {
-    const y = inset.y + 4 + lineIndex * 18;
-    text(context, changeLabel(change), inset.x + 12, y, 14, "#9fb0d0");
-    text(context, `${changeValue(change, change.before)} ▸ ${changeValue(change, change.after)}`, inset.x + inset.w - 12, y, 14, accent, "right");
-  });
-}
-
 interface PauseLayout {
   readonly titleY: number;
   readonly keysY: number;
@@ -1265,24 +1224,8 @@ const WIDE_PAUSE: PauseLayout = {
   quit: { x: 540, y: 736, w: 360, h: 58 },
 };
 
-const TALL_PAUSE: PauseLayout = {
-  titleY: 40,
-  keysY: 104,
-  build: { x: 20, y: 146, w: 500, h: 410 },
-  stats: { x: 20, y: 576, w: 500, h: 400 },
-  weaponTop: 70,
-  weaponStep: 40,
-  passiveTop: 290,
-  passiveStep: 30,
-  passiveColumns: 2,
-  statTop: 66,
-  statStep: 32,
-  statSize: 16,
-  quit: { x: 90, y: 1000, w: 360, h: 58 },
-};
-
 function pauseLayout(): PauseLayout {
-  return view().stage.portrait ? TALL_PAUSE : WIDE_PAUSE;
+  return WIDE_PAUSE;
 }
 
 export function pauseQuitRect(): Rect {
@@ -1293,10 +1236,10 @@ export function drawPause(
   context: CanvasRenderingContext2D,
   state: ArenaState,
 ): void {
-  fillBehindStage(context, "rgba(8, 10, 18, 0.78)");
+  fillBehindPopup(context, "rgba(8, 10, 18, 0.78)");
   const layout = pauseLayout();
-  const middle = view().stage.width / 2;
-  const room = view().stage.width - 40;
+  const middle = WIDE_STAGE.width / 2;
+  const room = WIDE_STAGE.width - 40;
   const title = t("pause.title");
   const keys = t("pause.keys");
   text(context, title, middle, layout.titleY, fitSize(context, title, room, 52), GOLD, "center");
@@ -1395,26 +1338,8 @@ const WIDE_RESULTS: ResultsLayout = {
   linkY: 780,
 };
 
-const TALL_RESULTS: ResultsLayout = {
-  titleY: 34,
-  lineY: 92,
-  mismatchY: 124,
-  summary: { x: 20, y: 156, w: 500, h: 336 },
-  damage: { x: 20, y: 510, w: 500, h: 380 },
-  rowTop: 24,
-  rowStep: 43,
-  rowSize: 18,
-  damageTop: 70,
-  damageStep: 43,
-  share: { x: 20, y: 908, w: 160, h: 56 },
-  post: { x: 190, y: 908, w: 160, h: 56 },
-  watch: { x: 360, y: 908, w: 160, h: 56 },
-  keysY: 982,
-  linkY: 1018,
-};
-
 function resultsLayout(): ResultsLayout {
-  return view().stage.portrait ? TALL_RESULTS : WIDE_RESULTS;
+  return WIDE_RESULTS;
 }
 
 export function shareRect(): Rect {
@@ -1440,7 +1365,7 @@ export function drawResults(
   state: ArenaState,
   view: ResultsView,
 ): void {
-  fillBehindStage(context, "rgba(8, 10, 18, 0.84)");
+  fillBehindPopup(context, "rgba(8, 10, 18, 0.84)");
   const layout = resultsLayout();
   const middle = stageWidth() / 2;
   const room = stageWidth() - 40;
@@ -1522,7 +1447,7 @@ export function drawResults(
 }
 
 function stageWidth(): number {
-  return currentView().stage.width;
+  return WIDE_STAGE.width;
 }
 
 export function drawReplayTag(
