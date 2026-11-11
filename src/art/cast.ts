@@ -1,13 +1,13 @@
 import type { RegularKind } from "../sim/arena/content";
-import { eye, leg, light, lightAll, RAMPS, stride, tinted } from "./form";
+import { type Act, moodFor, eye, leg, light, lightAll, RAMPS, stride, tinted } from "./form";
 import { Raster } from "./raster";
 import type { Sprite } from "./sprites";
 
-export type Pose = (frame: number) => Sprite;
+export type Pose = (frame: number, act?: Act) => Sprite;
 
 const { paper, stamp, blue, yellow, green, purple, charcoal, teal, red, steel, wood } = RAMPS;
 
-function spamRoach(frame: number): Sprite {
+function spamRoach(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(18, 13);
   [4, 8, 12].forEach((x, i) => {
     const reach = (frame + i) % 2 === 0 ? 1 : -1;
@@ -21,14 +21,14 @@ function spamRoach(frame: number): Sprite {
   r.rect(9, 3, 2, 2, stamp.base);
   lightAll(r, charcoal, paper, stamp);
   r.line(2, 3, 6, 5, paper.shadow).line(11, 3, 7, 5, paper.shadow);
-  eye(r, 14, 7, "bright");
+  eye(r, 14, 7, moodFor(act, "bright"));
   r.set(14, 10, "w").set(16, 10, "w");
   const wiggle = frame % 2;
   r.line(16, 6, 17, 1 + wiggle, charcoal.light).line(15, 5, 13, 1 - wiggle + 1, charcoal.light);
   return tinted(r);
 }
 
-function clickbaitMoth(frame: number): Sprite {
+function clickbaitMoth(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(18, 16);
   const up = frame % 2 === 0;
   const wingY = up ? 4 : 7;
@@ -40,16 +40,17 @@ function clickbaitMoth(frame: number): Sprite {
   r.set(8, wingY + 1, red.base).set(9, wingY + 1, red.base).set(8, wingY + 2, red.shadow);
   r.rect(6, wingY - 3, 1, 4, "w").set(7, wingY - 2, "w").set(7, wingY - 1, "w").set(8, wingY - 1, "w");
   r.line(10, 11, 12, 11, purple.shadow);
-  eye(r, 14, 9, "shocked");
+  eye(r, 14, 9, moodFor(act, "shocked"));
   r.set(16, 10, "k");
   r.line(15, 6, 17, 2, purple.light).set(16, 3, purple.hi).set(17, 4, purple.hi);
   r.rect(17, 0, 1, 1 + (frame % 2), red.light);
   return tinted(r);
 }
 
-function coldEmailCrow(frame: number): Sprite {
+function coldEmailCrow(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(24, 22);
-  const bob = frame % 2;
+  const windup = act === "windup";
+  const bob = windup ? 0 : frame % 2;
   r.polygon([[6, 12], [0, 9], [0, 14], [5, 15]], blue.shadow);
   r.ellipse(10, 13, 7, 5.5, blue.base).ellipse(16, 7 + bob, 4.5, 4.5, blue.base);
   lightAll(r, blue);
@@ -61,14 +62,21 @@ function coldEmailCrow(frame: number): Sprite {
   r.polygon([[15, 12], [17, 12], [18, 15], [16, 17], [14, 15]], red.base);
   light(r, red);
   r.rect(15, 11, 3, 1, red.shadow);
-  eye(r, 17, 6 + bob, "smug");
-  r.rect(20, 9 + bob, 4, 3, paper.light).set(22, 10 + bob, stamp.base);
+  eye(r, 17, 6 + bob, moodFor(act, "smug"));
+  if (windup) {
+    const lift = frame % 2;
+    r.line(9, 10, 4, 3 - lift, blue.shadow).line(10, 10, 5, 3 - lift, blue.shadow);
+    r.rect(1, 0 + (1 - lift), 6, 4, paper.light).line(1, 1 - lift, 3, 3 - lift, paper.shadow).line(6, 1 - lift, 4, 3 - lift, paper.shadow).set(5, 2 - lift + 1, stamp.base);
+    r.rect(20, 9, 3, 1 + lift, "k");
+  } else {
+    r.rect(20, 9 + bob, 4, 3, paper.light).set(22, 10 + bob, stamp.base);
+  }
   leg(r, 8, 18, 21, stride(frame, 1));
   leg(r, 12, 18, 21, stride(frame, -1));
   return tinted(r);
 }
 
-function engagementLocust(frame: number): Sprite {
+function engagementLocust(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(26, 22);
   const crouch = frame === 1 || frame === 3 ? 1 : 0;
   const y = crouch;
@@ -81,7 +89,7 @@ function engagementLocust(frame: number): Sprite {
   r.rect(15, 7 + y, 9, 1, yellow.base).rect(17, 4 + y, 5, 3, yellow.base);
   light(r, yellow);
   r.rect(17, 6 + y, 5, 1, red.base);
-  eye(r, 20, 10 + y, "fake");
+  eye(r, 20, 10 + y, moodFor(act, "fake"));
   r.rect(20, 14 + y, 4, 2, "k").set(21, 14 + y, "w").set(23, 14 + y, "w");
   const sway = frame === 1 ? 1 : frame === 3 ? -1 : 0;
   r.line(24 + sway, 3, 24, 21, wood.base);
@@ -91,7 +99,7 @@ function engagementLocust(frame: number): Sprite {
   return tinted(r);
 }
 
-function thoughtLeaderToad(frame: number): Sprite {
+function thoughtLeaderToad(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(36, 33);
   const puff = frame % 2;
   r.ellipse(17, 30, 17, 2.5, red.base);
@@ -101,8 +109,8 @@ function thoughtLeaderToad(frame: number): Sprite {
   light(r, yellow);
   r.ellipse(17, 25, 8, 4.5, yellow.hi);
   r.ring(11, 9, 3, 3, 1, "k").ring(22, 9, 3, 3, 1, "k").line(14, 9, 19, 9, "k");
-  eye(r, 11, 9, "smug");
-  eye(r, 22, 9, "smug");
+  eye(r, 11, 9, moodFor(act, "smug"));
+  eye(r, 22, 9, moodFor(act, "smug"));
   r.line(9, 15, 23, 15, "k").set(24, 14, "k").set(8, 14, "k");
   r.line(28, 8, 29, 12, steel.shadow).line(29, 12, 25, 16, steel.shadow).rect(24, 16, 2, 1, charcoal.base);
   const wag = frame === 2 ? 2 : frame === 0 ? 0 : 1;
@@ -113,7 +121,7 @@ function thoughtLeaderToad(frame: number): Sprite {
   return tinted(r);
 }
 
-function freeLeadMouse(frame: number): Sprite {
+function freeLeadMouse(frame: number, act: Act = "walk"): Sprite {
   const r = new Raster(22, 16);
   const bob = frame % 2;
   const y = bob;
@@ -121,7 +129,7 @@ function freeLeadMouse(frame: number): Sprite {
   r.ellipse(9, 10 + y, 6, 3.5, steel.base).ellipse(15, 9 + y, 3.5, 3, steel.base).ellipse(13, 5 + y, 2, 2, steel.base);
   light(r, steel);
   r.set(13, 5 + y, stamp.light).set(19, 8 + y, stamp.base);
-  eye(r, 15, 8 + y, "worried");
+  eye(r, 15, 8 + y, moodFor(act, "worried"));
   r.rect(17, 10 + y, 5, 3, teal.base);
   light(r, teal);
   r.rect(18, 11 + y, 3, 1, "w");

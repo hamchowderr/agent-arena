@@ -5,12 +5,14 @@ import { ENEMY_SPRITES } from "./arena-sprites";
 import { ENEMY_ART_TIER, MAX_SILHOUETTE_OVERLAP, MAX_SPRITE_COLORS, MIN_ENEMY_COLORS, MIN_GROUND_CONTRAST, TIER_SPAN } from "./art-rules";
 import { colorCount, groundContrast, silhouetteOverlap, span } from "./audit";
 import { shade } from "./shade";
-import { enemyPoses, enemySprite, wallSprite } from "./world-enemies";
+import { enemyActs, enemyPoses, enemySprite, wallSprite } from "./world-enemies";
 import { WORLD_LOOKS } from "./world-looks";
 
 const CASES = WORLDS.flatMap((world) =>
   [...new Set<RegularKind>([...world.slots, "lootRunner"])].map((kind) => [world.id, kind] as const),
 );
+
+const TELEGRAPHS: ReadonlySet<RegularKind> = new Set(["charger", "shooter", "exploder"]);
 
 describe("world enemies", () => {
   it.each(CASES.filter(([world]) => world !== "hustlr"))("%s draws its own %s instead of reusing the office set", (world, kind) => {
@@ -39,6 +41,22 @@ describe("world enemies", () => {
       expect(colorCount(grid)).toBeLessThanOrEqual(MAX_SPRITE_COLORS);
       expect(groundContrast(grid, look.ground[0])).toBeGreaterThanOrEqual(MIN_GROUND_CONTRAST);
     }
+  });
+
+  it.each(CASES)("%s %s winds up with its own pose and dies with its own corpse", (world, kind) => {
+    const acts = enemyActs(world, kind);
+    const walk = (enemyPoses(world, kind) ?? []).map((frame) => frame.join("/"));
+    const windup = (acts?.windup ?? []).map((frame) => frame.join("/"));
+    expect(windup).toHaveLength(2);
+    for (const frame of windup) {
+      expect(walk).not.toContain(frame);
+    }
+    expect(walk).not.toContain(acts?.dead.join("/"));
+  });
+
+  it.each(CASES.filter(([world, kind]) => TELEGRAPHS.has(kind) && world !== undefined))("%s %s animates its attack tell across both windup frames", (world, kind) => {
+    const windup = enemyActs(world, kind)?.windup ?? [];
+    expect(windup[0]?.join("/")).not.toBe(windup[1]?.join("/"));
   });
 
   it("gives every world a different set of faces", () => {

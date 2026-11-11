@@ -32,7 +32,7 @@ import {
   PROPS,
   DRONE,
 } from "../art/arena-sprites";
-import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FPS, DEATH_FRAMES, WALK_FRAMES } from "../art/animate";
+import { BOSS_IDLE_FPS, BOSS_IDLE_FRAMES, BOSS_IMPACT_FPS, BOSS_IMPACT_FRAMES, BOSS_WINDUP_FRAMES, DEATH_FPS, DEATH_FRAMES, HURT_FRAMES, WALK_FRAMES, WINDUP_FRAMES } from "../art/animate";
 import { ENEMY_ART_TIER, RENDER_SCALE } from "../art/art-rules";
 import { MARK_SIZES, MARK_WIDTH, markFrameIndex, markFrames, SPARK_FRAMES, sparkFrames, type MarkSize } from "../art/impacts";
 import { WEAPON_STAGES, weaponSprite, weaponStage, type WeaponStage } from "../art/weapon-art";
@@ -88,6 +88,7 @@ const MARK_FADE_TICKS = 2 * TICKS_PER_SECOND;
 const MARK_BY_TIER = { fodder: "small", mid: "medium", heavy: "large", boss: "crater" } as const;
 const FACING_DEADZONE = px(3);
 const DEATH_TICKS_PER_FRAME = TICKS_PER_SECOND / DEATH_FPS;
+const WINDUP_TICKS_PER_FRAME = 4;
 const MAX_HAZARD_SPRITES = 40;
 const HAZARD_PIXELS = 13;
 const BIG_HAZARD_SCALE = 18 / 13;
@@ -784,7 +785,7 @@ export class ArenaRenderer {
         this.shadows.add(x, z, enemy.radius / SUB / 0.55);
       }
       const hurt = enemy.hitFlash > 0;
-      const frame = hurt ? WALK_FRAMES + (enemy.hitFlash > HIT_FLASH_TICKS / 2 ? 0 : 1) : telegraph ? 0 : this.walkFrame(enemy.kind, enemy.id, state.tick);
+      const frame = hurt ? WALK_FRAMES + (enemy.hitFlash > HIT_FLASH_TICKS / 2 ? 0 : 1) : telegraph && !enemy.wall ? WALK_FRAMES + HURT_FRAMES + (Math.floor(state.tick / WINDUP_TICKS_PER_FRAME) % WINDUP_FRAMES) : telegraph ? 0 : this.walkFrame(enemy.kind, enemy.id, state.tick);
       const batch = enemy.wall ? this.walls : enemy.elite ? this.elites[enemy.kind] : this.enemies[enemy.kind];
       batch.add(x, 0, z, telegraph && Math.floor(state.tick / 3) % 2 === 0, null, frame, flip, enemy.fake && seesFakes);
     }
