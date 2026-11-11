@@ -13,8 +13,8 @@ export const RUN_LOOP: Readonly<Record<RunPhase, Readonly<Partial<Record<RunEven
   title: { start: "playing" },
   playing: { levelUpOpened: "levelUp", pause: "pausedPlaying", died: "dead", finalBossDown: "won" },
   levelUp: { cardTaken: "playing", pause: "pausedLevelUp" },
-  pausedPlaying: { resume: "playing" },
-  pausedLevelUp: { resume: "levelUp" },
+  pausedPlaying: { resume: "playing", toTitle: "title" },
+  pausedLevelUp: { resume: "levelUp", toTitle: "title" },
   dead: { start: "playing", toTitle: "title" },
   won: { start: "playing", toTitle: "title" },
 };

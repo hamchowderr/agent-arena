@@ -348,6 +348,7 @@ export interface Killer {
 
 export interface ArenaState {
   readonly seed: number;
+  readonly startWorld: number;
   readonly rng: Rng;
   tick: number;
   status: Status;
@@ -390,17 +391,26 @@ export interface ArenaState {
   events: ArenaEvent[];
 }
 
-export function createArena(seed: number): ArenaState {
+export const HEAD_START_CARDS_PER_WORLD = 4;
+
+export function clampStartWorld(world: number): number {
+  return Number.isInteger(world) ? Math.max(0, Math.min(WORLDS.length - 1, world)) : 0;
+}
+
+export function createArena(seed: number, startAt = 0): ArenaState {
+  const startWorld = clampStartWorld(startAt);
+  const tier = WORLDS[startWorld]?.tier ?? 1;
   return {
     seed,
+    startWorld,
     rng: createRng(mixSeed(seed, 77)),
     tick: 0,
     status: "playing",
-    tier: 1,
+    tier,
     player: {
       x: 0,
       y: 0,
-      health: BASE_HEALTH,
+      health: BASE_HEALTH + HEALTH_PER_TIER * (tier - 1),
       facingX: UNIT,
       facingY: 0,
       dashTicks: 0,
@@ -420,13 +430,13 @@ export function createArena(seed: number): ArenaState {
     passives: new Map(),
     banished: new Set(),
     xp: 0,
-    level: 1,
-    pendingLevelUps: 0,
+    level: 1 + startWorld * HEAD_START_CARDS_PER_WORLD,
+    pendingLevelUps: startWorld * HEAD_START_CARDS_PER_WORLD,
     cards: [],
     rerolls: RUN_REROLLS,
     skips: RUN_SKIPS,
     kills: 0,
-    bossesDown: 0,
+    bossesDown: startWorld,
     bossId: null,
     nextBossTick: seconds(BOSS_EVERY_SECONDS),
     slam: null,
@@ -1484,7 +1494,7 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   }
   state.tier = Math.min(5, state.tier + 1) as Tier;
   state.player.health = Math.min(maxHealth(state), state.player.health + percentOf(maxHealth(state), 40));
-  state.nextBossTick = Math.max(seconds(BOSS_EVERY_SECONDS * (state.bossesDown + 1)), state.tick + seconds(20));
+  state.nextBossTick = Math.max(seconds(BOSS_EVERY_SECONDS * (bossesBeaten(state) + 1)), state.tick + seconds(20));
   state.events.push({ kind: "tierUp", tier: state.tier });
 }
 
@@ -1870,8 +1880,12 @@ function applyCard(state: ArenaState, card: Card): void {
   }
 }
 
+export function bossesBeaten(state: ArenaState): number {
+  return state.bossesDown - state.startWorld;
+}
+
 export function score(state: ArenaState): number {
-  return state.kills * 10 + state.level * 100 + state.bossesDown * 1000 + Math.trunc(state.tick / TICKS_PER_SECOND);
+  return state.kills * 10 + state.level * 100 + bossesBeaten(state) * 1000 + Math.trunc(state.tick / TICKS_PER_SECOND);
 }
 
 export function elapsedSeconds(state: ArenaState): number {

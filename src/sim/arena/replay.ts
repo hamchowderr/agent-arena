@@ -1,6 +1,7 @@
-import { choose, createArena, reroll, skip, step, type ArenaState, type Input } from "./sim";
+import { choose, clampStartWorld, createArena, reroll, skip, step, type ArenaState, type Input } from "./sim";
 
-export const REPLAY_VERSION = 1;
+export const REPLAY_VERSION = 2;
+const FIRST_WORLD_VERSION = 1;
 
 export type Action =
   | { readonly kind: "step"; readonly input: Input }
@@ -22,18 +23,20 @@ interface Token {
 
 export interface Recording {
   readonly seed: number;
+  readonly startWorld: number;
   readonly tokens: Token[];
 }
 
 export interface Replay {
   readonly seed: number;
+  readonly startWorld: number;
   readonly finalTick: number;
   readonly check: number;
   readonly actions: readonly Action[];
 }
 
-export function startRecording(seed: number): Recording {
-  return { seed: seed >>> 0, tokens: [] };
+export function startRecording(seed: number, startWorld = 0): Recording {
+  return { seed: seed >>> 0, startWorld: clampStartWorld(startWorld), tokens: [] };
 }
 
 export function inputCode(input: Input): number {
@@ -170,6 +173,7 @@ class Reader {
 export function encodeReplay(recording: Recording, final: ArenaState): Uint8Array {
   const bytes: number[] = [REPLAY_VERSION];
   writeVarint(bytes, recording.seed);
+  writeVarint(bytes, recording.startWorld);
   writeVarint(bytes, final.tick);
   writeVarint(bytes, stateCheck(final));
   for (const token of recording.tokens) {
@@ -183,10 +187,15 @@ export function encodeReplay(recording: Recording, final: ArenaState): Uint8Arra
 
 export function decodeReplay(bytes: Uint8Array, maxActions = 1 << 22): Replay | null {
   const reader = new Reader(bytes);
-  if (reader.byte() !== REPLAY_VERSION) {
+  const version = reader.byte();
+  if (version !== REPLAY_VERSION && version !== FIRST_WORLD_VERSION) {
     return null;
   }
   const seed = reader.varint();
+  const startWorld = version === FIRST_WORLD_VERSION ? 0 : reader.varint();
+  if (startWorld === null || startWorld !== clampStartWorld(startWorld)) {
+    return null;
+  }
   const finalTick = reader.varint();
   const check = reader.varint();
   if (seed === null || finalTick === null || check === null) {
@@ -207,7 +216,7 @@ export function decodeReplay(bytes: Uint8Array, maxActions = 1 << 22): Replay | 
       actions.push(action);
     }
   }
-  return { seed, finalTick, check, actions };
+  return { seed, startWorld, finalTick, check, actions };
 }
 
 export interface ReplayResult {
@@ -220,7 +229,7 @@ export function replayMatches(replay: Replay, state: ArenaState): boolean {
 }
 
 export function playReplay(replay: Replay): ReplayResult {
-  const state = createArena(replay.seed);
+  const state = createArena(replay.seed, replay.startWorld);
   for (const action of replay.actions) {
     act(state, null, action);
   }
