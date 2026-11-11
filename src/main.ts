@@ -1,5 +1,6 @@
 import { PAD, readPad } from "./game/controls";
 import { startFrameLoop } from "./game/frame-loop";
+import { JOURNAL_KEY, UNFINISHED_KEY } from "./game/journal-keys";
 const worldCanvas = document.querySelector<HTMLCanvasElement>("#world");
 const hudCanvas = document.querySelector<HTMLCanvasElement>("#hud");
 const loadingNote = document.querySelector<HTMLElement>("#status");
@@ -76,7 +77,17 @@ function loadPixelCjkFont(): void {
   document.head.append(link);
 }
 
+function keepUnfinishedRun(): void {
+  const journal = saved.read(JOURNAL_KEY);
+  if (journal) {
+    saved.write(UNFINISHED_KEY, journal);
+    saved.write(JOURNAL_KEY, "");
+    console.warn("The last run stopped before it finished. Its replay is saved under", UNFINISHED_KEY);
+  }
+}
+
 async function boot(): Promise<void> {
+  keepUnfinishedRun();
   const hud = hudCanvas?.getContext("2d");
   if (!worldCanvas || !hudCanvas || !hud) {
     return;
