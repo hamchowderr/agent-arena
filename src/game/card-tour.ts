@@ -24,3 +24,30 @@ export function tourStop(
   }
   return { index: durations.length - 1, progress: 1 };
 }
+
+export class CardTour<Hand> {
+  private hand: Hand | null = null;
+  private quiet: Hand | null = null;
+  private age = 0;
+
+  frame(hand: Hand | null, seconds: number): void {
+    if (hand !== this.hand) {
+      this.hand = hand;
+      this.age = 0;
+      return;
+    }
+    this.age += seconds;
+  }
+
+  hush(hand: Hand): void {
+    this.quiet = hand;
+  }
+
+  get seconds(): number {
+    return this.age;
+  }
+
+  get talking(): boolean {
+    return this.hand !== null && this.hand !== this.quiet;
+  }
+}

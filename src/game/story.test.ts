@@ -8,6 +8,7 @@ import {
   arrivalScene,
   checkScene,
   bossScene,
+  eliteScene,
   ENDING,
   endingScene,
   INTRO,
@@ -22,7 +23,7 @@ import {
   type Scene,
   type StoryLine,
 } from "./story";
-import { memoryOf, StoryPlayer } from "./story-player";
+import { memoryOf, SCENE_GAP_SECONDS, StoryPlayer } from "./story-player";
 
 const source = { text: (line: StoryLine) => t(line.key, line.values), spaced: () => true };
 
@@ -244,6 +245,54 @@ describe("story player", () => {
     expect(story.speech?.scene.id).toBe("ending");
     story.skip();
     expect(story.busy).toBe(false);
+  });
+
+  it("leaves a gap of play between two scenes so only one explanation shows at a time", () => {
+    const { story } = player();
+    story.play(tipScene("hustlr", "firstPick"));
+    story.play(eliteScene("hustlr"));
+    expect(story.speech?.scene.id).toBe("tip.firstPick");
+    story.frame(readingSeconds(t("story.tip.firstPick"), true) + 0.1);
+    expect(story.speech).toBeNull();
+    expect(story.resting).toBe(true);
+    expect(story.holding).toBe(false);
+    expect(story.busy).toBe(true);
+    story.frame(SCENE_GAP_SECONDS - 0.2);
+    expect(story.speech).toBeNull();
+    story.frame(0.3);
+    expect(story.speech?.scene.id).toBe("elite.hustlr");
+  });
+
+  it("waits out the gap before a scene that arrives just after another ends", () => {
+    const { story } = player();
+    story.play(tipScene("hustlr", "firstChest"));
+    story.frame(30);
+    story.play(tipScene("hustlr", "lowHealth"));
+    expect(story.speech).toBeNull();
+    story.frame(SCENE_GAP_SECONDS);
+    expect(story.speech?.scene.id).toBe("tip.lowHealth");
+  });
+
+  it("lets a lesson cut in without waiting out the gap", () => {
+    const { story } = player();
+    story.play(tipScene("hustlr", "firstChest"));
+    story.frame(30);
+    story.cut(payoffScene("hustlr"));
+    expect(story.speech?.scene.id).toBe("payoff.hustlr");
+  });
+
+  it("gives hold scenes that follow each other a gap of play between them", () => {
+    const { story } = player();
+    story.play(payoffScene("hustlr"));
+    story.play(arrivalScene("notionally"));
+    for (let line = 0; line < payoffScene("hustlr").lines.length; line += 1) {
+      finishLine(story);
+    }
+    expect(story.holding).toBe(false);
+    expect(story.speech).toBeNull();
+    story.frame(SCENE_GAP_SECONDS);
+    expect(story.speech?.scene.id).toBe("arrival.notionally");
+    expect(story.holding).toBe(true);
   });
 
   it("brief versions of hold scenes keep the rival's line", () => {

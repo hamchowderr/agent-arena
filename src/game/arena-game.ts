@@ -77,7 +77,7 @@ import {
   YOU_COLOR,
   type StoryLine,
 } from "./story";
-import { tourStop, type TourStop } from "./card-tour";
+import { CardTour, tourStop, type TourStop } from "./card-tour";
 import { blipFor, blipIndices, entranceBoom, type Blip } from "./voice-blips";
 import type { Card } from "../sim/arena/cards";
 import {
@@ -240,10 +240,9 @@ export class ArenaGame {
   private ending = false;
   private banner: Banner | null = null;
   private hover = -1;
-  private tourSeconds = 0;
   private voicedLine = "";
   private voicedShown = 0;
-  private tourCards: readonly Card[] | null = null;
+  private readonly tour = new CardTour<readonly Card[]>();
   readonly menu: Menu;
   private audioReady = false;
   private mutedMusic = DEFAULT_SETTINGS.music;
@@ -1021,7 +1020,9 @@ export class ArenaGame {
         this.memory.add(TUTORIAL_DONE);
       }
     }
-    if (!this.lessonShowing()) {
+    if (this.lessonShowing()) {
+      this.tour.hush(this.state.cards);
+    } else {
       this.advanceTour(elapsed / 1000);
     }
     if (this.screen === "run" && this.spins.length === 0 && (this.state.status !== "levelUp" || this.lessonShowing())) {
@@ -1545,30 +1546,28 @@ export class ArenaGame {
   }
 
   private advanceTour(seconds: number): void {
-    if (this.screen !== "run" || this.state.status !== "levelUp") {
-      this.tourCards = null;
-      return;
-    }
-    if (this.state.cards !== this.tourCards) {
-      this.tourCards = this.state.cards;
-      this.tourSeconds = 0;
-      return;
-    }
-    this.tourSeconds += seconds;
+    const levelUp = this.screen === "run" && this.state.status === "levelUp";
+    this.tour.frame(levelUp ? this.state.cards : null, seconds);
   }
 
   private shownCard(): TourStop {
     if (this.hover >= 0) {
       return { index: this.hover, progress: 0 };
     }
+    if (!this.tour.talking) {
+      return { index: Math.max(0, this.state.cards.findIndex((card) => card.recommended)), progress: 0 };
+    }
     const spaced = usesSpaces(currentLocale());
     return tourStop(
       this.state.cards.map((card) => readingSeconds(partGuide(card), spaced)),
-      this.tourSeconds,
+      this.tour.seconds,
     );
   }
 
   private levelUpGuide(): LevelUpGuide | null {
+    if (!this.tour.talking) {
+      return null;
+    }
     const shown = this.shownCard();
     const card = this.state.cards[shown.index];
     if (!card) {

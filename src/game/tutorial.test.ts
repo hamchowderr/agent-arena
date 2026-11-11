@@ -200,8 +200,11 @@ describe("stale tutorial lines", () => {
     story.forget(staleLesson);
     expect(staleLesson(LESSON_ID)).toBe(false);
     const order: string[] = [];
-    for (let speech = story.speech; speech; speech = story.speech) {
-      order.push(speech.scene.id);
+    for (let frames = 0; story.busy && frames < 20; frames += 1) {
+      const id = story.speech?.scene.id;
+      if (id && order.at(-1) !== id) {
+        order.push(id);
+      }
       story.frame(60);
     }
     expect(order).toEqual(["tip.firstChest", "elite.hustlr"]);
