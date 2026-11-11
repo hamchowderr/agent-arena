@@ -242,6 +242,19 @@ export interface HostileShot {
   readonly source: EnemyKind;
 }
 
+export interface Flame {
+  readonly weapon: WeaponId;
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  readonly damage: number;
+  life: number;
+}
+
+export const BURN_TICKS = seconds(3);
+export const BURN_EVERY = 20;
+export const BRICK_LIFE = 70;
+
 export interface Hazard {
   readonly x: number;
   readonly y: number;
@@ -297,6 +310,8 @@ export type ArenaEvent =
   | { readonly kind: "fakePopped"; readonly x: number; readonly y: number }
   | { readonly kind: "blocked"; readonly x: number; readonly y: number }
   | { readonly kind: "deflected"; readonly x: number; readonly y: number }
+  | { readonly kind: "ignite"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
+  | { readonly kind: "burn"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
   | { readonly kind: "leeched" }
   | { readonly kind: "metered"; readonly x: number; readonly y: number }
   | { readonly kind: "rooted" }
@@ -362,6 +377,7 @@ export interface ArenaState {
   fight: BossFight | null;
   readonly shots: HostileShot[];
   readonly hazards: Hazard[];
+  readonly flames: Flame[];
   spawnCarry: number;
   worldStartTick: number;
   eliteSpawned: boolean;
@@ -423,6 +439,7 @@ export function createArena(seed: number): ArenaState {
     fight: null,
     shots: [],
     hazards: [],
+    flames: [],
     spawnCarry: 0,
     worldStartTick: 0,
     eliteSpawned: false,
@@ -587,6 +604,7 @@ export function step(state: ArenaState, input: Input): void {
   moveEnemies(state);
   fireWeapons(state);
   moveProjectiles(state);
+  burnFlames(state);
   updateTools(state);
   updateSlam(state);
   updateBossFight(state);
@@ -1097,7 +1115,7 @@ function fireWeapons(state: ArenaState): void {
   const throttle = throttlePercent(state);
   const range = inDarkWater(state) ? DARK_TARGET_RANGE : TARGET_RANGE;
   for (const owned of state.weapons) {
-    const definition = WEAPONS[owned.id];
+    const definition: WeaponDefinition = WEAPONS[owned.id];
     const stats = weaponStats(owned.id, owned.level);
     if (definition.kind === "orbit") {
       orbitHits(state, owned);
@@ -1130,11 +1148,16 @@ function fireWeapons(state: ArenaState): void {
       owned.cooldown = 4;
       continue;
     }
+    if (definition.kind === "bomb") {
+      lobBombs(state, owned.id, target, stats.count, stats.damage, px(stats.radius));
+      continue;
+    }
     for (let shot = 0; shot < stats.count; shot += 1) {
       const hallucinated = state.rng.chancePercent(hallucinationPercent(state));
       const drone = definition.kind === "seeker";
       const from = drone ? dronePosition(state, shot, stats.count, dronePhase(owned.id)) : { x: state.player.x, y: state.player.y - px(4) };
-      const spread = drone ? 0 : (shot - Math.trunc(stats.count / 2)) * 10;
+      const fan = definition.kind === "homing" ? 28 : 10;
+      const spread = drone ? 0 : (shot - Math.trunc(stats.count / 2)) * fan;
       const speed = px(definition.speed);
       const aim = scaleToLength(target.x - from.x, target.y - from.y, speed);
       const turn = hallucinated ? spread + state.rng.intBelow(HALLUCINATION_VEER * 2 + 1) - HALLUCINATION_VEER : spread;
@@ -1147,7 +1170,7 @@ function fireWeapons(state: ArenaState): void {
         vy: Math.trunc((aim.x * sinStep(turn) + aim.y * cosStep(turn)) / UNIT),
         damage: effectiveDamage(state, stats.damage),
         pierce: stats.pierce,
-        life: definition.kind === "beam" ? 50 : definition.kind === "seeker" ? 150 : 90,
+        life: definition.kind === "beam" ? 50 : definition.kind === "seeker" ? 150 : definition.kind === "brick" ? BRICK_LIFE : 90,
         radius: px(stats.radius),
         hit: new Set(),
         hallucinated,
@@ -1210,6 +1233,62 @@ function orbitHits(state: ArenaState, owned: OwnedWeapon): void {
   }
 }
 
+function lobBombs(state: ArenaState, weapon: WeaponId, target: Enemy, count: number, damage: number, radius: number): void {
+  const speed = px(WEAPONS[weapon].speed);
+  for (let index = 0; index < count; index += 1) {
+    const hallucinated = state.rng.chancePercent(hallucinationPercent(state));
+    const angle = Math.trunc((index * ANGLE_STEPS) / Math.max(1, count)) + state.rng.intBelow(ANGLE_STEPS);
+    const offset = index === 0 ? 0 : radius + px(6);
+    const aimX = target.x + Math.trunc((cosStep(angle) * offset) / UNIT) + (hallucinated ? radius * 3 : 0);
+    const aimY = target.y + Math.trunc((sinStep(angle) * offset) / UNIT);
+    const fromX = state.player.x;
+    const fromY = state.player.y - px(4);
+    const distance = isqrt(distanceSquared(fromX, fromY, aimX, aimY));
+    const ticks = Math.max(1, Math.trunc(distance / speed));
+    state.projectiles.push({
+      weapon,
+      kind: "bomb",
+      x: fromX,
+      y: fromY,
+      vx: Math.trunc((aimX - fromX) / ticks),
+      vy: Math.trunc((aimY - fromY) / ticks),
+      damage: effectiveDamage(state, damage),
+      pierce: 0,
+      life: ticks,
+      radius,
+      hit: new Set(),
+      hallucinated,
+    });
+    if (hallucinated) {
+      state.events.push({ kind: "hallucinated", x: state.player.x, y: state.player.y });
+    }
+  }
+}
+
+function ignite(state: ArenaState, bomb: Projectile): void {
+  state.flames.push({ weapon: bomb.weapon, x: bomb.x, y: bomb.y, radius: bomb.radius, damage: bomb.damage, life: BURN_TICKS });
+  state.events.push({ kind: "ignite", x: bomb.x, y: bomb.y, radius: bomb.radius, weapon: bomb.weapon });
+}
+
+function burnFlames(state: ArenaState): void {
+  for (const flame of state.flames) {
+    flame.life -= 1;
+    if (flame.life % BURN_EVERY !== 0) {
+      continue;
+    }
+    state.events.push({ kind: "burn", x: flame.x, y: flame.y, radius: flame.radius, weapon: flame.weapon });
+    state.grid.forEachNear(flame.x, flame.y, flame.radius + px(20), (enemy) => {
+      if (enemy.health <= 0) {
+        return;
+      }
+      const reach = flame.radius + enemy.radius;
+      if (distanceSquared(flame.x, flame.y, enemy.x, enemy.y) <= reach * reach) {
+        damageEnemy(state, enemy, flame.damage, flame.weapon);
+      }
+    });
+  }
+}
+
 export const BLADE_REACH = px(7);
 
 function bladeTouching(state: ArenaState, x: number, y: number): boolean {
@@ -1244,7 +1323,8 @@ function pulse(state: ArenaState, weapon: WeaponId, radius: number, damage: numb
 
 function moveProjectiles(state: ArenaState): void {
   for (const projectile of state.projectiles) {
-    if (projectile.kind === "seeker" && !projectile.hallucinated && state.tick % 4 === 0) {
+    const steers = projectile.kind === "seeker" ? state.tick % 4 === 0 : projectile.kind === "homing" && state.tick % 2 === 0;
+    if (steers && !projectile.hallucinated) {
       const target = nearestEnemy(state, projectile.x, projectile.y, px(160));
       if (target) {
         const speed = isqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy);
@@ -1256,6 +1336,12 @@ function moveProjectiles(state: ArenaState): void {
     projectile.x += projectile.vx;
     projectile.y += projectile.vy;
     projectile.life -= 1;
+    if (projectile.kind === "bomb") {
+      if (projectile.life === 0 && !projectile.hallucinated) {
+        ignite(state, projectile);
+      }
+      continue;
+    }
     if (projectile.hallucinated) {
       continue;
     }
@@ -1714,6 +1800,7 @@ function removeDead(state: ArenaState): void {
   filterInPlace(state.gems, (gem) => !Number.isNaN(gem.x));
   filterInPlace(state.shots, (shot) => shot.life > 0);
   filterInPlace(state.hazards, (hazard) => hazard.life > 0);
+  filterInPlace(state.flames, (flame) => flame.life > 0);
   filterInPlace(state.patches, (patch) => patch.life > 0 && distanceSquared(patch.x, patch.y, player.x, player.y) < DESPAWN_DISTANCE * DESPAWN_DISTANCE);
 }
 

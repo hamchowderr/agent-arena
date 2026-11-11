@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { BEAM, BIG_GEM, BOLT, CODE_BLOCK, GEM, RAG_BEAM, SEEKER } from "./arena-sprites";
 import { MIN_GROUND_CONTRAST } from "./art-rules";
+import { BRICK, CURSOR, RAG_DART, weaponSprite } from "./weapon-art";
 import { dominantHue, groundContrast, hueGap, span } from "./audit";
 import { shade } from "./shade";
 import { WORLD_LOOKS } from "./world-looks";
 
-const PLAYER_SHOTS = { BOLT, BEAM, RAG_BEAM, SEEKER, CODE_BLOCK } as const;
+const PLAYER_SHOTS = { BOLT, BEAM, RAG_BEAM, SEEKER, CODE_BLOCK, BRICK, CURSOR, RAG_DART } as const;
 const TOKENS = { GEM, BIG_GEM } as const;
 const GOLD_HUE = 40;
 const GROUNDS = Object.values(WORLD_LOOKS).map((look) => look.ground[0]);
@@ -15,9 +16,11 @@ describe("weapon and pickup art", () => {
     expect(span(shade([sprite], "#000000"))).toBeGreaterThanOrEqual(9);
   });
 
-  it("draws web search as a long beam, longer for the evolved version", () => {
-    expect(span(shade([BEAM], "#000000"))).toBeGreaterThanOrEqual(36);
-    expect(span(shade([RAG_BEAM], "#000000"))).toBeGreaterThan(span(shade([BEAM], "#000000")));
+  it("draws web search as homing darts, bigger for the evolved version", () => {
+    const dart = span(shade([weaponSprite("webSearch", 0)], "#000000"));
+    expect(dart).toBeGreaterThanOrEqual(16);
+    expect(dart).toBeLessThan(span(shade([BEAM], "#000000")));
+    expect(span(shade([RAG_DART], "#000000"))).toBeGreaterThan(dart);
   });
 
   it("sizes XP tokens like pickups, with the big token larger", () => {

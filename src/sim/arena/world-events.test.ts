@@ -179,13 +179,13 @@ describe("formations", () => {
     const health = blocker.health;
     state.enemies.length = 0;
     state.enemies.push(blocker);
-    state.weapons.push({ id: "shell", level: 5, cooldown: 0, orbitHits: new Map() });
+    state.weapons.push({ id: "voice", level: 5, cooldown: 0, orbitHits: new Map() });
     state.player.x = blocker.x - Math.trunc((blocker.x - blocker.anchorX) / 3);
     state.player.y = blocker.y - Math.trunc((blocker.y - blocker.anchorY) / 3);
     step(state, IDLE);
     expect(blocker.health).toBe(health);
     expect(state.events.some((event) => event.kind === "pulse")).toBe(true);
-    state.weapons[0] = { id: "shell", level: 5, cooldown: 0, orbitHits: new Map() };
+    state.weapons[0] = { id: "voice", level: 5, cooldown: 0, orbitHits: new Map() };
     state.player.x = blocker.x + Math.trunc((blocker.x - blocker.anchorX) / 3);
     state.player.y = blocker.y + Math.trunc((blocker.y - blocker.anchorY) / 3);
     step(state, IDLE);
@@ -245,7 +245,7 @@ describe("twists", () => {
     state.enemies.length = 0;
     const branch = makeNear(state, slotKind("synergex", TWISTS.decoys.slot), px(20), false);
     branch.health = 1;
-    state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
+    state.weapons.push({ id: "voice", level: 1, cooldown: 0, orbitHits: new Map() });
     step(state, IDLE);
     const children = state.enemies.filter((enemy) => enemy !== branch && Math.abs(enemy.x - branch.x) + Math.abs(enemy.y - branch.y) < px(60));
     expect(children.filter((child) => child.fake)).toHaveLength(1);

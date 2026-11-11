@@ -73,6 +73,7 @@ import {
   type StoryLine,
 } from "./story";
 import { tourStop, type TourStop } from "./card-tour";
+import { blipFor, blipIndices, entranceBoom, type Blip } from "./voice-blips";
 import type { Card } from "../sim/arena/cards";
 import {
   memoryOf,
@@ -98,6 +99,9 @@ import {
   drawResults,
   drawRunHud,
   drawSpeaker,
+  drawBossEntrance,
+  ENTRANCE_SECONDS,
+  ENTRANCE_SLAM_SECONDS,
   guideAccent,
   drawTitle,
   HUD_HEIGHT,
@@ -178,6 +182,7 @@ export interface GameHooks {
   readonly onReplayCode?: (seed: number, code: string) => void;
   readonly share?: (request: ShareRequest) => Promise<ShareOutcome>;
   readonly storyMemory?: StoryMemory;
+  readonly blip?: (blip: Blip) => void;
 }
 
 const LOW_HEALTH_PERCENT = 35;
@@ -214,6 +219,8 @@ export class ArenaGame {
   private banner: Banner | null = null;
   private hover = -1;
   private tourSeconds = 0;
+  private voicedLine = "";
+  private voicedShown = 0;
   private tourCards: readonly Card[] | null = null;
   private musicOn = false;
   private renderedTier: Tier = 1;
@@ -974,16 +981,8 @@ export class ArenaGame {
             event.x,
             event.y,
             event.radius,
-            event.weapon === "ciPipeline" ? "#ffcd75" : "#9ff6ff",
+            "#9ff6ff",
           );
-          if (event.weapon === "ciPipeline") {
-            this.renderer.pulse(
-              event.x,
-              event.y,
-              Math.trunc(event.radius * 0.6),
-              "#ffffff",
-            );
-          }
           break;
         case "chain":
           this.renderer.tools.chain(event.weapon, event.points);
@@ -1012,12 +1011,6 @@ export class ArenaGame {
         case "bossArrives": {
           const world = WORLDS[event.world];
           if (world) {
-            this.banner = {
-              title: bossName(world),
-              subtitle: t("story.bossArrives", { rival: rivalName(world) }),
-              age: 0,
-              life: 170,
-            };
             this.tell(bossScene(world.id));
           }
           break;
@@ -1174,6 +1167,14 @@ export class ArenaGame {
         case "deflected":
           this.effects.spawn("spark", event.x, event.y);
           break;
+        case "ignite":
+          this.renderer.pulse(event.x, event.y, event.radius, "#ef7d57");
+          this.effects.spawn("pow", event.x, event.y);
+          this.renderer.mark(event.x, event.y, event.weapon === "codeInterpreter" ? "large" : "crater");
+          break;
+        case "burn":
+          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "codeInterpreter" ? "#ffcd75" : "#b13e53");
+          break;
         case "leeched":
           this.twistFloat(
             "twist.leeched",
@@ -1257,11 +1258,52 @@ export class ArenaGame {
     }
   }
 
+  private voice(speech: Speech): void {
+    const key = `${speech.scene.id}:${speech.index}`;
+    if (key !== this.voicedLine) {
+      this.voicedLine = key;
+      this.voicedShown = 0;
+      if (this.entering(speech)) {
+        this.hooks.blip?.(entranceBoom(speech.scene.world));
+      }
+    }
+    const chars = [...speech.text];
+    const due = blipIndices(speech.text, this.voicedShown, speech.shown);
+    this.voicedShown = Math.max(this.voicedShown, speech.shown);
+    const last = due[due.length - 1];
+    if (last !== undefined && !this.playback) {
+      this.hooks.blip?.(blipFor(speech.line.voice, speech.scene.world, chars[last] ?? "a"));
+    }
+  }
+
+  private entering(speech: Speech): boolean {
+    return speech.scene.id.startsWith("boss.") && speech.index === 0;
+  }
+
+  private drawEntrance(speech: Speech): void {
+    if (!this.entering(speech) || speech.age >= ENTRANCE_SECONDS) {
+      return;
+    }
+    const slamFrame = speech.age >= ENTRANCE_SLAM_SECONDS && speech.age < ENTRANCE_SLAM_SECONDS + 0.05;
+    if (slamFrame) {
+      this.renderer.shake = Math.max(this.renderer.shake, 0.5);
+    }
+    drawBossEntrance(this.hud, {
+      label: rivalName(speech.scene.world),
+      name: bossName(speech.scene.world),
+      company: t("story.bossArrives", { rival: rivalName(speech.scene.world) }),
+      portrait: bossCanvas(speech.scene.world),
+      age: speech.age,
+    });
+  }
+
   private drawStory(rect?: Rect): void {
     const speech = this.story.speech;
     if (!speech) {
       return;
     }
+    this.voice(speech);
+    this.drawEntrance(speech);
     const voice = speech.line.voice;
     drawSpeaker(this.hud, {
       name: this.speakerName(speech),
@@ -1476,3 +1518,4 @@ export {
   replayUrl,
 } from "./replay-link";
 export { detectLocale } from "../i18n";
+export { playBlip } from "./blip-player";

@@ -533,8 +533,12 @@ export class ArenaRenderer {
       { weapon: "webSearch", stages: WEAPON_STAGES, flat: true, capacity: 100, glow: "#41a6f6" },
       { weapon: "ragSearch", stages: [0], flat: true, capacity: 100, glow: "#a7f070" },
       { weapon: "subagents", stages: WEAPON_STAGES, flat: false, capacity: 100, glow: "#73eff7" },
-      { weapon: "codeExec", stages: WEAPON_STAGES, flat: false, capacity: 16, glow: "#ffcd75" },
-      { weapon: "codeInterpreter", stages: [0], flat: false, capacity: 16, glow: "#ffcd75" },
+      { weapon: "codeExec", stages: WEAPON_STAGES, flat: false, capacity: 40, glow: "#ef7d57" },
+      { weapon: "codeInterpreter", stages: [0], flat: false, capacity: 40, glow: "#ffcd75" },
+      { weapon: "browser", stages: WEAPON_STAGES, flat: false, capacity: 16, glow: "#73eff7" },
+      { weapon: "computerUse", stages: [0], flat: false, capacity: 16, glow: "#73eff7" },
+      { weapon: "shell", stages: WEAPON_STAGES, flat: false, capacity: 40, glow: "#94b0c2" },
+      { weapon: "ciPipeline", stages: [0], flat: false, capacity: 40, glow: "#ffcd75" },
       { weapon: "coderSubagent", stages: WEAPON_STAGES, flat: false, capacity: 60, glow: "#ef7d57" },
       { weapon: "agentNetwork", stages: [0], flat: false, capacity: 100, glow: "#41a6f6" },
       { weapon: "durableAgentTeam", stages: [0], flat: false, capacity: 120, glow: "#ffcd75" },
@@ -961,8 +965,9 @@ export class ArenaRenderer {
         continue;
       }
       const key = this.arm(projectile.weapon);
-      const flat = projectile.kind === "beam";
-      this.arms.get(key)?.add(x, flat ? 6 : 4, z, false, flat ? this.heading : null);
+      const flat = projectile.kind === "beam" || projectile.kind === "homing";
+      const lift = flat ? 6 : projectile.kind === "bomb" ? 4 + Math.min(projectile.life, 14) : 4;
+      this.arms.get(key)?.add(x, lift, z, false, flat ? this.heading : null);
       this.armGlows.get(key)?.add(x, 0.7, z, false, flat ? this.heading : null);
       this.shadows.add(x, z, 5);
     }

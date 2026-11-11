@@ -1,5 +1,5 @@
 import type { WeaponId } from "../sim/arena/content";
-import { beamSprite, BOLT, CODE_BLOCK, outlined, RAG_BEAM, SEEKER } from "./arena-sprites";
+import { beamSprite, BOLT, CODE_BLOCK, outlined, SEEKER } from "./arena-sprites";
 import type { Sprite } from "./sprites";
 import { CODE_MISSILE, NETWORK_MISSILE, TEAM_MISSILE } from "./tool-art";
 
@@ -25,12 +25,6 @@ export function staged(sprite: Sprite, stage: WeaponStage): Sprite {
   return sparkle(outlined(outlined(sprite, "y"), "o"));
 }
 
-const SEARCH_BEAMS: Readonly<Record<WeaponStage, Sprite>> = {
-  0: beamSprite(40, 5, ["c", "m", "w"]),
-  1: beamSprite(50, 7, ["c", "m", "w"]),
-  2: beamSprite(60, 9, ["m", "y", "w"]),
-};
-
 export const INTERPRETER: Sprite = [
   ".oooooooooooo.",
   "oyyyyyyyyyyyyo",
@@ -46,14 +40,48 @@ export const INTERPRETER: Sprite = [
   ".oooooooooooo.",
 ];
 
+export const BRICK: Sprite = [
+  "kkkkkkkkkkkk",
+  "kooooooooook",
+  "kowoooooooyk",
+  "kooyoooooook",
+  "kowooyyyyook",
+  "kooooooooook",
+  "krrrrrrrrrrk",
+  "kkkkkkkkkkkk",
+];
+
+export const CURSOR: Sprite = [
+  "kk.......",
+  "kwk......",
+  "kwwk.....",
+  "kwwwk....",
+  "kwwwwk...",
+  "kwwwwwk..",
+  "kwwwwwwk.",
+  "kwwwkkkkk",
+  "kwkkwk...",
+  "kk.kwwk..",
+  "....kwk..",
+  ".....k...",
+];
+
+const SEARCH_DARTS: Readonly<Record<WeaponStage, Sprite>> = {
+  0: beamSprite(18, 5, ["c", "m", "w"]),
+  1: beamSprite(22, 7, ["c", "m", "w"]),
+  2: beamSprite(26, 9, ["m", "y", "w"]),
+};
+
+export const RAG_DART: Sprite = beamSprite(30, 9, ["y", "l", "w"]);
+
 export function weaponSprite(weapon: WeaponId, stage: WeaponStage): Sprite {
   switch (weapon) {
     case "prompt":
       return staged(BOLT, stage);
     case "webSearch":
-      return SEARCH_BEAMS[stage];
+      return SEARCH_DARTS[stage];
     case "ragSearch":
-      return RAG_BEAM;
+      return RAG_DART;
     case "subagents":
       return staged(SEEKER, stage);
     case "codeExec":
@@ -66,8 +94,15 @@ export function weaponSprite(weapon: WeaponId, stage: WeaponStage): Sprite {
       return NETWORK_MISSILE;
     case "durableAgentTeam":
       return outlined(TEAM_MISSILE, "y");
+    case "browser":
+      return staged(CURSOR, stage);
+    case "computerUse":
+      return outlined(outlined(CURSOR, "m"), "c");
     case "shell":
+      return staged(BRICK, stage);
     case "ciPipeline":
+      return outlined(outlined(BRICK, "y"), "o");
+    case "voice":
     case "fileReader":
     case "mapReduce":
     case "apiCall":

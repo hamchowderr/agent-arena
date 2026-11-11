@@ -78,7 +78,7 @@ function stepIsolated(state: ArenaState, ticks: number, keep: Enemy[]): ArenaEve
 
 function pulseWith(state: ArenaState): void {
   state.weapons.length = 0;
-  state.weapons.push({ id: "shell", level: 1, cooldown: 0, orbitHits: new Map() });
+  state.weapons.push({ id: "voice", level: 1, cooldown: 0, orbitHits: new Map() });
 }
 
 describe("world rosters", () => {
@@ -190,7 +190,7 @@ describe("enemy behaviors", () => {
     const heavy = place(state, "heavy", -px(20), 0);
     step(state, IDLE);
     expect(Math.abs(grunt.knockX)).toBeGreaterThan(Math.abs(heavy.knockX) * 3);
-    expect(Math.abs(grunt.knockX)).toBeLessThanOrEqual((WEAPONS.shell.knockback ?? KNOCKBACK) * 2);
+    expect(Math.abs(grunt.knockX)).toBeLessThanOrEqual((WEAPONS.voice.knockback ?? KNOCKBACK) * 2);
   });
 
   it("makes the loot runner flee, drop tokens on every hit, and escape in time", () => {
@@ -198,7 +198,7 @@ describe("enemy behaviors", () => {
     const runner = place(state, "lootRunner", px(40), 0);
     runner.timer = seconds(LOOT_RUNNER_ESCAPE_SECONDS);
     pulseWith(state);
-    state.weapons[0] = { id: "shell", level: 1, cooldown: 0, orbitHits: new Map() };
+    state.weapons[0] = { id: "voice", level: 1, cooldown: 0, orbitHits: new Map() };
     runner.x = state.player.x + px(20);
     step(state, IDLE);
     expect(state.gems.length).toBeGreaterThan(0);

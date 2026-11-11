@@ -63,7 +63,7 @@ async function boot(): Promise<void> {
   if (!worldCanvas || !hudCanvas || !hud) {
     return;
   }
-  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale, postToXUrl, readReplayCode, replayCodeFrom, replayUrl } = await import("./game/arena-game");
+  const { ArenaGame, HUD_HEIGHT, HUD_WIDTH, detectLocale, playBlip, postToXUrl, readReplayCode, replayCodeFrom, replayUrl } = await import("./game/arena-game");
   hudCanvas.width = HUD_WIDTH;
   hudCanvas.height = HUD_HEIGHT;
   const query = new URLSearchParams(window.location.search);
@@ -73,6 +73,7 @@ async function boot(): Promise<void> {
     newSeed: () => (Number.isInteger(fixedSeed) && fixedSeed > 0 ? fixedSeed : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0),
     now: () => performance.now(),
     storyMemory: storyMemory(query.get("story") === "fresh"),
+    blip: playBlip,
     onLocale: (code) => {
       document.documentElement.lang = code;
       if (code === "ja" || code === "zh-Hans") {

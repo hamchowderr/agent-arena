@@ -1,6 +1,6 @@
 import type { Tier } from "../tiers";
 
-export type WeaponKind = "bolt" | "beam" | "orbit" | "pulse" | "seeker" | "laser" | "chain" | "mine";
+export type WeaponKind = "bolt" | "beam" | "orbit" | "pulse" | "seeker" | "homing" | "bomb" | "brick" | "laser" | "chain" | "mine";
 
 export interface WeaponLevel {
   readonly damage: number;
@@ -38,23 +38,36 @@ export const WEAPONS = {
     levels: [level(10, 32, 1, 1, 3), level(12, 30, 1, 1, 3), level(14, 28, 2, 1, 3), level(17, 26, 2, 2, 3), level(20, 22, 3, 2, 4)],
   },
   webSearch: {
-    kind: "beam",
+    kind: "homing",
     tier: 1,
-    speed: 6,
-    levels: [level(14, 90, 1, 4, 3), level(17, 84, 1, 5, 3), level(20, 78, 2, 6, 3), level(24, 72, 2, 7, 4), level(28, 64, 3, 8, 4)],
+    speed: 5,
+    levels: [level(9, 40, 1, 1, 3), level(11, 38, 2, 1, 3), level(13, 36, 2, 2, 3), level(15, 34, 3, 2, 3), level(18, 30, 4, 2, 4)],
   },
   codeExec: {
-    kind: "orbit",
+    kind: "bomb",
     tier: 1,
+    speed: 4,
+    levels: [level(3, 120, 1, 0, 16), level(4, 114, 1, 0, 18), level(4, 108, 2, 0, 19), level(5, 102, 2, 0, 21), level(6, 96, 3, 0, 23)],
+  },
+  browser: {
+    kind: "orbit",
+    tier: 2,
     speed: 3,
     knockback: 110,
     levels: [level(8, 18, 1, 99, 26), level(10, 18, 2, 99, 28), level(12, 16, 2, 99, 30), level(14, 16, 3, 99, 32), level(16, 14, 4, 99, 34)],
   },
   shell: {
+    kind: "brick",
+    tier: 2,
+    speed: 3,
+    knockback: 150,
+    levels: [level(20, 90, 1, 3, 6), level(24, 86, 1, 3, 6), level(28, 82, 2, 4, 7), level(32, 78, 2, 4, 7), level(38, 72, 3, 5, 8)],
+  },
+  voice: {
     kind: "pulse",
     tier: 2,
     speed: 0,
-    knockback: 150,
+    knockback: 60,
     levels: [level(12, 100, 1, 99, 36), level(15, 94, 1, 99, 40), level(18, 88, 1, 99, 44), level(22, 80, 1, 99, 48), level(26, 72, 1, 99, 54)],
   },
   subagents: {
@@ -64,27 +77,34 @@ export const WEAPONS = {
     levels: [level(12, 70, 2, 1, 3), level(14, 66, 2, 1, 3), level(16, 62, 3, 1, 3), level(19, 58, 3, 2, 3), level(22, 52, 4, 2, 4)],
   },
   ragSearch: {
-    kind: "beam",
+    kind: "homing",
     tier: 1,
     speed: 7,
     evolved: true,
-    levels: [level(40, 50, 4, 99, 5)],
+    levels: [level(20, 44, 3, 3, 5)],
   },
   codeInterpreter: {
-    kind: "orbit",
+    kind: "bomb",
     tier: 1,
+    speed: 5,
+    evolved: true,
+    levels: [level(9, 80, 3, 0, 28)],
+  },
+  computerUse: {
+    kind: "orbit",
+    tier: 2,
     speed: 5,
     evolved: true,
     knockback: 140,
     levels: [level(24, 10, 6, 99, 40)],
   },
   ciPipeline: {
-    kind: "pulse",
+    kind: "brick",
     tier: 2,
-    speed: 0,
+    speed: 4,
     evolved: true,
     knockback: 180,
-    levels: [level(45, 45, 1, 99, 72)],
+    levels: [level(60, 50, 3, 99, 10)],
   },
   fileReader: {
     kind: "laser",
@@ -191,6 +211,7 @@ export interface Evolution {
 export const EVOLUTIONS: readonly Evolution[] = [
   { weapon: "webSearch", passive: "vectorMemory", result: "ragSearch" },
   { weapon: "codeExec", passive: "sandbox", result: "codeInterpreter" },
+  { weapon: "browser", passive: "planner", result: "computerUse" },
   { weapon: "shell", passive: "autoTestHook", result: "ciPipeline" },
   { weapon: "scheduledJob", passive: "loopRunner", result: "durableWorkflow" },
   { weapon: "agentNetwork", passive: "loopRunner", result: "durableAgentTeam" },
