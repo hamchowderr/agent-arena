@@ -5,7 +5,7 @@ import { TRANSPARENT } from "./palette";
 import type { Sprite } from "./sprites";
 import { eliteSprite } from "./arena-sprites";
 import { enemyActs, enemyPoses, enemySprite, wallSprite } from "./world-enemies";
-import { agentBody } from "./agent";
+import { agentPose } from "./agent";
 import { bossSprite } from "./bosses";
 import { shade, type ColorGrid } from "./shade";
 
@@ -69,5 +69,5 @@ export function bossClips(world: WorldId, faction: string): EnemyClips {
 }
 
 export function agentClips(tier: Tier): ColorGrid[] {
-  return walkFrames(agentBody(tier)).map((frame) => shade([frame], "#ffffff"));
+  return [0, 1, 2, 3].map((frame) => shade([agentPose(tier, frame)], "#ffffff"));
 }
