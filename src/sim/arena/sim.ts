@@ -13,6 +13,7 @@ import {
   LOOT_RUNNER_ESCAPE_SECONDS,
   LOOT_RUNNER_SECOND,
   OPENING_PACK,
+  OPENING_SECOND,
   SIGNATURE_SECOND,
   SPLIT_COUNT,
   SPLIT_INTO,
@@ -100,6 +101,11 @@ export const LOOT_GEM_EVERY_HIT = 1;
 export const LOOT_PAYOUT = 12;
 export const MAX_SPAWNS_PER_TICK = 1;
 export const RAMP_SECONDS = 120;
+export const FLOOR_RAMP_SECONDS = 20;
+export const OPENING_LEVELS = 5;
+export const KIT_OFFSET = px(56);
+export const KIT_REACH = px(14);
+export const KIT_LEASH = px(150);
 const BOSS_KNOCKBACK = 3;
 const KNOCKBACK_KEEP_PERCENT = 60;
 const SCREEN_TOP_ANGLE = (ANGLE_STEPS * 3) / 4;
@@ -300,6 +306,7 @@ export type ArenaEvent =
   | { readonly kind: "pulse"; readonly x: number; readonly y: number; readonly radius: number; readonly weapon: WeaponId }
   | { readonly kind: "interrupted"; readonly x: number; readonly y: number }
   | { readonly kind: "levelUp"; readonly level: number }
+  | { readonly kind: "kitOpened"; readonly x: number; readonly y: number }
   | { readonly kind: "bossArrives"; readonly world: number }
   | { readonly kind: "bossDown"; readonly world: number; readonly x: number; readonly y: number }
   | { readonly kind: "tierUp"; readonly tier: Tier }
@@ -389,6 +396,8 @@ export interface ArenaState {
   readonly flames: Flame[];
   spawnCarry: number;
   worldStartTick: number;
+  kit: StarterKit | null;
+  heldTicks: number;
   eliteSpawned: boolean;
   lootSpawned: boolean;
   readonly staged: Set<StagedEvent>;
@@ -404,13 +413,18 @@ export interface ArenaState {
   events: ArenaEvent[];
 }
 
+export interface StarterKit {
+  readonly x: number;
+  readonly y: number;
+}
+
 export const HEAD_START_CARDS_PER_WORLD = 4;
 
 export function clampStartWorld(world: number): number {
   return Number.isInteger(world) ? Math.max(0, Math.min(WORLDS.length - 1, world)) : 0;
 }
 
-export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = DEFAULT_LOADOUT): ArenaState {
+export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = DEFAULT_LOADOUT, opening = false): ArenaState {
   const context = CONTEXT_WINDOWS[loadout.context];
   const startWorld = clampStartWorld(startAt);
   const tier = WORLDS[startWorld]?.tier ?? 1;
@@ -463,6 +477,8 @@ export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = D
     flames: [],
     spawnCarry: 0,
     worldStartTick: 0,
+    kit: opening && startWorld === 0 ? { x: KIT_OFFSET, y: 0 } : null,
+    heldTicks: 0,
     eliteSpawned: false,
     lootSpawned: false,
     staged: new Set(),
@@ -608,7 +624,7 @@ export function effectiveDamage(state: ArenaState, base: number): number {
 }
 
 export function xpToNext(level: number): number {
-  return 2 + level * 3 + Math.trunc((level * level) / 4);
+  return 2 + level * 3 + Math.trunc((level * level) / 4) + Math.max(0, OPENING_LEVELS - level) * 2;
 }
 
 export function currentWorld(state: ArenaState): World {
@@ -637,6 +653,10 @@ export function step(state: ArenaState, input: Input): void {
     return;
   }
   state.tick += 1;
+  if (state.kit !== null) {
+    holdForKit(state, state.kit, input);
+    return;
+  }
   movePlayer(state, input);
   regenerate(state);
   spawnEnemies(state);
@@ -656,6 +676,32 @@ export function step(state: ArenaState, input: Input): void {
   if (state.status === "playing" && state.pendingLevelUps > 0) {
     openLevelUp(state);
   }
+}
+
+function holdForKit(state: ArenaState, kit: StarterKit, input: Input): void {
+  state.heldTicks += 1;
+  state.worldStartTick += 1;
+  state.nextBossTick += 1;
+  movePlayer(state, input);
+  const player = state.player;
+  if (distanceSquared(player.x, player.y, kit.x, kit.y) > KIT_LEASH * KIT_LEASH) {
+    const back = scaleToLength(player.x - kit.x, player.y - kit.y, KIT_LEASH);
+    player.x = kit.x + back.x;
+    player.y = kit.y + back.y;
+    player.dashTicks = 0;
+  }
+  const reach = KIT_REACH + PLAYER_RADIUS;
+  if (distanceSquared(player.x, player.y, kit.x, kit.y) <= reach * reach) {
+    state.kit = null;
+    state.quietTicks = seconds(OPENING_SECOND);
+    state.pendingLevelUps += 1;
+    state.events.push({ kind: "kitOpened", x: kit.x, y: kit.y });
+    openLevelUp(state);
+  }
+}
+
+export function runTicks(state: ArenaState): number {
+  return state.tick - state.heldTicks;
 }
 
 function movePlayer(state: ArenaState, input: Input): void {
@@ -752,9 +798,9 @@ function pickSlot(state: ArenaState, row: WaveRow): RegularKind {
 function spawnEnemies(state: ArenaState): void {
   const world = currentWorld(state);
   const ramp = Math.min(RAMP_SECONDS, worldSeconds(state));
-  const full = world.minAlive + Math.trunc(((world.maxAlive - world.minAlive) * ramp) / RAMP_SECONDS);
+  const full = world.minAlive + Math.trunc(((world.maxAlive - world.minAlive) * ramp * ramp) / (RAMP_SECONDS * RAMP_SECONDS));
   const ceiling = state.bossId === null ? full : Math.trunc(full / 2);
-  const floor = world.minAlive;
+  const floor = Math.trunc((world.minAlive * Math.min(FLOOR_RAMP_SECONDS, worldSeconds(state))) / FLOOR_RAMP_SECONDS);
   if (state.bossId === null) {
     spawnSpecials(state);
     stageEvents(state);
@@ -813,7 +859,7 @@ function stageEvents(state: ArenaState): void {
   const world = currentWorld(state);
   const index = state.bossesDown;
   const angle = () => state.rng.intBelow(ANGLE_STEPS);
-  stage(state, "opening", 0, () => openingPack(OPENING_PACK, angle()));
+  stage(state, "opening", OPENING_SECOND, () => openingPack(OPENING_PACK, angle()));
   stage(state, "wallRing", WALL_RING_SECOND, () => wallRing(index, angle()));
   stage(state, "signature", SIGNATURE_SECOND, () => signatureWave(world.signature, index, angle()));
   stage(state, "swarm", SWARM_SECOND, () => swarmStream(angle(), state.rng.intBelow(px(60)) - px(30)));
@@ -890,7 +936,7 @@ function spawnSpecials(state: ArenaState): void {
 }
 
 function healthScale(state: ArenaState): number {
-  const seconds = Math.trunc(state.tick / TICKS_PER_SECOND);
+  const seconds = Math.trunc(runTicks(state) / TICKS_PER_SECOND);
   return 100 + Math.trunc(seconds / 2) + state.bossesDown * 60;
 }
 
@@ -910,7 +956,7 @@ function spawnEnemyAt(state: ArenaState, kind: EnemyKind, x: number, y: number, 
   const fake = options.fake ?? false;
   const scaled = kind === "boss" ? (WORLDS[state.bossesDown]?.bossHealth ?? 9000) : percentOf(definition.health, percentOf(healthScale(state), options.healthPercent ?? 100));
   const health = fake ? 1 : elite ? scaled * ELITE_HEALTH_TIMES : scaled;
-  const full = definition.damage === 0 || fake ? 0 : definition.damage + state.bossesDown * 3 + Math.trunc(state.tick / (TICKS_PER_SECOND * 60));
+  const full = definition.damage === 0 || fake ? 0 : definition.damage + state.bossesDown * 3 + Math.trunc(runTicks(state) / (TICKS_PER_SECOND * 60));
   const damage = options.wall ? percentOf(full, WALL_DAMAGE_PERCENT) : options.order === "march" || options.order === "spiral" ? percentOf(full, SWEEP_DAMAGE_PERCENT) : full;
   const enemy: Enemy = {
     id: state.nextId,
@@ -1557,7 +1603,7 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   }
   state.tier = Math.min(5, state.tier + 1) as Tier;
   state.player.health = Math.min(maxHealth(state), state.player.health + percentOf(maxHealth(state), 40));
-  state.nextBossTick = Math.max(seconds(BOSS_EVERY_SECONDS * (bossesBeaten(state) + 1)), state.tick + seconds(20));
+  state.nextBossTick = Math.max(seconds(BOSS_EVERY_SECONDS * (bossesBeaten(state) + 1)) + state.heldTicks, state.tick + seconds(20));
   state.events.push({ kind: "tierUp", tier: state.tier });
 }
 
@@ -1960,11 +2006,11 @@ export function bossesBeaten(state: ArenaState): number {
 }
 
 export function score(state: ArenaState): number {
-  return state.kills * 10 + state.level * 100 + bossesBeaten(state) * 1000 + Math.trunc(state.tick / TICKS_PER_SECOND);
+  return state.kills * 10 + state.level * 100 + bossesBeaten(state) * 1000 + Math.trunc(runTicks(state) / TICKS_PER_SECOND);
 }
 
 export function elapsedSeconds(state: ArenaState): number {
-  return Math.trunc(state.tick / TICKS_PER_SECOND);
+  return Math.trunc(runTicks(state) / TICKS_PER_SECOND);
 }
 
 export function worldPixels(value: number): number {

@@ -445,6 +445,43 @@ export function drawFloats(
   context.globalAlpha = 1;
 }
 
+function starterPick(state: ArenaState): boolean {
+  return state.heldTicks > 0 && state.tick === state.heldTicks;
+}
+
+export function drawKitMarker(
+  context: CanvasRenderingContext2D,
+  at: { readonly x: number; readonly y: number },
+  label: string,
+  frame: number,
+  scale: number,
+): void {
+  const radius = 34 * scale;
+  context.save();
+  context.strokeStyle = "#f4f1e8";
+  context.globalAlpha = 0.85;
+  context.lineWidth = 3;
+  context.setLineDash([8, 7]);
+  context.lineDashOffset = -frame * 0.4;
+  context.beginPath();
+  context.ellipse(at.x, at.y, radius, radius * 0.55, 0, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+  const bounce = Math.sin(frame / 9) * 5;
+  const tip = at.y - 54 * scale + bounce;
+  context.fillStyle = "#ffcd75";
+  context.strokeStyle = SHADOW;
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(at.x, tip);
+  context.lineTo(at.x - 11, tip - 14);
+  context.lineTo(at.x + 11, tip - 14);
+  context.closePath();
+  context.stroke();
+  context.fill();
+  text(context, label, at.x, tip - 44, 22, "#ffcd75", "center");
+}
+
 export interface SpeakerView {
   readonly name: string;
   readonly color: string;
@@ -837,7 +874,7 @@ export function drawLevelUp(
 ): void {
   fillBehindPopup(context, "rgba(8, 10, 18, 0.62)");
   const middle = WIDE_STAGE.width / 2;
-  const title = t("levelUp.title", { level: state.level });
+  const title = starterPick(state) ? t("levelUp.starter") : t("levelUp.title", { level: state.level });
   if (guide) {
     text(context, title, middle, 28, fitSize(context, title, WIDE_STAGE.width - 40, 46), GOLD, "center");
     drawGuideStrip(context, guide);

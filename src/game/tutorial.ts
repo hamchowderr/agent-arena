@@ -7,7 +7,7 @@ import type { Face, Scene, StoryLine } from "./story";
 
 export type Device = "keys" | "touch" | "pad";
 
-export const GOALS = ["move", "dash", "fight", "tokens", "pick", "boss"] as const;
+export const GOALS = ["move", "pick", "dash", "fight", "tokens", "boss"] as const;
 export type Goal = (typeof GOALS)[number];
 
 export type Spot = "cards" | "tags" | "loadout" | "buttons" | "recommended";
@@ -100,6 +100,7 @@ export class Tutorial {
   private flashAge = FLASH_SECONDS;
   private flashed: Goal | null = null;
   private over = false;
+  private kitOpened = false;
 
   constructor(
     readonly active: boolean,
@@ -131,7 +132,7 @@ export class Tutorial {
   private progress(goal: Goal, state: ArenaState): number | null {
     switch (goal) {
       case "move":
-        return Math.min(1, this.moved / MOVE_DISTANCE);
+        return state.kit === null ? Math.min(1, this.moved / MOVE_DISTANCE) : null;
       case "fight":
         return Math.min(1, (state.kills - this.killsAt) / FIGHT_KILLS);
       default:
@@ -145,7 +146,9 @@ export class Tutorial {
     }
     const world = currentWorld(state).id;
     for (const event of events) {
-      if (event.kind === "dash" && this.current === "dash" && this.opened) {
+      if (event.kind === "kitOpened") {
+        this.kitOpened = true;
+      } else if (event.kind === "dash" && this.current === "dash" && this.opened) {
         this.complete(state, "dash");
       } else if (event.kind === "bossArrives" && !this.bossTaught) {
         this.bossTaught = true;
@@ -171,9 +174,19 @@ export class Tutorial {
       return;
     }
     if (state.status === "levelUp" && !this.done.has("pick") && this.current !== "pick") {
-      this.done.add("tokens");
+      if (this.kitOpened) {
+        this.done.add("move");
+        this.flashed = "move";
+        this.flashAge = 0;
+      } else {
+        this.done.add("tokens");
+      }
       this.go(state, "pick");
       this.teach({ id: LESSON_ID, mode: "hold", world: currentWorld(state).id, lines: this.lesson().map((entry) => entry.line), repeat: "always" });
+      return;
+    }
+    if (state.status === "levelUp" && this.current === "tokens") {
+      this.complete(state, "tokens");
       return;
     }
     if (state.status !== "playing") {
@@ -193,7 +206,7 @@ export class Tutorial {
     }
     switch (this.current) {
       case "move":
-        if (this.moved >= MOVE_DISTANCE) {
+        if (state.kit === null && this.moved >= MOVE_DISTANCE) {
           this.complete(state, "move");
         }
         break;
