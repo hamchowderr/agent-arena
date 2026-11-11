@@ -5,17 +5,81 @@ import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
 import { WORLDS, type SignatureWave } from "../sim/arena/content";
 import type { StagedEvent } from "../sim/arena/formations";
 import { SUB, TICKS_PER_SECOND } from "../sim/arena/math";
-import { createArena, currentWorld, elapsedSeconds, maxHealth, score, throttlePercent, type ArenaEvent, type ArenaState, type Input } from "../sim/arena/sim";
-import { act, decodeReplay, encodeReplay, replayMatches, startRecording, type Action, type Recording, type Replay } from "../sim/arena/replay";
+import {
+  createArena,
+  currentWorld,
+  elapsedSeconds,
+  maxHealth,
+  score,
+  throttlePercent,
+  type ArenaEvent,
+  type ArenaState,
+  type Input,
+} from "../sim/arena/sim";
+import {
+  act,
+  decodeReplay,
+  encodeReplay,
+  replayMatches,
+  startRecording,
+  type Action,
+  type Recording,
+  type Replay,
+} from "../sim/arena/replay";
 import { nextPhase, type RunEvent, type RunPhase } from "../sim/arena/run-loop";
 import type { Tier } from "../sim/tiers";
-import { currentLocale, nextLocale, setLocale, t, usesSpaces, type LocaleCode } from "../i18n";
+import {
+  currentLocale,
+  nextLocale,
+  setLocale,
+  t,
+  usesSpaces,
+  type LocaleCode,
+} from "../i18n";
 import type { MessageKey } from "../i18n/locales/en";
-import { STICK_RADIUS, STILL, stickDirection, stickKnob, type Direction, type Stick } from "./controls";
-import { bossName, clock, passiveName, rivalName, tierStage } from "./format";
+import {
+  STICK_RADIUS,
+  STILL,
+  stickDirection,
+  stickKnob,
+  type Direction,
+  type Stick,
+} from "./controls";
+import {
+  bossName,
+  cardName,
+  clock,
+  partGuide,
+  passiveName,
+  rivalName,
+  tierStage,
+} from "./format";
 import { agentCanvas, bossCanvas, guideCanvas } from "./portraits";
-import { acquisitionScene, arrivalScene, bossScene, checkScene, eliteScene, endingScene, GUIDE_COLOR, introScene, payoffScene, RIVAL_COLOR, tierScene, tipScene, YOU_COLOR, type StoryLine } from "./story";
-import { memoryOf, StoryPlayer, type Speech, type StoryMemory } from "./story-player";
+import {
+  acquisitionScene,
+  arrivalScene,
+  bossScene,
+  checkScene,
+  eliteScene,
+  endingScene,
+  GUIDE_COLOR,
+  introScene,
+  payoffScene,
+  readingSeconds,
+  RIVAL_COLOR,
+  tierScene,
+  tipScene,
+  YOU_COLOR,
+  type StoryLine,
+} from "./story";
+import { tourStop, type TourStop } from "./card-tour";
+import type { Card } from "../sim/arena/cards";
+import {
+  memoryOf,
+  StoryPlayer,
+  type Speech,
+  type StoryMemory,
+} from "./story-player";
 import { replayCode } from "./replay-link";
 import { LESSON_ID, pickLesson, staleLesson, Tutorial, TUTORIAL_DONE, type Device, type LessonLine } from "./tutorial";
 import { drawObjective, drawSpotlight, LESSON_SPEAKER_RECT, spotRects, TUTORIAL_SKIP_RECT } from "./tutorial-hud";
@@ -34,6 +98,7 @@ import {
   drawResults,
   drawRunHud,
   drawSpeaker,
+  guideAccent,
   drawTitle,
   HUD_HEIGHT,
   HUD_WIDTH,
@@ -46,6 +111,7 @@ import {
   type Banner,
   type ChestSpin,
   type FloatText,
+  type LevelUpGuide,
   type Rect,
 } from "./hud";
 
@@ -57,7 +123,9 @@ const MAX_FLOATS = 90;
 const HUD_PER_RENDER = HUD_WIDTH / RENDER_WIDTH;
 const TWIST_FLOAT_EVERY = 45;
 
-const SIGNATURE_TEXT: Readonly<Record<SignatureWave, readonly [MessageKey, MessageKey]>> = {
+const SIGNATURE_TEXT: Readonly<
+  Record<SignatureWave, readonly [MessageKey, MessageKey]>
+> = {
   viralThread: ["signature.viralThread", "signature.viralThreadLine"],
   inboxZero: ["signature.inboxZero", "signature.inboxZeroLine"],
   canyonToll: ["signature.canyonToll", "signature.canyonTollLine"],
@@ -65,7 +133,12 @@ const SIGNATURE_TEXT: Readonly<Record<SignatureWave, readonly [MessageKey, Messa
   mirageSchool: ["signature.mirageSchool", "signature.mirageSchoolLine"],
 };
 
-const STAGED_TEXT: Readonly<Record<Exclude<StagedEvent, "opening" | "signature">, readonly [MessageKey, MessageKey]>> = {
+const STAGED_TEXT: Readonly<
+  Record<
+    Exclude<StagedEvent, "opening" | "signature">,
+    readonly [MessageKey, MessageKey]
+  >
+> = {
   wallRing: ["event.wallRing", "event.wallRingLine"],
   swarm: ["event.swarm", "event.swarmLine"],
 };
@@ -74,7 +147,12 @@ const REPLAY_CARD_HOLD = 50;
 const NOTICE_FRAMES = 150;
 
 export type ShareTarget = "sheet" | "x";
-export type ShareOutcome = "shared" | "copied" | "opened" | "cancelled" | "failed";
+export type ShareOutcome =
+  | "shared"
+  | "copied"
+  | "opened"
+  | "cancelled"
+  | "failed";
 
 export interface ShareRequest {
   readonly target: ShareTarget;
@@ -135,6 +213,8 @@ export class ArenaGame {
   private ending = false;
   private banner: Banner | null = null;
   private hover = -1;
+  private tourSeconds = 0;
+  private tourCards: readonly Card[] | null = null;
   private musicOn = false;
   private renderedTier: Tier = 1;
   private twistFloatAt = 0;
@@ -251,7 +331,17 @@ export class ArenaGame {
     this.spins = [];
     this.effects.clear();
     const firstWorld = WORLDS[0];
-    this.banner = firstWorld ? { title: rivalName(firstWorld), subtitle: t("story.worldBanner", { world: 1, stage: tierStage(firstWorld.tier) }), age: 0, life: 150 } : null;
+    this.banner = firstWorld
+      ? {
+          title: rivalName(firstWorld),
+          subtitle: t("story.worldBanner", {
+            world: 1,
+            stage: tierStage(firstWorld.tier),
+          }),
+          age: 0,
+          life: 150,
+        }
+      : null;
     this.ending = false;
     this.story.clear();
     const teaching = !watching && (this.teachNext || !this.memory.has(TUTORIAL_DONE));
@@ -285,7 +375,9 @@ export class ArenaGame {
   }
 
   private ownReplay(): Replay | null {
-    return this.recording ? decodeReplay(encodeReplay(this.recording, this.state)) : null;
+    return this.recording
+      ? decodeReplay(encodeReplay(this.recording, this.state))
+      : null;
   }
 
   private watchAgain(): void {
@@ -301,7 +393,10 @@ export class ArenaGame {
     }
     const playback = this.playback;
     if (playback) {
-      this.watched = { mismatch: playback.desynced || !replayMatches(playback.replay, this.state) };
+      this.watched = {
+        mismatch:
+          playback.desynced || !replayMatches(playback.replay, this.state),
+      };
       this.playback = null;
     } else if (this.recording) {
       const recording = this.recording;
@@ -323,8 +418,18 @@ export class ArenaGame {
       return;
     }
     const state = this.state;
-    const text = t("share.post", { time: clock(elapsedSeconds(state)), kills: state.kills, score: score(state) });
-    void share({ target, seed: state.seed, code, title: t("share.title"), text }).then((outcome) => {
+    const text = t("share.post", {
+      time: clock(elapsedSeconds(state)),
+      kills: state.kills,
+      score: score(state),
+    });
+    void share({
+      target,
+      seed: state.seed,
+      code,
+      title: t("share.title"),
+      text,
+    }).then((outcome) => {
       if (outcome === "copied") {
         this.notify(t("share.copied"));
       } else if (outcome === "failed") {
@@ -342,7 +447,9 @@ export class ArenaGame {
       return "title";
     }
     if (this.screen === "paused") {
-      return this.state.status === "levelUp" ? "pausedLevelUp" : "pausedPlaying";
+      return this.state.status === "levelUp"
+        ? "pausedLevelUp"
+        : "pausedPlaying";
     }
     return this.state.status;
   }
@@ -489,7 +596,9 @@ export class ArenaGame {
       this.hover = -1;
       return;
     }
-    this.hover = cardRects(this.state.cards.length).findIndex((rect) => inside(rect, x, y));
+    this.hover = cardRects(this.state.cards.length).findIndex((rect) =>
+      inside(rect, x, y),
+    );
     if (!pressed) {
       return;
     }
@@ -511,11 +620,25 @@ export class ArenaGame {
 
   private syncMusic(): void {
     const { tier, bossesDown, bossId } = this.state;
-    setMusic(this.musicOn ? cueFor({ onTitle: this.screen === "title" || this.screen === "results", tier, bossesDown, bossId }) : null);
+    setMusic(
+      this.musicOn
+        ? cueFor({
+            onTitle: this.screen === "title" || this.screen === "results",
+            tier,
+            bossesDown,
+            bossId,
+          })
+        : null,
+    );
   }
 
   wantsStick(): boolean {
-    return this.screen === "run" && this.state.status === "playing" && !this.playback && !this.story.holding;
+    return (
+      this.screen === "run" &&
+      this.state.status === "playing" &&
+      !this.playback &&
+      !this.story.holding
+    );
   }
 
   touchStart(id: number, x: number, y: number): boolean {
@@ -558,11 +681,18 @@ export class ArenaGame {
   }
 
   nudgeCard(delta: number): void {
-    if (this.screen !== "run" || this.state.status !== "levelUp" || this.playback) {
+    if (
+      this.screen !== "run" ||
+      this.state.status !== "levelUp" ||
+      this.playback
+    ) {
       return;
     }
     const count = this.state.cards.length;
-    this.hover = this.hover < 0 ? 0 : (this.hover + delta + count) % count;
+    this.hover =
+      this.hover < 0
+        ? this.shownCard().index
+        : (this.hover + delta + count) % count;
   }
 
   confirm(): void {
@@ -575,7 +705,7 @@ export class ArenaGame {
       return;
     }
     if (this.screen === "run" && this.state.status === "levelUp" && !this.lessonShowing()) {
-      this.act({ kind: "choose", index: Math.max(0, this.hover) });
+      this.act({ kind: "choose", index: this.shownCard().index });
       this.hover = -1;
       return;
     }
@@ -594,9 +724,17 @@ export class ArenaGame {
     const down = this.held.has("s") || this.held.has("arrowdown");
     const dash = this.dashQueued;
     this.dashQueued = false;
-    const keys: Direction = { moveX: left === right ? 0 : left ? -1 : 1, moveY: up === down ? 0 : up ? -1 : 1 };
+    const keys: Direction = {
+      moveX: left === right ? 0 : left ? -1 : 1,
+      moveY: up === down ? 0 : up ? -1 : 1,
+    };
     const touch = this.touch ? stickDirection(this.touch) : STILL;
-    const chosen = keys.moveX !== 0 || keys.moveY !== 0 ? keys : touch.moveX !== 0 || touch.moveY !== 0 ? touch : this.padDirection;
+    const chosen =
+      keys.moveX !== 0 || keys.moveY !== 0
+        ? keys
+        : touch.moveX !== 0 || touch.moveY !== 0
+          ? touch
+          : this.padDirection;
     return { ...chosen, dash };
   }
 
@@ -609,7 +747,13 @@ export class ArenaGame {
     context.globalAlpha = 0.35;
     context.fillStyle = "#0d0f14";
     context.beginPath();
-    context.arc(this.touch.originX, this.touch.originY, STICK_RADIUS, 0, Math.PI * 2);
+    context.arc(
+      this.touch.originX,
+      this.touch.originY,
+      STICK_RADIUS,
+      0,
+      Math.PI * 2,
+    );
     context.fill();
     context.globalAlpha = 0.6;
     context.strokeStyle = "#f4f1e8";
@@ -637,10 +781,20 @@ export class ArenaGame {
       this.hitStop -= this.playback ? this.playback.speed : 1;
     } else if (this.screen === "run" && this.playback) {
       this.advancePlayback(this.playback, elapsed);
-    } else if (this.screen === "run" && this.state.status === "playing" && !this.story.holding) {
+    } else if (
+      this.screen === "run" &&
+      this.state.status === "playing" &&
+      !this.story.holding
+    ) {
       this.accumulator += elapsed;
       let steps = 0;
-      while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && this.state.status === "playing" && this.spins.length === 0 && !this.story.holding) {
+      while (
+        this.accumulator >= STEP_MS &&
+        steps < MAX_STEPS_PER_FRAME &&
+        this.state.status === "playing" &&
+        this.spins.length === 0 &&
+        !this.story.holding
+      ) {
         this.act({ kind: "step", input: this.input() });
         this.handle(this.state.events);
         this.accumulator -= STEP_MS;
@@ -661,6 +815,9 @@ export class ArenaGame {
         this.memory.add(TUTORIAL_DONE);
       }
     }
+    if (!this.lessonShowing()) {
+      this.advanceTour(elapsed / 1000);
+    }
     if (this.screen === "run" && this.spins.length === 0 && (this.state.status !== "levelUp" || this.lessonShowing())) {
       this.story.frame((elapsed / 1000) * (this.playback?.speed ?? 1));
     }
@@ -673,9 +830,11 @@ export class ArenaGame {
       this.renderer.setWorld(this.state.tier, this.state.seed);
     }
     this.renderer.hurt = Math.max(0, this.renderer.hurt - 0.06);
-    this.renderer.shake = this.renderer.shake < 0.02 ? 0 : this.renderer.shake * 0.86;
+    this.renderer.shake =
+      this.renderer.shake < 0.02 ? 0 : this.renderer.shake * 0.86;
     const bossAlive = this.state.bossId !== null;
-    this.renderer.letterbox += ((bossAlive ? 0.06 : 0) - this.renderer.letterbox) * 0.1;
+    this.renderer.letterbox +=
+      ((bossAlive ? 0.06 : 0) - this.renderer.letterbox) * 0.1;
     this.renderer.sync(this.state);
     this.renderer.render();
     this.drawHud(elapsed / 1000);
@@ -709,7 +868,12 @@ export class ArenaGame {
     this.accumulator += elapsed * playback.speed;
     const limit = MAX_STEPS_PER_FRAME * playback.speed;
     let steps = 0;
-    while (this.accumulator >= STEP_MS && steps < limit && this.state.status === "playing" && this.spins.length === 0) {
+    while (
+      this.accumulator >= STEP_MS &&
+      steps < limit &&
+      this.state.status === "playing" &&
+      this.spins.length === 0
+    ) {
       const next = actions[playback.index];
       if (!next) {
         this.finishRun();
@@ -734,7 +898,10 @@ export class ArenaGame {
     for (const event of events) {
       switch (event.kind) {
         case "damage":
-          if (this.floats.length < MAX_FLOATS && (event.crit || this.frameCount % 2 === 0)) {
+          if (
+            this.floats.length < MAX_FLOATS &&
+            (event.crit || this.frameCount % 2 === 0)
+          ) {
             this.floats.push({
               text: event.crit ? `${event.amount}!` : String(event.amount),
               x: event.x + ((event.amount * 37) % 7) * SUB,
@@ -754,8 +921,18 @@ export class ArenaGame {
           }
           break;
         case "kill":
-          this.renderer.die(event.x, event.y, event.enemy, event.elite, this.state.player.x);
-          if (event.enemy === "brute" || event.enemy === "heavy" || event.enemy === "lootRunner") {
+          this.renderer.die(
+            event.x,
+            event.y,
+            event.enemy,
+            event.elite,
+            this.state.player.x,
+          );
+          if (
+            event.enemy === "brute" ||
+            event.enemy === "heavy" ||
+            event.enemy === "lootRunner"
+          ) {
             this.hitStop = Math.max(this.hitStop, 2);
             this.renderer.shake = Math.max(this.renderer.shake, 0.3);
           }
@@ -764,20 +941,48 @@ export class ArenaGame {
           this.renderer.hurt = 1;
           this.renderer.shake = Math.max(this.renderer.shake, 0.7);
           this.hitStop = Math.max(this.hitStop, 3);
-          if (this.state.player.health * 100 < maxHealth(this.state) * LOW_HEALTH_PERCENT && this.state.player.health > 0) {
+          if (
+            this.state.player.health * 100 <
+              maxHealth(this.state) * LOW_HEALTH_PERCENT &&
+            this.state.player.health > 0
+          ) {
             this.tell(tipScene(currentWorld(this.state).id, "lowHealth"));
           }
-          this.floats.push({ text: `-${event.amount}`, x: this.state.player.x, y: this.state.player.y, color: "#ff6b6b", size: 24, age: 0 });
+          this.floats.push({
+            text: `-${event.amount}`,
+            x: this.state.player.x,
+            y: this.state.player.y,
+            color: "#ff6b6b",
+            size: 24,
+            age: 0,
+          });
           break;
         case "hallucinated":
           if (this.frameCount % 3 === 0) {
-            this.floats.push({ text: "???", x: event.x, y: event.y - 8 * SUB, color: "#d77bba", size: 18, age: 0 });
+            this.floats.push({
+              text: "???",
+              x: event.x,
+              y: event.y - 8 * SUB,
+              color: "#d77bba",
+              size: 18,
+              age: 0,
+            });
           }
           break;
         case "pulse":
-          this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "ciPipeline" ? "#ffcd75" : "#9ff6ff");
+          this.renderer.pulse(
+            event.x,
+            event.y,
+            event.radius,
+            event.weapon === "ciPipeline" ? "#ffcd75" : "#9ff6ff",
+          );
           if (event.weapon === "ciPipeline") {
-            this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.6), "#ffffff");
+            this.renderer.pulse(
+              event.x,
+              event.y,
+              Math.trunc(event.radius * 0.6),
+              "#ffffff",
+            );
           }
           break;
         case "levelUp":
@@ -787,29 +992,63 @@ export class ArenaGame {
         case "bossArrives": {
           const world = WORLDS[event.world];
           if (world) {
-            this.banner = { title: bossName(world), subtitle: t("story.bossArrives", { rival: rivalName(world) }), age: 0, life: 170 };
+            this.banner = {
+              title: bossName(world),
+              subtitle: t("story.bossArrives", { rival: rivalName(world) }),
+              age: 0,
+              life: 170,
+            };
             this.tell(bossScene(world.id));
           }
           break;
         }
         case "bossPhase": {
           const check = currentWorld(this.state).check;
-          const part = check.kind === "passive" ? passiveName(check.passive) : t("boss.checkWeapons");
+          const part =
+            check.kind === "passive"
+              ? passiveName(check.passive)
+              : t("boss.checkWeapons");
           this.renderer.shake = Math.max(this.renderer.shake, 0.9);
           this.hitStop = Math.max(this.hitStop, 8);
-          const boss = this.state.enemies.find((enemy) => enemy.id === this.state.bossId) ?? this.state.player;
+          const boss =
+            this.state.enemies.find(
+              (enemy) => enemy.id === this.state.bossId,
+            ) ?? this.state.player;
           this.effects.spawn("pow", boss.x, boss.y);
           this.banner =
             event.phase === 2
-              ? { title: t("boss.phase2"), subtitle: event.checkPassed ? t("boss.checkPassed", { part }) : t("boss.checkFailed", { part }), age: 0, life: 170 }
-              : { title: t("boss.phase3"), subtitle: t("boss.phase3Line"), age: 0, life: 170 };
+              ? {
+                  title: t("boss.phase2"),
+                  subtitle: event.checkPassed
+                    ? t("boss.checkPassed", { part })
+                    : t("boss.checkFailed", { part }),
+                  age: 0,
+                  life: 170,
+                }
+              : {
+                  title: t("boss.phase3"),
+                  subtitle: t("boss.phase3Line"),
+                  age: 0,
+                  life: 170,
+                };
           const worldId = currentWorld(this.state).id;
-          this.tell(event.phase === 2 ? checkScene(worldId, event.checkPassed, part) : acquisitionScene(worldId));
+          this.tell(
+            event.phase === 2
+              ? checkScene(worldId, event.checkPassed, part)
+              : acquisitionScene(worldId),
+          );
           break;
         }
         case "bossHealed":
           if (this.floats.length < MAX_FLOATS) {
-            this.floats.push({ text: `+${event.amount}`, x: event.x, y: event.y, color: "#a7f070", size: 22, age: 0 });
+            this.floats.push({
+              text: `+${event.amount}`,
+              x: event.x,
+              y: event.y,
+              color: "#a7f070",
+              size: 22,
+              age: 0,
+            });
           }
           break;
         case "acquired":
@@ -822,7 +1061,14 @@ export class ArenaGame {
           this.effects.spawn("pow", event.x, event.y);
           this.effects.spawn("burst", event.x, event.y);
           const cleared = WORLDS[event.world];
-          this.banner = { title: t("story.worldCleared"), subtitle: cleared ? t("story.couldNotRent", { rival: rivalName(cleared) }) : "", age: 0, life: 170 };
+          this.banner = {
+            title: t("story.worldCleared"),
+            subtitle: cleared
+              ? t("story.couldNotRent", { rival: rivalName(cleared) })
+              : "",
+            age: 0,
+            life: 170,
+          };
           if (cleared) {
             this.tell(payoffScene(cleared.id));
             const next = WORLDS[event.world + 1];
@@ -851,7 +1097,14 @@ export class ArenaGame {
           break;
         case "eliteArrives":
           this.renderer.shake = Math.max(this.renderer.shake, 0.5);
-          this.banner = { title: t("elite.arrives"), subtitle: t("elite.subtitle", { rival: rivalName(currentWorld(this.state).id) }), age: 0, life: 150 };
+          this.banner = {
+            title: t("elite.arrives"),
+            subtitle: t("elite.subtitle", {
+              rival: rivalName(currentWorld(this.state).id),
+            }),
+            age: 0,
+            life: 150,
+          };
           this.tell(eliteScene(currentWorld(this.state).id));
           break;
         case "chest":
@@ -861,7 +1114,14 @@ export class ArenaGame {
             this.tell(tipScene(currentWorld(this.state).id, "firstChest"));
           }
           if (this.floats.length < MAX_FLOATS) {
-            this.floats.push({ text: t("chest.open"), x: event.x, y: event.y, color: "#ffcd75", size: 22, age: 0 });
+            this.floats.push({
+              text: t("chest.open"),
+              x: event.x,
+              y: event.y,
+              color: "#ffcd75",
+              size: 22,
+              age: 0,
+            });
           }
           break;
         case "lootEscaped":
@@ -871,9 +1131,17 @@ export class ArenaGame {
           if (event.event === "opening" || !world) {
             break;
           }
-          const [title, line] = event.event === "signature" ? SIGNATURE_TEXT[world.signature] : STAGED_TEXT[event.event];
+          const [title, line] =
+            event.event === "signature"
+              ? SIGNATURE_TEXT[world.signature]
+              : STAGED_TEXT[event.event];
           this.renderer.shake = Math.max(this.renderer.shake, 0.4);
-          this.banner = { title: t(title), subtitle: t(line), age: 0, life: 160 };
+          this.banner = {
+            title: t(title),
+            subtitle: t(line),
+            age: 0,
+            life: 160,
+          };
           break;
         }
         case "fakePopped":
@@ -884,21 +1152,46 @@ export class ArenaGame {
           this.twistFloat("twist.blocked", event.x, event.y, "#9ff6ff");
           break;
         case "leeched":
-          this.twistFloat("twist.leeched", this.state.player.x, this.state.player.y, "#a77ee0");
+          this.twistFloat(
+            "twist.leeched",
+            this.state.player.x,
+            this.state.player.y,
+            "#a77ee0",
+          );
           break;
         case "rooted":
           this.renderer.shake = Math.max(this.renderer.shake, 0.3);
-          this.twistFloat("twist.rooted", this.state.player.x, this.state.player.y, "#2fb5ad");
+          this.twistFloat(
+            "twist.rooted",
+            this.state.player.x,
+            this.state.player.y,
+            "#2fb5ad",
+          );
           break;
         case "metered":
           if (this.floats.length < MAX_FLOATS) {
-            this.floats.push({ text: "-1", x: event.x, y: event.y, color: "#e9a93a", size: 20, age: 0 });
+            this.floats.push({
+              text: "-1",
+              x: event.x,
+              y: event.y,
+              color: "#e9a93a",
+              size: 20,
+              age: 0,
+            });
           }
           break;
       }
     }
-    if (this.state.tick % TICKS_PER_SECOND === 0 && throttlePercent(this.state) > 0) {
-      this.twistFloat("twist.throttled", this.state.player.x, this.state.player.y, "#e9a93a");
+    if (
+      this.state.tick % TICKS_PER_SECOND === 0 &&
+      throttlePercent(this.state) > 0
+    ) {
+      this.twistFloat(
+        "twist.throttled",
+        this.state.player.x,
+        this.state.player.y,
+        "#e9a93a",
+      );
     }
     this.syncMusic();
   }
@@ -923,9 +1216,15 @@ export class ArenaGame {
   private speakerPortrait(speech: Speech): HTMLCanvasElement {
     switch (speech.line.voice) {
       case "guide": {
-        const blink = (speech.age + this.state.seed % 7) % BLINK_EVERY < BLINK_SECONDS;
-        const talking = speech.typing && Math.floor(speech.age / MOUTH_SECONDS) % 2 === 0;
-        return guideCanvas({ face: speech.line.face ?? "smile", talking, blink });
+        const blink =
+          (speech.age + (this.state.seed % 7)) % BLINK_EVERY < BLINK_SECONDS;
+        const talking =
+          speech.typing && Math.floor(speech.age / MOUTH_SECONDS) % 2 === 0;
+        return guideCanvas({
+          face: speech.line.face ?? "smile",
+          talking,
+          blink,
+        });
       }
       case "you":
         return agentCanvas(this.state.tier);
@@ -943,7 +1242,12 @@ export class ArenaGame {
     const voice = speech.line.voice;
     drawSpeaker(this.hud, {
       name: this.speakerName(speech),
-      color: voice === "guide" ? GUIDE_COLOR : voice === "you" ? YOU_COLOR : RIVAL_COLOR,
+      color:
+        voice === "guide"
+          ? GUIDE_COLOR
+          : voice === "you"
+            ? YOU_COLOR
+            : RIVAL_COLOR,
       portrait: this.speakerPortrait(speech),
       text: speech.text,
       shown: speech.shown,
@@ -958,15 +1262,77 @@ export class ArenaGame {
     });
   }
 
-  private twistFloat(key: MessageKey, x: number, y: number, color: string): void {
-    if (this.floats.length >= MAX_FLOATS || this.frameCount < this.twistFloatAt) {
+  private advanceTour(seconds: number): void {
+    if (this.screen !== "run" || this.state.status !== "levelUp") {
+      this.tourCards = null;
+      return;
+    }
+    if (this.state.cards !== this.tourCards) {
+      this.tourCards = this.state.cards;
+      this.tourSeconds = 0;
+      return;
+    }
+    this.tourSeconds += seconds;
+  }
+
+  private shownCard(): TourStop {
+    if (this.hover >= 0) {
+      return { index: this.hover, progress: 0 };
+    }
+    const spaced = usesSpaces(currentLocale());
+    return tourStop(
+      this.state.cards.map((card) => readingSeconds(partGuide(card), spaced)),
+      this.tourSeconds,
+    );
+  }
+
+  private levelUpGuide(): LevelUpGuide | null {
+    const shown = this.shownCard();
+    const card = this.state.cards[shown.index];
+    if (!card) {
+      return null;
+    }
+    const blink = Math.floor(this.frameCount / 8) % 26 === 0;
+    return {
+      name: `${t("story.guideName")} · ${cardName(card)}`,
+      text: partGuide(card),
+      portrait: guideCanvas({
+        face: card.kind === "evolve" ? "grin" : "smile",
+        talking: false,
+        blink,
+      }),
+      accent: guideAccent(card),
+      progress: shown.progress,
+    };
+  }
+
+  private twistFloat(
+    key: MessageKey,
+    x: number,
+    y: number,
+    color: string,
+  ): void {
+    if (
+      this.floats.length >= MAX_FLOATS ||
+      this.frameCount < this.twistFloatAt
+    ) {
       return;
     }
     this.twistFloatAt = this.frameCount + TWIST_FLOAT_EVERY;
-    this.floats.push({ text: t(key), x, y: y - 10 * SUB, color, size: 20, age: 0 });
+    this.floats.push({
+      text: t(key),
+      x,
+      y: y - 10 * SUB,
+      color,
+      size: 20,
+      age: 0,
+    });
   }
 
-  private projectToHud(x: number, y: number): { readonly x: number; readonly y: number } {
+  private projectToHud(
+    x: number,
+    y: number,
+  ): { readonly x: number; readonly y: number } {
     const screen = this.renderer.project(x, y, 0);
     return { x: screen.x * HUD_WIDTH, y: screen.y * HUD_HEIGHT };
   }
@@ -981,7 +1347,10 @@ export class ArenaGame {
       this.drawNotice();
       return;
     }
-    const paused = this.screen !== "run" || this.state.status !== "playing" || this.spins.length > 0;
+    const paused =
+      this.screen !== "run" ||
+      this.state.status !== "playing" ||
+      this.spins.length > 0;
     this.effects.draw(context, paused ? 0 : seconds, project, HUD_PER_RENDER);
     for (const float of this.floats) {
       float.age += paused ? 0 : 1;
@@ -989,10 +1358,26 @@ export class ArenaGame {
     this.floats = this.floats.filter((float) => float.age < 40);
     drawFloats(context, this.floats, project);
     const player = this.projectToHud(this.state.player.x, this.state.player.y);
-    const boss = this.state.enemies.find((enemy) => enemy.id === this.state.bossId);
-    drawRunHud(context, this.state, player, boss ? { name: bossName(currentWorld(this.state)), fraction: boss.health / boss.maxHealth } : null);
+    const boss = this.state.enemies.find(
+      (enemy) => enemy.id === this.state.bossId,
+    );
+    drawRunHud(
+      context,
+      this.state,
+      player,
+      boss
+        ? {
+            name: bossName(currentWorld(this.state)),
+            fraction: boss.health / boss.maxHealth,
+          }
+        : null,
+    );
     if (boss && !paused) {
-      drawBossMarker(context, this.projectToHud(boss.x, boss.y), this.frameCount);
+      drawBossMarker(
+        context,
+        this.projectToHud(boss.x, boss.y),
+        this.frameCount,
+      );
     }
     const objective = this.screen === "results" || this.state.status === "levelUp" ? null : this.tutorial.objective(this.state);
     if (objective) {
@@ -1009,7 +1394,12 @@ export class ArenaGame {
       }
     }
     if (this.screen === "run" && this.state.status === "levelUp") {
-      drawLevelUp(context, this.state, this.hover);
+      drawLevelUp(
+        context,
+        this.state,
+        this.lessonShowing() ? -1 : this.shownCard().index,
+        this.lessonShowing() ? null : this.levelUpGuide(),
+      );
       const speech = this.story.speech;
       if (speech && this.lessonShowing()) {
         const spot = this.lesson[speech.index]?.spot;
@@ -1030,7 +1420,11 @@ export class ArenaGame {
       drawPause(context, this.state);
     }
     if (this.screen === "results") {
-      drawResults(context, this.state, { replay: this.watched !== null, mismatch: this.watched?.mismatch ?? false, shareReady: this.shareCode !== null && this.hooks.share !== undefined });
+      drawResults(context, this.state, {
+        replay: this.watched !== null,
+        mismatch: this.watched?.mismatch ?? false,
+        shareReady: this.shareCode !== null && this.hooks.share !== undefined,
+      });
     }
     this.drawNotice();
   }
@@ -1040,7 +1434,11 @@ export class ArenaGame {
       return;
     }
     this.notice.age += 1;
-    drawNotice(this.hud, this.notice.text, Math.min(this.notice.age / 8, (NOTICE_FRAMES - this.notice.age) / 20));
+    drawNotice(
+      this.hud,
+      this.notice.text,
+      Math.min(this.notice.age / 8, (NOTICE_FRAMES - this.notice.age) / 20),
+    );
     if (this.notice.age > NOTICE_FRAMES) {
       this.notice = null;
     }
@@ -1048,5 +1446,10 @@ export class ArenaGame {
 }
 
 export { HUD_HEIGHT, HUD_WIDTH, RENDER_HEIGHT, RENDER_WIDTH };
-export { postToXUrl, readReplayCode, replayCodeFrom, replayUrl } from "./replay-link";
+export {
+  postToXUrl,
+  readReplayCode,
+  replayCodeFrom,
+  replayUrl,
+} from "./replay-link";
 export { detectLocale } from "../i18n";
