@@ -23,6 +23,23 @@ function saveLocale(code: string): void {
 
 const STORY_KEY = "agent-arena.story.seen";
 
+const saved = {
+  read(key: string): string | null {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  write(key: string, value: string): void {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      return;
+    }
+  },
+};
+
 function storyMemory(fresh: boolean): { has(id: string): boolean; add(id: string): void } {
   const seen = new Set<string>();
   try {
@@ -74,6 +91,13 @@ async function boot(): Promise<void> {
     now: () => performance.now(),
     storyMemory: storyMemory(query.get("story") === "fresh"),
     blip: playBlip,
+    saved,
+    openLink: (url) => {
+      const tab = window.open(url, "_blank");
+      if (tab) {
+        tab.opener = null;
+      }
+    },
     onLocale: (code) => {
       document.documentElement.lang = code;
       if (code === "ja" || code === "zh-Hans") {
@@ -173,12 +197,14 @@ async function boot(): Promise<void> {
         game.confirm();
       } else if (button === PAD.back && game.skipTutorial()) {
         continue;
-      } else if (button === PAD.start || button === PAD.back) {
+      } else if (button === PAD.back) {
+        game.back();
+      } else if (button === PAD.start) {
         tap(game.screen === "title" ? "enter" : "escape");
       } else if (button === PAD.reroll) {
         tap("r");
       } else if (button === PAD.skip) {
-        tap("x");
+        tap(game.screen === "paused" ? "q" : "x");
       } else if (button === PAD.left || button === PAD.right) {
         game.nudgeCard(button === PAD.left ? -1 : 1);
       }

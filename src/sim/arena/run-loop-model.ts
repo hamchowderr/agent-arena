@@ -7,6 +7,7 @@ export const MODEL_SKIPS = 2;
 
 export interface ModelState {
   readonly phase: RunPhase;
+  readonly startWorld: number;
   readonly bossesDown: number;
   readonly bossActive: boolean;
   readonly pending: number;
@@ -40,12 +41,16 @@ export interface ModelViolation {
   readonly event: RunEvent;
 }
 
-export const INITIAL_MODEL_STATE: ModelState = { phase: "title", bossesDown: 0, bossActive: false, pending: 0, rerolls: MODEL_REROLLS, skips: MODEL_SKIPS };
+export const INITIAL_MODEL_STATE: ModelState = { phase: "title", startWorld: 0, bossesDown: 0, bossActive: false, pending: 0, rerolls: MODEL_REROLLS, skips: MODEL_SKIPS };
 
-const FRESH_RUN: Omit<ModelState, "phase"> = { bossesDown: 0, bossActive: false, pending: 0, rerolls: MODEL_REROLLS, skips: MODEL_SKIPS };
+const FRESH_RUN: Omit<ModelState, "phase"> = { startWorld: 0, bossesDown: 0, bossActive: false, pending: 0, rerolls: MODEL_REROLLS, skips: MODEL_SKIPS };
+
+function runFrom(startWorld: number): Omit<ModelState, "phase"> {
+  return { ...FRESH_RUN, startWorld, bossesDown: startWorld, pending: Math.min(MODEL_MAX_PENDING, startWorld) };
+}
 
 export function modelKey(state: ModelState): string {
-  return `${state.phase}|${state.bossesDown}|${state.bossActive ? 1 : 0}|${state.pending}|${state.rerolls}|${state.skips}`;
+  return `${state.phase}|${state.startWorld}|${state.bossesDown}|${state.bossActive ? 1 : 0}|${state.pending}|${state.rerolls}|${state.skips}`;
 }
 
 class Walk {
@@ -95,20 +100,23 @@ export function modelSuccessors(state: ModelState): { readonly edges: ModelEdge[
     edges.push({ action, events: walk.events, to: walk.state });
   };
   const freshRun = (walk: Walk) => walk.set(FRESH_RUN);
+  const startAnywhere = () => {
+    WORLDS.forEach((_, startWorld) =>
+      attempt("start", (walk) => {
+        walk.set(runFrom(startWorld));
+        walk.fire("start");
+        walk.openPendingLevelUp(true);
+      }),
+    );
+  };
 
   switch (state.phase) {
     case "title":
-      attempt("start", (walk) => {
-        freshRun(walk);
-        walk.fire("start");
-      });
+      startAnywhere();
       break;
     case "dead":
     case "won":
-      attempt("start", (walk) => {
-        freshRun(walk);
-        walk.fire("start");
-      });
+      startAnywhere();
       attempt("toTitle", (walk) => {
         freshRun(walk);
         walk.fire("toTitle");
@@ -157,6 +165,10 @@ export function modelSuccessors(state: ModelState): { readonly edges: ModelEdge[
     case "pausedPlaying":
     case "pausedLevelUp":
       attempt("resume", (walk) => walk.fire("resume"));
+      attempt("toTitle", (walk) => {
+        freshRun(walk);
+        walk.fire("toTitle");
+      });
       break;
   }
   return { edges, violations };

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { playBotRun } from "./bot";
 import { offerCards } from "./cards";
-import { MAX_PASSIVES, MAX_WEAPONS, WEAPONS } from "./content";
+import { MAX_PASSIVES, MAX_WEAPONS, WEAPONS, WORLDS } from "./content";
 import { distanceSquared, px, seconds, SUB } from "./math";
-import { BOSS_ENTRY_DISTANCE, KNOCKBACK, choose, createArena, freeOrder, IDLE, dronePosition, maxHealth, orbitPosition, step, xpToNext } from "./sim";
+import { BOSS_ENTRY_DISTANCE, HEAD_START_CARDS_PER_WORLD, KNOCKBACK, bossesBeaten, choose, createArena, currentWorld, freeOrder, IDLE, dronePosition, maxHealth, orbitPosition, step, xpToNext } from "./sim";
 
 describe("arena sim", () => {
   it("replays the same run from the same seed", () => {
@@ -149,5 +149,37 @@ describe("knockback", () => {
       return Math.hypot(state.enemies[0]?.knockX ?? 0, state.enemies[0]?.knockY ?? 0);
     };
     expect(shoved()).toBeGreaterThanOrEqual(KNOCKBACK * 3);
+  });
+});
+
+describe("starting at a later world", () => {
+  it("drops you into that world's tier with a head start of cards", () => {
+    const state = createArena(21, 2);
+    expect(currentWorld(state).id).toBe(WORLDS[2]?.id);
+    expect(state.tier).toBe(WORLDS[2]?.tier);
+    expect(state.player.health).toBe(maxHealth(state));
+    expect(state.pendingLevelUps).toBe(2 * HEAD_START_CARDS_PER_WORLD);
+    expect(state.level).toBe(1 + 2 * HEAD_START_CARDS_PER_WORLD);
+    expect(bossesBeaten(state)).toBe(0);
+    step(state, IDLE);
+    expect(state.status).toBe("levelUp");
+  });
+
+  it("brings that world's boss after the usual two minutes", () => {
+    const state = createArena(5, 3);
+    while (state.pendingLevelUps > 0 || state.status === "levelUp") {
+      if (state.status === "levelUp") {
+        choose(state, 0);
+      } else {
+        step(state, IDLE);
+      }
+    }
+    expect(state.nextBossTick).toBe(seconds(120));
+  });
+
+  it("keeps the start world in range", () => {
+    expect(createArena(1, 99).startWorld).toBe(WORLDS.length - 1);
+    expect(createArena(1, -3).startWorld).toBe(0);
+    expect(createArena(1, 1.5).startWorld).toBe(0);
   });
 });
