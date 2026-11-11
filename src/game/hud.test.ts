@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { bossMarker, HUD_HEIGHT, HUD_WIDTH, wrapLines } from "./hud";
+import { bossMarker, wrapLines } from "./hud";
+import { view } from "./layout";
+
+const HUD_WIDTH = view().width;
+const HUD_HEIGHT = view().height;
 
 describe("bossMarker", () => {
   it("floats over the boss when it is on screen", () => {

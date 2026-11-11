@@ -3,8 +3,9 @@ import { WORLDS } from "../sim/arena/content";
 import { HEAD_START_CARDS_PER_WORLD } from "../sim/arena/sim";
 import { currentLocale, localeName, t, usesSpaces, type MessageKey } from "../i18n";
 import { bossName, rivalName, tierStage } from "./format";
-import { fitSize, HUD_HEIGHT, HUD_WIDTH, measure, text, wrapLines, type Rect } from "./hud";
-import { CONTROLS_PANEL, CREDITS_PANEL, Menu, menuRect, MENU_RECTS, SETTINGS_PANEL, VOLUME_BAR, VOLUME_STEPS, WORLD_CARD, type MenuItem, type MenuPage } from "./menu";
+import { fitSize, measure, text, wrapLines, type Rect } from "./hud";
+import { fillBehindStage, inStage, view } from "./layout";
+import { Menu, menuLayout, menuRect, VOLUME_STEPS, type MenuItem, type MenuPage } from "./menu";
 import { bossCanvas } from "./portraits";
 
 export type MenuDevice = "keys" | "touch" | "pad";
@@ -27,7 +28,6 @@ const LOCK = "#ff8a80";
 
 type Bitmap = readonly string[];
 
-const STEPPER_LABEL_WIDTH = 226;
 
 const ICONS: Readonly<Record<"chip" | "gear" | "help" | "star" | "lock" | "check" | "play" | "link" | "keys" | "pad" | "touch" | "sound" | "music" | "globe" | "arrow", Bitmap>> = {
   chip: [" # # # ", "#######", "#     #", "# ### #", "#     #", "#######", " # # # "],
@@ -182,9 +182,11 @@ function bossArt(world: number, locked: boolean): HTMLCanvasElement | null {
 }
 
 function drawLogo(context: CanvasRenderingContext2D, frame: number): void {
+  const tall = menuLayout().tall;
   const title = t("game.title");
-  const size = fitSize(context, title, 820, 84);
-  let x = 72;
+  const size = fitSize(context, title, tall ? 460 : 820, tall ? 64 : 84);
+  const top = tall ? 30 : 56;
+  let x = tall ? (540 - measure(context, title, size)) / 2 : 72;
   const letters = [...title];
   letters.forEach((letter, index) => {
     const width = measure(context, letter, size);
@@ -193,15 +195,20 @@ function drawLogo(context: CanvasRenderingContext2D, frame: number): void {
     context.textAlign = "left";
     context.textBaseline = "top";
     context.fillStyle = "#3a2410";
-    context.fillText(letter, x + 6, 56 + bob + 8);
+    context.fillText(letter, x + 6, top + bob + 8);
     context.fillStyle = PRIMARY_DEEP;
-    context.fillText(letter, x + 3, 56 + bob + 4);
+    context.fillText(letter, x + 3, top + bob + 4);
     context.fillStyle = index % 2 === 0 ? TITLE_INK : GOLD;
-    context.fillText(letter, x, 56 + bob);
+    context.fillText(letter, x, top + bob);
     x += width;
   });
-  const lines = wrapLines(t("title.tagline"), 760, usesSpaces(currentLocale()), (line) => measure(context, line, 20));
-  lines.slice(0, 2).forEach((line, index) => text(context, line, 74, 170 + index * 30, 20, DIM));
+  const taglineSize = tall ? 17 : 20;
+  const lines = wrapLines(t("title.tagline"), tall ? 480 : 760, usesSpaces(currentLocale()), (line) => measure(context, line, taglineSize));
+  lines
+    .slice(0, 2)
+    .forEach((line, index) =>
+      text(context, line, tall ? 270 : 74, (tall ? 116 : 170) + index * (tall ? 26 : 30), taglineSize, DIM, tall ? "center" : "left"),
+    );
 }
 
 function drawWorldCard(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
@@ -214,7 +221,8 @@ function drawWorldCard(context: CanvasRenderingContext2D, menu: Menu, frame: num
   const swap = menu.swap;
   const slide = swap ? (1 - ease(swap.age / 14)) * 70 * swap.direction : 0;
   const shake = menu.shake > 0 ? Math.round(Math.sin(menu.shake * 1.7) * menu.shake * 0.9) : 0;
-  const card = { ...WORLD_CARD, x: WORLD_CARD.x + shake };
+  const layout = menuLayout();
+  const card = { ...layout.worldCard, x: layout.worldCard.x + shake };
   context.fillStyle = SHADE;
   context.fillRect(card.x - 4, card.y - 4, card.w + 8, card.h + 12);
   context.fillStyle = SCRIM;
@@ -306,12 +314,12 @@ function drawWorldCard(context: CanvasRenderingContext2D, menu: Menu, frame: num
     }
   });
   const hotPrev = menu.focus === "start" || menu.focus === "worldPrev";
-  chevron(context, MENU_RECTS.worldPrev, -1, menu.world > 0, hotPrev, frame);
-  chevron(context, MENU_RECTS.worldNext, 1, menu.world < WORLDS.length - 1, hotPrev, frame);
+  chevron(context, layout.rects.worldPrev, -1, menu.world > 0, hotPrev, frame);
+  chevron(context, layout.rects.worldNext, 1, menu.world < WORLDS.length - 1, hotPrev, frame);
 }
 
 function drawStart(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
-  const rect = MENU_RECTS.start;
+  const rect = menuLayout().rects.start;
   const locked = menu.locked();
   const focused = menu.focus === "start";
   const down = pressOffset(menu, "start");
@@ -349,20 +357,28 @@ function drawHint(context: CanvasRenderingContext2D, device: MenuDevice, page: M
   }
   const key: MessageKey = device === "pad" ? (page === "home" ? "menu.hint.pad" : "menu.hint.padPage") : page === "home" ? "menu.hint.keys" : "menu.hint.keysPage";
   const hint = t(key);
-  text(context, hint, HUD_WIDTH - 24, HUD_HEIGHT - 34, fitSize(context, hint, 820, 15), MUTED, "right");
+  const v = view();
+  text(context, hint, v.width - v.safe.right - 24, v.height - v.safe.bottom - 34, fitSize(context, hint, Math.min(820, v.width - 48), 15), MUTED, "right");
 }
 
 function drawShade(context: CanvasRenderingContext2D): void {
-  const vignette = context.createRadialGradient(HUD_WIDTH / 2, HUD_HEIGHT / 2, HUD_HEIGHT * 0.3, HUD_WIDTH / 2, HUD_HEIGHT / 2, HUD_WIDTH * 0.72);
+  const { width, height, portrait } = view();
+  const vignette = context.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.3, width / 2, height / 2, Math.max(width, height) * 0.72);
   vignette.addColorStop(0, "rgba(8, 10, 18, 0.05)");
   vignette.addColorStop(1, "rgba(8, 10, 18, 0.7)");
   context.fillStyle = vignette;
-  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  const left = context.createLinearGradient(0, 0, 640, 0);
+  context.fillRect(0, 0, width, height);
+  if (portrait) {
+    context.fillStyle = "rgba(8, 10, 18, 0.35)";
+    context.fillRect(0, 0, width, height);
+    return;
+  }
+  const reach = view().stageX + 640;
+  const left = context.createLinearGradient(0, 0, reach, 0);
   left.addColorStop(0, "rgba(8, 10, 18, 0.72)");
   left.addColorStop(1, "rgba(8, 10, 18, 0)");
   context.fillStyle = left;
-  context.fillRect(0, 0, 640, HUD_HEIGHT);
+  context.fillRect(0, 0, reach, height);
 }
 
 function drawHome(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
@@ -372,7 +388,7 @@ function drawHome(context: CanvasRenderingContext2D, menu: Menu, frame: number):
   menuButton(context, menu, "settings", t("menu.settings"), ICONS.gear, frame);
   menuButton(context, menu, "howTo", t("menu.howTo"), ICONS.help, frame);
   menuButton(context, menu, "credits", t("menu.credits"), ICONS.star, frame);
-  const mastra = MENU_RECTS.mastra;
+  const mastra = menuLayout().rects.mastra;
   const focused = menu.focus === "mastra";
   if (focused) {
     focusRing(context, mastra, frame);
@@ -384,8 +400,7 @@ function drawHome(context: CanvasRenderingContext2D, menu: Menu, frame: number):
 }
 
 function pagePanel(context: CanvasRenderingContext2D, rect: Rect, title: string, glyph: Bitmap): void {
-  context.fillStyle = "rgba(6, 8, 14, 0.62)";
-  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+  fillBehindStage(context, "rgba(6, 8, 14, 0.62)");
   context.fillStyle = SHADE;
   context.fillRect(rect.x - 5, rect.y - 5, rect.w + 10, rect.h + 14);
   context.fillStyle = SCRIM;
@@ -399,15 +414,17 @@ function pagePanel(context: CanvasRenderingContext2D, rect: Rect, title: string,
 }
 
 function settingRow(context: CanvasRenderingContext2D, menu: Menu, item: MenuItem, label: string, glyph: Bitmap, frame: number): Rect {
-  const rect = MENU_RECTS[item];
+  const layout = menuLayout();
+  const rect = layout.rects[item];
   const focused = menu.focus === item;
   context.fillStyle = focused ? SURFACE_HOT : "rgba(43, 47, 58, 0.7)";
   context.fillRect(rect.x, rect.y, rect.w, rect.h);
   if (focused) {
     focusRing(context, { ...rect, h: rect.h - 3 }, frame);
   }
-  icon(context, glyph, rect.x + 18, rect.y + rect.h / 2 - 14, 4, focused ? TITLE_INK : EDGE);
-  text(context, label, rect.x + 62, rect.y + rect.h / 2 - 11, fitSize(context, label, STEPPER_LABEL_WIDTH, 22), focused ? TITLE_INK : INK);
+  const labelY = layout.tall ? rect.y + 24 : rect.y + rect.h / 2;
+  icon(context, glyph, rect.x + 18, labelY - 14, 4, focused ? TITLE_INK : EDGE);
+  text(context, label, rect.x + 62, labelY - 11, fitSize(context, label, layout.tall ? rect.w - 80 : 226, 22), focused ? TITLE_INK : INK);
   return rect;
 }
 
@@ -415,9 +432,10 @@ function drawVolume(context: CanvasRenderingContext2D, menu: Menu, item: "music"
   const rect = settingRow(context, menu, item, t(item === "music" ? "settings.music" : "settings.sound"), item === "music" ? ICONS.music : ICONS.sound, frame);
   const hot = menu.focus === item;
   const value = menu.settings[item];
-  chevron(context, MENU_RECTS[item === "music" ? "musicDown" : "soundDown"], -1, value > 0, hot, frame);
-  chevron(context, MENU_RECTS[item === "music" ? "musicUp" : "soundUp"], 1, value < VOLUME_STEPS, hot, frame);
-  const bar = VOLUME_BAR(rect);
+  const layout = menuLayout();
+  chevron(context, layout.rects[item === "music" ? "musicDown" : "soundDown"], -1, value > 0, hot, frame);
+  chevron(context, layout.rects[item === "music" ? "musicUp" : "soundUp"], 1, value < VOLUME_STEPS, hot, frame);
+  const bar = layout.volumeBar(rect);
   const cell = bar.w / VOLUME_STEPS;
   for (let index = 0; index < VOLUME_STEPS; index += 1) {
     const on = index < value;
@@ -434,21 +452,27 @@ function drawVolume(context: CanvasRenderingContext2D, menu: Menu, item: "music"
 }
 
 function drawSettings(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
-  pagePanel(context, SETTINGS_PANEL, t("settings.title"), ICONS.gear);
-  const language = settingRow(context, menu, "language", t("settings.language"), ICONS.globe, frame);
+  const layout = menuLayout();
+  pagePanel(context, layout.settingsPanel, t("settings.title"), ICONS.gear);
+  settingRow(context, menu, "language", t("settings.language"), ICONS.globe, frame);
   const hot = menu.focus === "language";
-  chevron(context, MENU_RECTS.languagePrev, -1, true, hot, frame);
-  chevron(context, MENU_RECTS.languageNext, 1, true, hot, frame);
+  const prev = layout.rects.languagePrev;
+  chevron(context, prev, -1, true, hot, frame);
+  chevron(context, layout.rects.languageNext, 1, true, hot, frame);
   const name = localeName(currentLocale());
-  const left = MENU_RECTS.languagePrev.x + MENU_RECTS.languagePrev.w;
-  const width = MENU_RECTS.languageNext.x - left;
-  text(context, name, left + width / 2, language.y + language.h / 2 - 12, fitSize(context, name, width - 20, 24), TITLE_INK, "center");
+  const left = prev.x + prev.w;
+  const width = layout.rects.languageNext.x - left;
+  text(context, name, left + width / 2, prev.y + prev.h / 2 - 12, fitSize(context, name, width - 20, 24), TITLE_INK, "center");
   drawVolume(context, menu, "music", frame);
   drawVolume(context, menu, "sound", frame);
   const controls = settingRow(context, menu, "controls", t("settings.controls"), ICONS.pad, frame);
   icon(context, ICONS.arrow, controls.x + controls.w - 52, controls.y + controls.h / 2 - 14, 4, menu.focus === "controls" ? TITLE_INK : EDGE);
   const sample = [t("controls.keyboard"), t("controls.gamepad"), t("controls.touch")].join(" · ");
-  text(context, sample, controls.x + 300, controls.y + controls.h / 2 - 8, fitSize(context, sample, controls.w - 370, 16), MUTED);
+  if (layout.tall) {
+    text(context, sample, controls.x + 62, controls.y + 62, fitSize(context, sample, controls.w - 140, 16), MUTED);
+  } else {
+    text(context, sample, controls.x + 300, controls.y + controls.h / 2 - 8, fitSize(context, sample, controls.w - 370, 16), MUTED);
+  }
   menuButton(context, menu, "done", t("settings.done"), null, frame);
 }
 
@@ -461,24 +485,26 @@ function loadoutRow(
   glyph: Bitmap,
   frame: number,
 ): void {
-  const row = settingRow(context, menu, item, label, glyph, frame);
+  settingRow(context, menu, item, label, glyph, frame);
   const hot = menu.focus === item;
-  const prev = MENU_RECTS[item === "context" ? "contextPrev" : "temperaturePrev"];
-  const next = MENU_RECTS[item === "context" ? "contextNext" : "temperatureNext"];
+  const prev = menuLayout().rects[item === "context" ? "contextPrev" : "temperaturePrev"];
+  const next = menuLayout().rects[item === "context" ? "contextNext" : "temperatureNext"];
   chevron(context, prev, -1, true, hot, frame);
   chevron(context, next, 1, true, hot, frame);
   const left = prev.x + prev.w;
   const width = next.x - left;
-  text(context, value, left + width / 2, row.y + row.h / 2 - 12, fitSize(context, value, width - 20, 24), TITLE_INK, "center");
+  text(context, value, left + width / 2, prev.y + prev.h / 2 - 12, fitSize(context, value, width - 20, 24), TITLE_INK, "center");
 }
 
 function drawLoadout(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
+  const layout = menuLayout();
+  const SETTINGS_PANEL = layout.settingsPanel;
   pagePanel(context, SETTINGS_PANEL, t("loadout.title"), ICONS.chip);
   const { context: window, temperature } = menu.loadout;
   loadoutRow(context, menu, "context", t("loadout.context"), t(`loadout.context.${window}`), ICONS.chip, frame);
   loadoutRow(context, menu, "temperature", t("loadout.temperature"), t(`loadout.temperature.${temperature}`), ICONS.star, frame);
   const notes = [t(`loadout.effect.${window}`), t(`loadout.effect.${temperature}`)];
-  const top = MENU_RECTS.temperature.y + MENU_RECTS.temperature.h + 22;
+  const top = layout.rects.temperature.y + layout.rects.temperature.h + 22;
   notes.forEach((note, index) => {
     text(context, note, SETTINGS_PANEL.x + SETTINGS_PANEL.w / 2, top + index * 32, fitSize(context, note, SETTINGS_PANEL.w - 80, 20), index === 0 ? GOLD : GOOD, "center");
   });
@@ -499,8 +525,13 @@ const CONTROL_ROWS: readonly (readonly [MessageKey, MessageKey, MessageKey, Mess
 ];
 
 function drawControls(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
-  const panelRect = CONTROLS_PANEL;
+  const panelRect = menuLayout().controlsPanel;
   pagePanel(context, panelRect, t("controls.title"), ICONS.pad);
+  if (menuLayout().tall) {
+    drawTallControls(context, panelRect);
+    menuButton(context, menu, "back", t("menu.back"), null, frame);
+    return;
+  }
   const labelWidth = 230;
   const column = (panelRect.w - 60 - labelWidth) / 3;
   const heads: readonly (readonly [MessageKey, Bitmap])[] = [
@@ -533,20 +564,54 @@ function drawControls(context: CanvasRenderingContext2D, menu: Menu, frame: numb
   menuButton(context, menu, "back", t("menu.back"), null, frame);
 }
 
+function drawTallControls(context: CanvasRenderingContext2D, panelRect: Rect): void {
+  const spaced = usesSpaces(currentLocale());
+  const glyphs: readonly Bitmap[] = [ICONS.keys, ICONS.pad, ICONS.touch];
+  let y = panelRect.y + 92;
+  CONTROL_ROWS.forEach(([label, keys, pad, touch], row) => {
+    const hints = [keys, pad, touch];
+    const lines = hints.map((key) => (key ? wrapLines(t(key), panelRect.w - 110, spaced, (line) => measure(context, line, 14)).slice(0, 2) : []));
+    const height = 34 + lines.reduce((sum, entry) => sum + Math.max(1, entry.length) * 19 + 4, 0);
+    context.fillStyle = row % 2 === 0 ? "rgba(43, 47, 58, 0.55)" : "rgba(43, 47, 58, 0.25)";
+    context.fillRect(panelRect.x + 16, y - 6, panelRect.w - 32, height);
+    text(context, t(label), panelRect.x + 30, y, fitSize(context, t(label), panelRect.w - 60, 18), GOLD);
+    let lineY = y + 30;
+    lines.forEach((entry, index) => {
+      const glyph = glyphs[index];
+      if (glyph) {
+        icon(context, glyph, panelRect.x + 34, lineY + 1, 2, EDGE);
+      }
+      if (entry.length === 0) {
+        context.fillStyle = MUTED;
+        context.fillRect(panelRect.x + 64, lineY + 8, 24, 4);
+      }
+      entry.forEach((line) => {
+        text(context, line, panelRect.x + 64, lineY, 14, DIM);
+        lineY += 19;
+      });
+      lineY += Math.max(0, 1 - entry.length) * 19 + 4;
+    });
+    y += height + 8;
+  });
+}
+
 const CREDIT_LINES: readonly MessageKey[] = ["credits.madeBy", "credits.inspired", "credits.music", "credits.tech", "credits.parody", "credits.license"];
 
 function drawCredits(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
-  const panelRect = CREDITS_PANEL;
+  const panelRect = menuLayout().creditsPanel;
   pagePanel(context, panelRect, t("credits.title"), ICONS.star);
   const spaced = usesSpaces(currentLocale());
-  let y = panelRect.y + 110;
+  const tall = menuLayout().tall;
+  const size = tall ? 17 : 20;
+  const lineGap = tall ? 25 : 30;
+  let y = panelRect.y + (tall ? 100 : 110);
   CREDIT_LINES.forEach((key, index) => {
-    const lines = wrapLines(t(key), panelRect.w - 120, spaced, (line) => measure(context, line, 20));
+    const lines = wrapLines(t(key), panelRect.w - (tall ? 48 : 120), spaced, (line) => measure(context, line, size));
     lines.forEach((line) => {
-      text(context, line, panelRect.x + panelRect.w / 2, y, 20, index === 0 ? TITLE_INK : DIM, "center");
-      y += 30;
+      text(context, line, panelRect.x + panelRect.w / 2, y, size, index === 0 ? TITLE_INK : DIM, "center");
+      y += lineGap;
     });
-    y += 22;
+    y += tall ? 14 : 22;
   });
   menuButton(context, menu, "mastra", t("credits.mastra"), ICONS.link, frame);
   menuButton(context, menu, "source", t("credits.source"), ICONS.link, frame);
@@ -555,6 +620,11 @@ function drawCredits(context: CanvasRenderingContext2D, menu: Menu, frame: numbe
 
 export function drawMenu(context: CanvasRenderingContext2D, menu: Menu, frame: number, device: MenuDevice): void {
   drawShade(context);
+  inStage(context, () => drawPage(context, menu, frame));
+  drawHint(context, device, menu.page);
+}
+
+function drawPage(context: CanvasRenderingContext2D, menu: Menu, frame: number): void {
   if (menu.page === "home") {
     drawHome(context, menu, frame);
   } else {
@@ -571,5 +641,4 @@ export function drawMenu(context: CanvasRenderingContext2D, menu: Menu, frame: n
   } else if (menu.page === "credits") {
     drawCredits(context, menu, frame);
   }
-  drawHint(context, device, menu.page);
 }

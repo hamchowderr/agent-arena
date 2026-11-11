@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LOADOUT, WORLDS } from "../sim/arena/content";
-import { HUD_HEIGHT, HUD_WIDTH } from "./hud";
-import { DEFAULT_SETTINGS, Menu, menuRect, MENU_RECTS, PAGE_ROWS, parseCleared, parseLoadout, parseSettings, unlockedWorlds, VOLUME_BAR, VOLUME_STEPS, type MenuPage } from "./menu";
+import { DEFAULT_SETTINGS, Menu, menuLayout, menuRect, PAGE_ROWS, parseCleared, parseLoadout, parseSettings, TALL_MENU, unlockedWorlds, VOLUME_STEPS, WIDE_MENU, type MenuPage } from "./menu";
+import { TALL_STAGE, WIDE_STAGE } from "./layout";
 
 const PAGES: readonly MenuPage[] = ["home", "loadout", "settings", "controls", "credits"];
 
@@ -97,7 +97,7 @@ describe("main menu", () => {
   it("sets a volume by clicking the bar", () => {
     const menu = new Menu(DEFAULT_SETTINGS, 0);
     menu.open("settings");
-    const bar = VOLUME_BAR(MENU_RECTS.music);
+    const bar = menuLayout().volumeBar(menuLayout().rects.music);
     menu.click(bar.x + bar.w * 0.25, bar.y + bar.h / 2);
     expect(menu.settings.music).toBe(3);
     menu.click(bar.x + bar.w - 1, bar.y + bar.h / 2);
@@ -121,15 +121,18 @@ describe("main menu", () => {
     expect(menu.click(5, 5)).toBeNull();
   });
 
-  it("keeps every button on screen, with no two focusable buttons overlapping", () => {
+  it.each([
+    ["wide", WIDE_MENU, WIDE_STAGE],
+    ["tall", TALL_MENU, TALL_STAGE],
+  ] as const)("keeps every %s button on screen, with no two focusable buttons overlapping", (_, layout, stage) => {
     for (const page of PAGES) {
       const items = PAGE_ROWS[page].flat();
-      const rects = items.map((item) => menuRect(page, item));
+      const rects = items.map((item) => menuRect(page, item, layout));
       for (const rect of rects) {
         expect(rect.x).toBeGreaterThanOrEqual(0);
         expect(rect.y).toBeGreaterThanOrEqual(0);
-        expect(rect.x + rect.w).toBeLessThanOrEqual(HUD_WIDTH);
-        expect(rect.y + rect.h).toBeLessThanOrEqual(HUD_HEIGHT);
+        expect(rect.x + rect.w).toBeLessThanOrEqual(stage.width);
+        expect(rect.y + rect.h).toBeLessThanOrEqual(stage.height);
       }
       rects.forEach((a, index) =>
         rects.slice(index + 1).forEach((b) => {

@@ -1,7 +1,8 @@
 import { setMusic } from "../audio/music";
 import { cueFor } from "../audio/score";
 import { Effects } from "../render/effects";
-import { ArenaRenderer, RENDER_HEIGHT, RENDER_WIDTH } from "../render/world";
+import { ArenaRenderer } from "../render/world";
+import { inStage, renderSize, setView, toStage, view, type View } from "./layout";
 import { SHOT_GLOW } from "../art/weapon-art";
 import { WORLDS, type SignatureWave } from "../sim/arena/content";
 import type { StagedEvent } from "../sim/arena/formations";
@@ -88,7 +89,7 @@ import {
 } from "./story-player";
 import { replayCode } from "./replay-link";
 import { LESSON_ID, pickLesson, staleLesson, Tutorial, TUTORIAL_DONE, type Device, type LessonLine } from "./tutorial";
-import { drawObjective, drawSpotlight, LESSON_SPEAKER_RECT, spotRects, TUTORIAL_SKIP_RECT } from "./tutorial-hud";
+import { drawObjective, drawSpotlight, lessonSpeakerRect, spotRects, tutorialSkipRect } from "./tutorial-hud";
 import {
   cardRects,
   CHEST_HOLD_FRAMES,
@@ -101,6 +102,7 @@ import {
   drawNotice,
   drawPause,
   drawReplayHud,
+  drawReplayTag,
   drawResults,
   drawRunHud,
   drawSpeaker,
@@ -108,15 +110,13 @@ import {
   ENTRANCE_SECONDS,
   ENTRANCE_SLAM_SECONDS,
   guideAccent,
-  HUD_HEIGHT,
-  HUD_WIDTH,
   inside,
-  PAUSE_QUIT_RECT,
-  POST_RECT,
-  REROLL_RECT,
-  SHARE_RECT,
-  SKIP_RECT,
-  WATCH_RECT,
+  pauseQuitRect,
+  postRect,
+  rerollRect,
+  shareRect,
+  skipRect,
+  watchRect,
   type Banner,
   type ChestSpin,
   type FloatText,
@@ -129,7 +129,6 @@ export type Screen = "title" | "run" | "paused" | "results";
 const STEP_MS = 1000 / TICKS_PER_SECOND;
 const MAX_STEPS_PER_FRAME = 4;
 const MAX_FLOATS = 90;
-const HUD_PER_RENDER = HUD_WIDTH / RENDER_WIDTH;
 const TWIST_FLOAT_EVERY = 45;
 
 const SIGNATURE_TEXT: Readonly<
@@ -733,24 +732,25 @@ export class ArenaGame {
     if (pressed) {
       this.wakeAudio();
     }
+    const stage = toStage(x, y);
     if (this.screen === "title") {
       if (pressed) {
-        this.runMenu(this.menu.click(x, y));
+        this.runMenu(this.menu.click(stage.x, stage.y));
       } else {
-        this.menu.hover(x, y);
+        this.menu.hover(stage.x, stage.y);
       }
       return;
     }
-    if (this.screen === "paused" && pressed && inside(PAUSE_QUIT_RECT, x, y)) {
+    if (this.screen === "paused" && pressed && inside(pauseQuitRect(), stage.x, stage.y)) {
       this.toTitle();
       return;
     }
     if (this.screen === "results" && pressed) {
-      if (inside(SHARE_RECT, x, y)) {
+      if (inside(shareRect(), stage.x, stage.y)) {
         this.share("sheet");
-      } else if (inside(POST_RECT, x, y)) {
+      } else if (inside(postRect(), stage.x, stage.y)) {
         this.share("x");
-      } else if (inside(WATCH_RECT, x, y)) {
+      } else if (inside(watchRect(), stage.x, stage.y)) {
         this.watchAgain();
       } else {
         this.playAgain();
@@ -763,7 +763,7 @@ export class ArenaGame {
       }
       return;
     }
-    if (this.screen === "run" && pressed && this.tutorial.goal && inside(TUTORIAL_SKIP_RECT, x, y) && this.skipTutorial()) {
+    if (this.screen === "run" && pressed && this.tutorial.goal && inside(tutorialSkipRect(), x, y) && this.skipTutorial()) {
       return;
     }
     if (this.screen === "run" && this.story.holding) {
@@ -777,7 +777,7 @@ export class ArenaGame {
       return;
     }
     this.hover = cardRects(this.state.cards.length).findIndex((rect) =>
-      inside(rect, x, y),
+      inside(rect, stage.x, stage.y),
     );
     if (!pressed) {
       return;
@@ -785,9 +785,9 @@ export class ArenaGame {
     if (this.hover >= 0) {
       this.act({ kind: "choose", index: this.hover });
       this.hover = -1;
-    } else if (inside(REROLL_RECT, x, y)) {
+    } else if (inside(rerollRect(), stage.x, stage.y)) {
       this.act({ kind: "reroll" });
-    } else if (inside(SKIP_RECT, x, y)) {
+    } else if (inside(skipRect(), stage.x, stage.y)) {
       this.act({ kind: "skip" });
     }
   }
@@ -824,6 +824,11 @@ export class ArenaGame {
       !this.playback &&
       !this.story.holding
     );
+  }
+
+  preferTouch(): void {
+    this.device = "touch";
+    this.menuDevice = "touch";
   }
 
   touchStart(id: number, x: number, y: number): boolean {
@@ -1616,12 +1621,18 @@ export class ArenaGame {
     y: number,
   ): { readonly x: number; readonly y: number } {
     const screen = this.renderer.project(x, y, 0);
-    return { x: screen.x * HUD_WIDTH, y: screen.y * HUD_HEIGHT };
+    return { x: screen.x * view().width, y: screen.y * view().height };
+  }
+
+  resize(next: View): void {
+    setView(next);
+    const size = renderSize(next);
+    this.renderer.resize(size.width, size.height);
   }
 
   private drawHud(seconds: number): void {
     const context = this.hud;
-    context.clearRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+    context.clearRect(0, 0, view().width, view().height);
     context.imageSmoothingEnabled = false;
     const project = (x: number, y: number) => this.projectToHud(x, y);
     if (this.screen === "title") {
@@ -1634,7 +1645,7 @@ export class ArenaGame {
       this.screen !== "run" ||
       this.state.status !== "playing" ||
       this.spins.length > 0;
-    this.effects.draw(context, paused ? 0 : seconds, project, HUD_PER_RENDER);
+    this.effects.draw(context, paused ? 0 : seconds, project, view().width / this.renderer.width);
     for (const float of this.floats) {
       float.age += paused ? 0 : 1;
     }
@@ -1644,6 +1655,7 @@ export class ArenaGame {
     const boss = this.state.enemies.find(
       (enemy) => enemy.id === this.state.bossId,
     );
+    const covered = view().portrait && (paused || this.screen === "results");
     drawRunHud(
       context,
       this.state,
@@ -1654,6 +1666,7 @@ export class ArenaGame {
             fraction: boss.health / boss.maxHealth,
           }
         : null,
+      covered,
     );
     if (boss && !paused) {
       drawBossMarker(
@@ -1677,37 +1690,42 @@ export class ArenaGame {
       }
     }
     if (this.screen === "run" && this.state.status === "levelUp") {
-      drawLevelUp(
-        context,
-        this.state,
-        this.lessonShowing() ? -1 : this.shownCard().index,
-        this.lessonShowing() ? null : this.levelUpGuide(),
-      );
+      const state = this.state;
+      const hover = this.lessonShowing() ? -1 : this.shownCard().index;
+      const guide = this.lessonShowing() ? null : this.levelUpGuide();
+      inStage(context, () => drawLevelUp(context, state, hover, guide));
       const speech = this.story.speech;
       if (speech && this.lessonShowing()) {
         const spot = this.lesson[speech.index]?.spot;
         if (spot) {
           drawSpotlight(context, spotRects(spot, this.state), this.frameCount);
         }
-        this.drawStory(LESSON_SPEAKER_RECT);
+        this.drawStory(lessonSpeakerRect());
       }
     }
     const spinning = this.spins[0];
     if (this.screen === "run" && spinning) {
-      drawChestSpin(context, spinning, this.frameCount);
+      const frame = this.frameCount;
+      inStage(context, () => drawChestSpin(context, spinning, frame));
     }
     if (this.playback && this.screen !== "results") {
       drawReplayHud(context, this.playback.speed);
     }
     if (this.screen === "paused") {
-      drawPause(context, this.state);
+      const state = this.state;
+      inStage(context, () => drawPause(context, state));
     }
     if (this.screen === "results") {
-      drawResults(context, this.state, {
+      const state = this.state;
+      const results = {
         replay: this.watched !== null,
         mismatch: this.watched?.mismatch ?? false,
         shareReady: this.shareCode !== null && this.hooks.share !== undefined,
-      });
+      };
+      inStage(context, () => drawResults(context, state, results));
+      if (results.replay) {
+        drawReplayTag(context, t("replay.tag"));
+      }
     }
     this.drawNotice();
   }
@@ -1728,7 +1746,7 @@ export class ArenaGame {
   }
 }
 
-export { HUD_HEIGHT, HUD_WIDTH, RENDER_HEIGHT, RENDER_WIDTH };
+export { fitView, hudBacking } from "./layout";
 export {
   postToXUrl,
   readReplayCode,

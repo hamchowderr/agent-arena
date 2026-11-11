@@ -26,6 +26,7 @@ import {
 } from "../sim/arena/sim";
 import { spriteImage } from "../render/textures";
 import { currentLocale, t, usesSpaces } from "../i18n";
+import { fillBehindStage, view, view as currentView } from "./layout";
 import {
   cardBlurb,
   cardName,
@@ -40,8 +41,6 @@ import {
   weaponName,
 } from "./format";
 
-export const HUD_WIDTH = 1440;
-export const HUD_HEIGHT = 810;
 const FONT =
   '"Silkscreen", "DotGothic16", "Press Start 2P", ui-monospace, monospace';
 const INK = "#f4f1e8";
@@ -261,42 +260,49 @@ export function drawRunHud(
   state: ArenaState,
   player: { readonly x: number; readonly y: number },
   boss: { readonly name: string; readonly fraction: number } | null,
+  covered = false,
 ): void {
+  if (covered) {
+    return;
+  }
+  const v = view();
+  const left = v.safe.left + 24;
+  const right = v.width - v.safe.right - 24;
+  const top = v.safe.top;
+  const middle = v.width / 2;
   const xpFraction = state.xp / xpToNext(state.level);
   bar(
     context,
-    { x: 0, y: 0, w: HUD_WIDTH, h: 10 },
+    { x: 0, y: top, w: v.width, h: 10 },
     xpFraction,
     "#73eff7",
     "#1a2033",
   );
 
-  text(context, t("hud.level", { level: state.level }), 24, 26, 30, GOLD);
-  text(context, tierLabel(state.tier), 24, 64, 18);
-  text(
-    context,
-    t("hud.world", {
-      world: Math.min(state.bossesDown + 1, WORLDS.length),
-      rival: rivalName(currentWorld(state)),
-    }),
-    24,
-    90,
-    16,
-    "#9fb0d0",
-  );
+  text(context, t("hud.level", { level: state.level }), left, top + 26, 30, GOLD);
+  const tier = tierLabel(state.tier);
+  const sideWidth = v.portrait ? right - left : middle - left - 90;
+  text(context, tier, left, top + 64, fitSize(context, tier, sideWidth, 18));
+  const world = t("hud.world", {
+    world: Math.min(state.bossesDown + 1, WORLDS.length),
+    rival: rivalName(currentWorld(state)),
+  });
+  text(context, world, left, top + 90, fitSize(context, world, sideWidth, 16), "#9fb0d0");
 
   text(
     context,
     clock(elapsedSeconds(state)),
-    HUD_WIDTH / 2,
-    22,
+    middle,
+    top + 22,
     40,
     INK,
     "center",
   );
   if (boss) {
-    text(context, boss.name, HUD_WIDTH / 2, 74, 18, "#ff9b9b", "center");
-    const barRect = { x: HUD_WIDTH / 2 - 260, y: 100, w: 520, h: 16 };
+    const bossTop = top + (v.portrait ? 122 : 74);
+    text(context, boss.name, middle, bossTop, fitSize(context, boss.name, right - left, 18), "#ff9b9b", "center");
+    const barWidth = Math.min(520, right - left);
+    const barRect = { x: middle - barWidth / 2, y: bossTop + 26, w: barWidth, h: 16 };
     bar(context, barRect, boss.fraction, "#e43b44");
     context.fillStyle = "#1a1c2c";
     for (const floor of BOSS_PHASE_FLOORS) {
@@ -317,8 +323,8 @@ export function drawRunHud(
       text(
         context,
         t("boss.acquire", { time: clock(seconds) }),
-        HUD_WIDTH / 2,
-        128,
+        middle,
+        bossTop + 54,
         18,
         urgent ? "#ff4b5c" : GOLD,
         "center",
@@ -329,8 +335,8 @@ export function drawRunHud(
   text(
     context,
     t("hud.score", { score: compact(score(state)) }),
-    HUD_WIDTH - 24,
-    26,
+    right,
+    top + 26,
     22,
     INK,
     "right",
@@ -338,8 +344,8 @@ export function drawRunHud(
   text(
     context,
     t("hud.kills", { kills: compact(state.kills) }),
-    HUD_WIDTH - 24,
-    56,
+    right,
+    top + 56,
     18,
     "#9fb0d0",
     "right",
@@ -358,31 +364,63 @@ export function drawRunHud(
     context.fillRect(player.x - 6, player.y + 30, 12, 6);
   }
 
-  let x = 24;
-  const y = HUD_HEIGHT - 86;
-  for (const owned of state.weapons) {
-    const rect = { x, y, w: 62, h: 62 };
+  const slots = loadoutSlots(state.weapons.length, state.passives.size);
+  state.weapons.forEach((owned, index) => {
+    const rect = slots.weapons[index];
+    if (!rect) {
+      return;
+    }
     iconTile(context, rect, isEvolvedWeapon(owned.id) ? GOLD : WEAPON_ACCENT);
-    drawIcon(context, weaponIcon(owned.id), x + 31, y + 29, 48);
+    drawIcon(context, weaponIcon(owned.id), rect.x + 31, rect.y + 29, 48);
     text(
       context,
       isEvolvedWeapon(owned.id) ? "★" : String(owned.level),
-      x + 54,
-      y + 40,
+      rect.x + 54,
+      rect.y + 40,
       16,
       GOLD,
       "right",
     );
-    x += 70;
-  }
-  x += 12;
-  for (const [id, owned] of state.passives) {
-    const rect = { x, y: y + 14, w: 48, h: 48 };
+  });
+  [...state.passives].forEach(([id, owned], index) => {
+    const rect = slots.passives[index];
+    if (!rect) {
+      return;
+    }
     iconTile(context, rect, PASSIVE_ACCENT);
-    drawIcon(context, passiveIcon(id), x + 24, y + 22, 32);
-    text(context, String(owned), x + 44, y + 44, 13, GOLD, "right");
-    x += 54;
-  }
+    drawIcon(context, passiveIcon(id), rect.x + 24, rect.y + 8, 32);
+    text(context, String(owned), rect.x + 44, rect.y + 30, 13, GOLD, "right");
+  });
+}
+
+export interface LoadoutSlots {
+  readonly weapons: readonly Rect[];
+  readonly passives: readonly Rect[];
+  readonly bounds: Rect;
+}
+
+const WEAPON_STEP = 70;
+const PASSIVE_STEP = 54;
+
+export function loadoutSlots(weapons: number, passives: number): LoadoutSlots {
+  const v = view();
+  const left = v.safe.left + 24;
+  const bottom = v.height - v.safe.bottom - 24;
+  const weaponsWidth = weapons * WEAPON_STEP;
+  const oneRow = left + weaponsWidth + 12 + passives * PASSIVE_STEP <= v.width - v.safe.right - 12;
+  const weaponY = bottom - 62;
+  const weaponRects = Array.from({ length: weapons }, (_, index) => ({ x: left + index * WEAPON_STEP, y: weaponY, w: 62, h: 62 }));
+  const passiveX = oneRow ? left + weaponsWidth + 12 : left;
+  const passiveY = oneRow || weapons === 0 ? bottom - 48 : weaponY - 62;
+  const passiveRects = Array.from({ length: passives }, (_, index) => ({ x: passiveX + index * PASSIVE_STEP, y: passiveY, w: 48, h: 48 }));
+  const all = [...weaponRects, ...passiveRects];
+  const right = Math.max(left + 116, ...all.map((rect) => rect.x + rect.w));
+  const topY = Math.min(bottom - 62, ...all.map((rect) => rect.y));
+  return {
+    weapons: weaponRects,
+    passives: passiveRects,
+    bounds: { x: left - 12, y: topY - 12, w: right - left + 24, h: bottom - topY + 24 },
+  };
 }
 
 export function drawFloats(
@@ -423,14 +461,18 @@ export interface SpeakerView {
   readonly rect?: Rect;
 }
 
-export const SPEAKER_RECT: Rect = {
-  x: HUD_WIDTH / 2 - 470,
-  y: HUD_HEIGHT - 196,
-  w: 940,
-  h: 150,
-};
+export function speakerRect(): Rect {
+  const v = view();
+  const w = Math.min(940, v.width - v.safe.left - v.safe.right - 24);
+  const h = w < COMPACT_SPEAKER_WIDTH ? 200 : 150;
+  return { x: Math.round((v.width - w) / 2), y: v.height - v.safe.bottom - h - 46, w, h };
+}
+
+const COMPACT_SPEAKER_WIDTH = 700;
 const PORTRAIT_BOX = 126;
+const COMPACT_PORTRAIT_BOX = 96;
 const SPEAKER_SIZES = [25, 22, 20, 18] as const;
+const COMPACT_SPEAKER_SIZES = [22, 20, 18, 16] as const;
 const PLATE_SIZES = [18, 16, 14, 12] as const;
 
 function pill(
@@ -461,7 +503,11 @@ export function drawSpeaker(
   view: SpeakerView,
 ): void {
   const enter = view.first ? Math.min(1, view.age / 0.16) : 1;
-  const at = view.rect ?? SPEAKER_RECT;
+  const at = view.rect ?? speakerRect();
+  const compact = at.w < COMPACT_SPEAKER_WIDTH;
+  const box = compact ? COMPACT_PORTRAIT_BOX : PORTRAIT_BOX;
+  const maxLines = compact ? 5 : 3;
+  const sizes = compact ? COMPACT_SPEAKER_SIZES : SPEAKER_SIZES;
   const rect = { ...at, y: at.y + Math.round((1 - enter) * 24) };
   context.save();
   context.globalAlpha = enter * (view.hold ? 1 : 0.94);
@@ -479,36 +525,29 @@ export function drawSpeaker(
   const frameX = rect.x + 12;
   const frameY = rect.y + 12;
   context.fillStyle = "#232741";
-  context.fillRect(frameX, frameY, PORTRAIT_BOX, PORTRAIT_BOX);
+  context.fillRect(frameX, frameY, box, box);
   context.fillStyle = "#2c3150";
   context.fillRect(
     frameX,
-    frameY + PORTRAIT_BOX * 0.62,
-    PORTRAIT_BOX,
-    PORTRAIT_BOX * 0.38,
+    frameY + box * 0.62,
+    box,
+    box * 0.38,
   );
   const portrait = view.portrait;
-  const scale = Math.max(
-    1,
-    Math.floor(
-      Math.min(
-        (PORTRAIT_BOX - 6) / portrait.width,
-        (PORTRAIT_BOX - 6) / portrait.height,
-      ),
-    ),
-  );
+  const fit = Math.min((box - 6) / portrait.width, (box - 6) / portrait.height);
+  const scale = compact ? fit : Math.max(1, Math.floor(fit));
   const pop = view.age < 0.12 ? Math.round((1 - view.age / 0.12) * 4) : 0;
   const width = portrait.width * scale;
   const height = portrait.height * scale;
   context.imageSmoothingEnabled = false;
   context.save();
   context.beginPath();
-  context.rect(frameX, frameY, PORTRAIT_BOX, PORTRAIT_BOX);
+  context.rect(frameX, frameY, box, box);
   context.clip();
   context.drawImage(
     portrait,
-    frameX + (PORTRAIT_BOX - width) / 2,
-    frameY + PORTRAIT_BOX - height + pop,
+    frameX + (box - width) / 2,
+    frameY + box - height + pop,
     width,
     height,
   );
@@ -518,11 +557,11 @@ export function drawSpeaker(
   context.strokeRect(
     frameX + 1.5,
     frameY + 1.5,
-    PORTRAIT_BOX - 3,
-    PORTRAIT_BOX - 3,
+    box - 3,
+    box - 3,
   );
 
-  const textX = frameX + PORTRAIT_BOX + 24;
+  const textX = frameX + box + 24;
   const plateMax = rect.w - (textX - rect.x) - 24;
   const plateSize = PLATE_SIZES.find((size) => measure(context, view.name, size) + 28 <= plateMax) ?? 12;
   const plateWidth = Math.min(plateMax, measure(context, view.name, plateSize) + 28);
@@ -534,16 +573,16 @@ export function drawSpeaker(
 
   const textWidth = rect.x + rect.w - textX - 28;
   const size =
-    SPEAKER_SIZES.find(
-      (candidate) => wrap(context, view.text, textWidth, candidate).length <= 3,
+    sizes.find(
+      (candidate) => wrap(context, view.text, textWidth, candidate).length <= maxLines,
     ) ??
-    SPEAKER_SIZES[SPEAKER_SIZES.length - 1] ??
+    sizes[sizes.length - 1] ??
     18;
   const lines = wrap(context, view.text, textWidth, size);
   const joiner = usesSpaces(currentLocale()) ? 1 : 0;
   const gap = Math.round(size * 1.42);
   let left = view.shown;
-  lines.slice(0, 3).forEach((line, index) => {
+  lines.slice(0, maxLines).forEach((line, index) => {
     const chars = [...line];
     const visible = chars.slice(0, Math.max(0, left)).join("");
     left -= chars.length + joiner;
@@ -605,17 +644,20 @@ export function drawBanner(
 ): void {
   const fade = Math.min(1, banner.age / 10, (banner.life - banner.age) / 15);
   context.globalAlpha = Math.max(0, fade);
-  text(context, banner.title, HUD_WIDTH / 2, 160, 56, GOLD, "center");
-  text(context, banner.subtitle, HUD_WIDTH / 2, 222, 22, INK, "center");
+  const v = view();
+  const top = v.safe.top + (v.portrait ? 236 : 160);
+  const room = v.width - v.safe.left - v.safe.right - 40;
+  text(context, banner.title, v.width / 2, top, fitSize(context, banner.title, room, 56), GOLD, "center");
+  text(context, banner.subtitle, v.width / 2, top + 62, fitSize(context, banner.subtitle, room, 22), INK, "center");
   context.globalAlpha = 1;
 }
 
-const MARKER_AREA: Rect = {
-  x: 56,
-  y: 140,
-  w: HUD_WIDTH - 112,
-  h: HUD_HEIGHT - 140 - 130,
-};
+function markerArea(): Rect {
+  const v = view();
+  const x = v.safe.left + 56;
+  const y = v.safe.top + (v.portrait ? 210 : 140);
+  return { x, y, w: v.width - v.safe.right - 56 - x, h: v.height - v.safe.bottom - 130 - y };
+}
 const BOSS_HEAD_OFFSET = 175;
 
 export function bossMarker(at: Point): {
@@ -624,6 +666,7 @@ export function bossMarker(at: Point): {
   readonly angle: number;
   readonly onScreen: boolean;
 } {
+  const MARKER_AREA = markerArea();
   const headY = at.y - BOSS_HEAD_OFFSET;
   const onScreen =
     inside(MARKER_AREA, at.x, Math.max(headY, MARKER_AREA.y)) &&
@@ -682,24 +725,34 @@ export function drawBossMarker(
 }
 
 export function cardRects(count: number): Rect[] {
+  if (view().stage.portrait) {
+    return Array.from({ length: count }, (_, index) => ({
+      x: TALL_CARD.x,
+      y: TALL_CARD.y + index * TALL_CARD.step,
+      w: TALL_CARD.w,
+      h: TALL_CARD.h,
+    }));
+  }
   const width = 360;
   const gap = 36;
   const total = count * width + (count - 1) * gap;
   return Array.from({ length: count }, (_, index) => ({
-    x: (HUD_WIDTH - total) / 2 + index * (width + gap),
+    x: (view().stage.width - total) / 2 + index * (width + gap),
     y: 236,
     w: width,
     h: 392,
   }));
 }
 
-export const REROLL_RECT: Rect = {
-  x: HUD_WIDTH / 2 - 330,
-  y: 670,
-  w: 300,
-  h: 60,
-};
-export const SKIP_RECT: Rect = { x: HUD_WIDTH / 2 + 30, y: 670, w: 300, h: 60 };
+const TALL_CARD = { x: 12, y: 226, w: 516, h: 214, step: 266 } as const;
+
+export function rerollRect(): Rect {
+  return view().stage.portrait ? { x: 24, y: 1000, w: 234, h: 60 } : { x: view().stage.width / 2 - 330, y: 670, w: 300, h: 60 };
+}
+
+export function skipRect(): Rect {
+  return view().stage.portrait ? { x: 282, y: 1000, w: 234, h: 60 } : { x: view().stage.width / 2 + 30, y: 670, w: 300, h: 60 };
+}
 
 export interface LevelUpGuide {
   readonly name: string;
@@ -709,14 +762,38 @@ export interface LevelUpGuide {
   readonly progress: number;
 }
 
-const GUIDE_STRIP: Rect = { x: HUD_WIDTH / 2 - 590, y: 88, w: 1180, h: 96 };
-const GUIDE_SIZES = [18, 16, 15, 14] as const;
+export function guideStripRect(): Rect {
+  return view().stage.portrait ? { x: 12, y: 66, w: 516, h: 124 } : { x: view().stage.width / 2 - 590, y: 88, w: 1180, h: 96 };
+}
+
+const GUIDE_SIZES = [18, 16, 15, 14, 13, 12, 11] as const;
+const GUIDE_TEXT_TOP = 32;
+const GUIDE_TEXT_BOTTOM = 10;
+
+export interface TextFit {
+  readonly size: number;
+  readonly gap: number;
+  readonly lines: number;
+}
+
+export function fitTextBlock(sizes: readonly number[], linesAt: (size: number) => number, height: number): TextFit {
+  const fallback = sizes[sizes.length - 1] ?? 12;
+  for (const size of sizes) {
+    const gap = Math.round(size * 1.3);
+    const lines = linesAt(size);
+    if ((lines - 1) * gap + size + Math.max(2, size / 8) <= height) {
+      return { size, gap, lines };
+    }
+  }
+  const gap = Math.round(fallback * 1.3);
+  return { size: fallback, gap, lines: Math.max(1, Math.floor((height - fallback) / gap) + 1) };
+}
 
 function drawGuideStrip(
   context: CanvasRenderingContext2D,
   guide: LevelUpGuide,
 ): void {
-  const rect = GUIDE_STRIP;
+  const rect = guideStripRect();
   context.fillStyle = SHADOW;
   context.fillRect(rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6);
   context.fillStyle = "rgba(14, 16, 26, 0.95)";
@@ -733,20 +810,21 @@ function drawGuideStrip(
   context.strokeRect(frame.x + 1, frame.y + 1, frame.w - 2, frame.h - 2);
   const textX = frame.x + frame.w + 18;
   const width = rect.x + rect.w - textX - 18;
-  text(context, guide.name, textX, rect.y + 10, 16, guide.accent);
-  const size =
-    GUIDE_SIZES.find(
-      (candidate) => wrap(context, guide.text, width, candidate).length <= 3,
-    ) ?? 14;
-  wrap(context, guide.text, width, size)
-    .slice(0, 3)
+  text(context, guide.name, textX, rect.y + 10, fitSize(context, guide.name, width, 16), guide.accent);
+  const fit = fitTextBlock(
+    GUIDE_SIZES,
+    (size) => wrap(context, guide.text, width, size).length,
+    rect.h - GUIDE_TEXT_TOP - GUIDE_TEXT_BOTTOM,
+  );
+  wrap(context, guide.text, width, fit.size)
+    .slice(0, fit.lines)
     .forEach((line, index) =>
       text(
         context,
         line,
         textX,
-        rect.y + 32 + index * Math.round(size * 1.3),
-        size,
+        rect.y + GUIDE_TEXT_TOP + index * fit.gap,
+        fit.size,
         INK,
       ),
     );
@@ -767,38 +845,17 @@ export function drawLevelUp(
   hover: number,
   guide: LevelUpGuide | null = null,
 ): void {
-  context.fillStyle = "rgba(8, 10, 18, 0.62)";
-  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+  fillBehindStage(context, "rgba(8, 10, 18, 0.62)");
+  const stage = view().stage;
+  const middle = stage.width / 2;
+  const title = t("levelUp.title", { level: state.level });
   if (guide) {
-    text(
-      context,
-      t("levelUp.title", { level: state.level }),
-      HUD_WIDTH / 2,
-      28,
-      46,
-      GOLD,
-      "center",
-    );
+    text(context, title, middle, stage.portrait ? 14 : 28, fitSize(context, title, stage.width - 40, stage.portrait ? 40 : 46), GOLD, "center");
     drawGuideStrip(context, guide);
   } else {
-    text(
-      context,
-      t("levelUp.title", { level: state.level }),
-      HUD_WIDTH / 2,
-      92,
-      60,
-      GOLD,
-      "center",
-    );
-    text(
-      context,
-      t("levelUp.hint"),
-      HUD_WIDTH / 2,
-      166,
-      20,
-      "#9fb0d0",
-      "center",
-    );
+    text(context, title, middle, stage.portrait ? 70 : 92, fitSize(context, title, stage.width - 40, 60), GOLD, "center");
+    const hint = t("levelUp.hint");
+    text(context, hint, middle, stage.portrait ? 144 : 166, fitSize(context, hint, stage.width - 40, 20), "#9fb0d0", "center");
   }
   const rects = cardRects(state.cards.length);
   state.cards.forEach((card, index) => {
@@ -809,13 +866,13 @@ export function drawLevelUp(
   });
   drawButton(
     context,
-    REROLL_RECT,
+    rerollRect(),
     t("levelUp.reroll", { count: state.rerolls }),
     state.rerolls > 0,
   );
   drawButton(
     context,
-    SKIP_RECT,
+    skipRect(),
     t("levelUp.skip", { count: state.skips }),
     state.skips > 0,
   );
@@ -844,15 +901,19 @@ export function drawChestSpin(
   spin: ChestSpin,
   frame: number,
 ): void {
-  context.fillStyle = "rgba(8, 10, 18, 0.62)";
-  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+  fillBehindStage(context, "rgba(8, 10, 18, 0.62)");
+  const stage = view().stage;
+  const middle = stage.width / 2;
+  const top = stage.portrait ? 150 : 0;
   const landed = spin.age >= CHEST_SPIN_FRAMES;
   const progress = Math.min(1, spin.age / CHEST_SPIN_FRAMES);
   const eased = 1 - (1 - progress) ** 3;
   const position = eased * (REEL_SLOTS - 1);
-  text(context, t("chest.title"), HUD_WIDTH / 2, 70, 60, GOLD, "center");
-  text(context, t("chest.hint"), HUD_WIDTH / 2, 142, 20, "#9fb0d0", "center");
-  const machine = { x: HUD_WIDTH / 2 - 190, y: 186, w: 380, h: 420 };
+  const title = t("chest.title");
+  const hint = t("chest.hint");
+  text(context, title, middle, top + 70, fitSize(context, title, stage.width - 40, 60), GOLD, "center");
+  text(context, hint, middle, top + 142, fitSize(context, hint, stage.width - 40, 20), "#9fb0d0", "center");
+  const machine = { x: middle - 190, y: top + 186, w: 380, h: 420 };
   context.fillStyle = SHADOW;
   context.fillRect(
     machine.x - 8,
@@ -922,9 +983,9 @@ export function drawChestSpin(
     text(
       context,
       name,
-      HUD_WIDTH / 2,
-      640,
-      fitSize(context, name, 900, 40),
+      middle,
+      top + 640,
+      fitSize(context, name, Math.min(900, stage.width - 40), 40),
       INK,
       "center",
     );
@@ -939,7 +1000,7 @@ export function drawChestSpin(
                 from: card.toLevel - 1,
                 to: card.toLevel,
               });
-    text(context, badge, HUD_WIDTH / 2, 698, 24, cardAccent(card), "center");
+    text(context, badge, middle, top + 698, fitSize(context, badge, stage.width - 40, 24), cardAccent(card), "center");
   }
 }
 
@@ -1014,7 +1075,8 @@ function drawCard(
   index: number,
   hovered: boolean,
 ): void {
-  const lift = hovered ? -12 : 0;
+  const tall = rect.w > rect.h;
+  const lift = hovered ? (tall ? -6 : -12) : 0;
   const box = { ...rect, y: rect.y + lift };
   const accent = cardAccent(card);
   context.fillStyle = SHADOW;
@@ -1028,7 +1090,7 @@ function drawCard(
   context.fillStyle = CARD_FACE;
   context.fillRect(box.x, box.y, box.w, box.h);
   context.fillStyle = accent;
-  context.fillRect(box.x, box.y, box.w, 40);
+  context.fillRect(box.x, box.y, box.w, tall ? 32 : 40);
   const kindLabel =
     card.kind === "evolve"
       ? t("card.evolve")
@@ -1037,14 +1099,16 @@ function drawCard(
         : card.kind === "restore"
           ? t("card.restore.kind")
           : t("card.passive");
-  text(context, kindLabel, box.x + 18, box.y + 11, 18, SHADOW);
+  const tagSize = tall ? 16 : 18;
+  const tagY = tall ? box.y + 8 : box.y + 11;
+  text(context, kindLabel, box.x + 18, tagY, tagSize, SHADOW);
   const badge =
     card.kind === "evolve" || card.kind === "restore"
       ? "★"
       : card.toLevel === 1
         ? t("card.new")
         : t("card.levelChange", { from: card.toLevel - 1, to: card.toLevel });
-  text(context, badge, box.x + box.w - 18, box.y + 11, 18, SHADOW, "right");
+  text(context, badge, box.x + box.w - 18, tagY, tagSize, SHADOW, "right");
   if (card.recommended) {
     const label = t("card.recommended");
     const width = Math.min(box.w - 20, measure(context, label, 15) + 24);
@@ -1059,6 +1123,33 @@ function drawCard(
     context.fillRect(box.x + box.w / 2 - width / 2, box.y - 28, width, 26);
     text(context, label, box.x + box.w / 2, box.y - 23, 15, SHADOW, "center");
   }
+  if (tall) {
+    drawTallCardBody(context, card, box, accent);
+  } else {
+    drawWideCardBody(context, card, box, accent);
+  }
+  const key = {
+    x: box.x + box.w / 2 - 18,
+    y: box.y + box.h - 14,
+    w: 36,
+    h: 30,
+  };
+  context.fillStyle = SHADOW;
+  context.fillRect(key.x - 3, key.y - 3, key.w + 6, key.h + 6);
+  context.fillStyle = hovered ? accent : TILE_LIGHT;
+  context.fillRect(key.x, key.y, key.w, key.h);
+  text(
+    context,
+    String(index + 1),
+    key.x + key.w / 2,
+    key.y + 6,
+    18,
+    hovered ? SHADOW : INK,
+    "center",
+  );
+}
+
+function drawWideCardBody(context: CanvasRenderingContext2D, card: Card, box: Rect, accent: string): void {
   const tile = { x: box.x + box.w / 2 - 56, y: box.y + 58, w: 112, h: 112 };
   iconTile(context, tile, accent);
   drawIcon(
@@ -1115,75 +1206,132 @@ function drawCard(
       "right",
     );
   });
-  const key = {
-    x: box.x + box.w / 2 - 18,
-    y: box.y + box.h - 14,
-    w: 36,
-    h: 30,
-  };
-  context.fillStyle = SHADOW;
-  context.fillRect(key.x - 3, key.y - 3, key.w + 6, key.h + 6);
-  context.fillStyle = hovered ? accent : TILE_LIGHT;
-  context.fillRect(key.x, key.y, key.w, key.h);
-  text(
-    context,
-    String(index + 1),
-    key.x + key.w / 2,
-    key.y + 6,
-    18,
-    hovered ? SHADOW : INK,
-    "center",
-  );
 }
 
-export const PAUSE_QUIT_RECT: Rect = { x: HUD_WIDTH / 2 - 180, y: 736, w: 360, h: 58 };
+function drawTallCardBody(context: CanvasRenderingContext2D, card: Card, box: Rect, accent: string): void {
+  const tile = { x: box.x + 14, y: box.y + 46, w: 84, h: 84 };
+  iconTile(context, tile, accent);
+  drawIcon(context, cardIcon(card), tile.x + tile.w / 2, tile.y + tile.h / 2 - 2, 72);
+  const left = tile.x + tile.w + 14;
+  const width = box.x + box.w - 14 - left;
+  const middle = left + width / 2;
+  const name = cardName(card);
+  text(context, name, middle, box.y + 44, fitSize(context, name, width, 24), INK, "center");
+  if (card.kind !== "evolve" && card.kind !== "restore") {
+    drawPips(context, card, middle, box.y + 78);
+  }
+  wrap(context, cardBlurb(card), width, 14)
+    .slice(0, 2)
+    .forEach((line, lineIndex) => text(context, line, middle, box.y + 100 + lineIndex * 18, 14, "#c8cfe0", "center"));
+  const inset = { x: box.x + 14, y: box.y + 140, w: box.w - 28, h: box.h - 154 };
+  context.fillStyle = CARD_INSET;
+  context.fillRect(inset.x, inset.y, inset.w, inset.h);
+  card.changes.slice(0, 3).forEach((change, lineIndex) => {
+    const y = inset.y + 4 + lineIndex * 18;
+    text(context, changeLabel(change), inset.x + 12, y, 14, "#9fb0d0");
+    text(context, `${changeValue(change, change.before)} ▸ ${changeValue(change, change.after)}`, inset.x + inset.w - 12, y, 14, accent, "right");
+  });
+}
+
+interface PauseLayout {
+  readonly titleY: number;
+  readonly keysY: number;
+  readonly build: Rect;
+  readonly stats: Rect;
+  readonly weaponTop: number;
+  readonly weaponStep: number;
+  readonly passiveTop: number;
+  readonly passiveStep: number;
+  readonly passiveColumns: number;
+  readonly statTop: number;
+  readonly statStep: number;
+  readonly statSize: number;
+  readonly quit: Rect;
+}
+
+const WIDE_PAUSE: PauseLayout = {
+  titleY: 70,
+  keysY: 140,
+  build: { x: 160, y: 200, w: 540, h: 520 },
+  stats: { x: 740, y: 200, w: 540, h: 520 },
+  weaponTop: 80,
+  weaponStep: 46,
+  passiveTop: 330,
+  passiveStep: 32,
+  passiveColumns: 1,
+  statTop: 80,
+  statStep: 40,
+  statSize: 18,
+  quit: { x: 540, y: 736, w: 360, h: 58 },
+};
+
+const TALL_PAUSE: PauseLayout = {
+  titleY: 40,
+  keysY: 104,
+  build: { x: 20, y: 146, w: 500, h: 410 },
+  stats: { x: 20, y: 576, w: 500, h: 400 },
+  weaponTop: 70,
+  weaponStep: 40,
+  passiveTop: 290,
+  passiveStep: 30,
+  passiveColumns: 2,
+  statTop: 66,
+  statStep: 32,
+  statSize: 16,
+  quit: { x: 90, y: 1000, w: 360, h: 58 },
+};
+
+function pauseLayout(): PauseLayout {
+  return view().stage.portrait ? TALL_PAUSE : WIDE_PAUSE;
+}
+
+export function pauseQuitRect(): Rect {
+  return pauseLayout().quit;
+}
 
 export function drawPause(
   context: CanvasRenderingContext2D,
   state: ArenaState,
 ): void {
-  context.fillStyle = "rgba(8, 10, 18, 0.78)";
-  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
-  text(context, t("pause.title"), HUD_WIDTH / 2, 70, 52, GOLD, "center");
-  text(context, t("pause.keys"), HUD_WIDTH / 2, 140, 18, "#9fb0d0", "center");
-  const left = { x: 160, y: 200, w: 540, h: 520 };
-  const right = { x: 740, y: 200, w: 540, h: 520 };
+  fillBehindStage(context, "rgba(8, 10, 18, 0.78)");
+  const layout = pauseLayout();
+  const middle = view().stage.width / 2;
+  const room = view().stage.width - 40;
+  const title = t("pause.title");
+  const keys = t("pause.keys");
+  text(context, title, middle, layout.titleY, fitSize(context, title, room, 52), GOLD, "center");
+  text(context, keys, middle, layout.keysY, fitSize(context, keys, room, 18), "#9fb0d0", "center");
+  const left = layout.build;
+  const right = layout.stats;
   panel(context, left);
   panel(context, right);
   text(context, t("pause.build"), left.x + 28, left.y + 24, 26, GOLD);
   const seconds = Math.max(1, elapsedSeconds(state));
   state.weapons.forEach((owned, index) => {
-    const y = left.y + 80 + index * 46;
+    const y = left.y + layout.weaponTop + index * layout.weaponStep;
     const damage = state.damageByWeapon.get(owned.id) ?? 0;
-    text(
-      context,
-      isEvolvedWeapon(owned.id)
-        ? `${weaponName(owned.id)} ★`
-        : t("pause.partLevel", {
-            name: weaponName(owned.id),
-            level: owned.level,
-          }),
-      left.x + 28,
-      y,
-      18,
-    );
-    text(
-      context,
-      t("pause.dps", { dps: Math.round(damage / seconds) }),
-      left.x + left.w - 28,
-      y,
-      18,
-      "#a7f070",
-      "right",
-    );
+    const dps = t("pause.dps", { dps: Math.round(damage / seconds) });
+    const name = isEvolvedWeapon(owned.id)
+      ? `${weaponName(owned.id)} ★`
+      : t("pause.partLevel", {
+          name: weaponName(owned.id),
+          level: owned.level,
+        });
+    const nameRoom = left.w - 72 - measure(context, dps, 18);
+    text(context, name, left.x + 28, y, fitSize(context, name, nameRoom, 18));
+    text(context, dps, left.x + left.w - 28, y, 18, "#a7f070", "right");
   });
+  const columnWidth = (left.w - 56) / layout.passiveColumns;
   [...state.passives].forEach(([id, owned], index) => {
+    const column = index % layout.passiveColumns;
+    const row = Math.floor(index / layout.passiveColumns);
+    const label = t("pause.partLevel", { name: passiveName(id), level: owned });
     text(
       context,
-      t("pause.partLevel", { name: passiveName(id), level: owned }),
-      left.x + 28,
-      left.y + 330 + index * 32,
-      16,
+      label,
+      left.x + 28 + column * columnWidth,
+      left.y + layout.passiveTop + row * layout.passiveStep,
+      fitSize(context, label, columnWidth - 12, 16),
       "#c8cfe0",
     );
   });
@@ -1204,31 +1352,82 @@ export function drawPause(
     [t("stat.seed"), `#${state.seed}`],
   ];
   stats.forEach(([label, value], index) => {
-    const y = right.y + 80 + index * 40;
-    text(context, label, right.x + 28, y, 18, "#c8cfe0");
-    text(context, value, right.x + right.w - 28, y, 18, INK, "right");
+    const y = right.y + layout.statTop + index * layout.statStep;
+    text(context, label, right.x + 28, y, layout.statSize, "#c8cfe0");
+    text(context, value, right.x + right.w - 28, y, layout.statSize, INK, "right");
   });
-  drawButton(context, PAUSE_QUIT_RECT, t("pause.quit"), true);
+  drawButton(context, layout.quit, t("pause.quit"), true);
 }
 
-export const SHARE_RECT: Rect = {
-  x: HUD_WIDTH / 2 - 486,
-  y: 678,
-  w: 300,
-  h: 56,
+interface ResultsLayout {
+  readonly titleY: number;
+  readonly lineY: number;
+  readonly mismatchY: number;
+  readonly summary: Rect;
+  readonly damage: Rect;
+  readonly rowTop: number;
+  readonly rowStep: number;
+  readonly rowSize: number;
+  readonly damageTop: number;
+  readonly damageStep: number;
+  readonly share: Rect;
+  readonly post: Rect;
+  readonly watch: Rect;
+  readonly keysY: number;
+  readonly linkY: number;
+}
+
+const WIDE_RESULTS: ResultsLayout = {
+  titleY: 60,
+  lineY: 124,
+  mismatchY: 158,
+  summary: { x: 160, y: 190, w: 540, h: 470 },
+  damage: { x: 740, y: 190, w: 540, h: 470 },
+  rowTop: 32,
+  rowStep: 58,
+  rowSize: 20,
+  damageTop: 80,
+  damageStep: 52,
+  share: { x: 234, y: 678, w: 300, h: 56 },
+  post: { x: 570, y: 678, w: 300, h: 56 },
+  watch: { x: 906, y: 678, w: 300, h: 56 },
+  keysY: 748,
+  linkY: 780,
 };
-export const POST_RECT: Rect = {
-  x: HUD_WIDTH / 2 - 150,
-  y: 678,
-  w: 300,
-  h: 56,
+
+const TALL_RESULTS: ResultsLayout = {
+  titleY: 34,
+  lineY: 92,
+  mismatchY: 124,
+  summary: { x: 20, y: 156, w: 500, h: 336 },
+  damage: { x: 20, y: 510, w: 500, h: 380 },
+  rowTop: 24,
+  rowStep: 43,
+  rowSize: 18,
+  damageTop: 70,
+  damageStep: 43,
+  share: { x: 20, y: 908, w: 160, h: 56 },
+  post: { x: 190, y: 908, w: 160, h: 56 },
+  watch: { x: 360, y: 908, w: 160, h: 56 },
+  keysY: 982,
+  linkY: 1018,
 };
-export const WATCH_RECT: Rect = {
-  x: HUD_WIDTH / 2 + 186,
-  y: 678,
-  w: 300,
-  h: 56,
-};
+
+function resultsLayout(): ResultsLayout {
+  return view().stage.portrait ? TALL_RESULTS : WIDE_RESULTS;
+}
+
+export function shareRect(): Rect {
+  return resultsLayout().share;
+}
+
+export function postRect(): Rect {
+  return resultsLayout().post;
+}
+
+export function watchRect(): Rect {
+  return resultsLayout().watch;
+}
 
 export interface ResultsView {
   readonly replay: boolean;
@@ -1241,31 +1440,19 @@ export function drawResults(
   state: ArenaState,
   view: ResultsView,
 ): void {
-  context.fillStyle = "rgba(8, 10, 18, 0.84)";
-  context.fillRect(0, 0, HUD_WIDTH, HUD_HEIGHT);
+  fillBehindStage(context, "rgba(8, 10, 18, 0.84)");
+  const layout = resultsLayout();
+  const middle = stageWidth() / 2;
+  const room = stageWidth() - 40;
   const won = state.status === "won";
-  text(
-    context,
-    won ? t("results.wonTitle") : t("results.lostTitle"),
-    HUD_WIDTH / 2,
-    60,
-    46,
-    won ? GOLD : "#ff9b9b",
-    "center",
-  );
-  text(
-    context,
-    won
-      ? t("results.wonLine")
-      : t("results.killedBy", { killer: killerName(state.killedBy) }),
-    HUD_WIDTH / 2,
-    124,
-    20,
-    INK,
-    "center",
-  );
-  const left = { x: 160, y: 190, w: 540, h: 470 };
-  const right = { x: 740, y: 190, w: 540, h: 470 };
+  const title = won ? t("results.wonTitle") : t("results.lostTitle");
+  text(context, title, middle, layout.titleY, fitSize(context, title, room, 46), won ? GOLD : "#ff9b9b", "center");
+  const line = won
+    ? t("results.wonLine")
+    : t("results.killedBy", { killer: killerName(state.killedBy) });
+  text(context, line, middle, layout.lineY, fitSize(context, line, room, 20), INK, "center");
+  const left = layout.summary;
+  const right = layout.damage;
   panel(context, left);
   panel(context, right);
   const rows: [string, string][] = [
@@ -1278,9 +1465,10 @@ export function drawResults(
     [t("stat.seed"), `#${state.seed}`],
   ];
   rows.forEach(([label, value], index) => {
-    const y = left.y + 32 + index * 58;
-    text(context, label, left.x + 28, y, 20, "#c8cfe0");
-    text(context, value, left.x + left.w - 28, y, 20, INK, "right");
+    const y = left.y + layout.rowTop + index * layout.rowStep;
+    text(context, label, left.x + 28, y, layout.rowSize, "#c8cfe0");
+    const valueRoom = left.w - 72 - measure(context, label, layout.rowSize);
+    text(context, value, left.x + left.w - 28, y, fitSize(context, value, valueRoom, layout.rowSize), INK, "right");
   });
   text(
     context,
@@ -1297,7 +1485,7 @@ export function drawResults(
     .sort((a, b) => b[1] - a[1])
     .slice(0, 7)
     .forEach(([id, damage], index) => {
-      const y = right.y + 80 + index * 52;
+      const y = right.y + layout.damageTop + index * layout.damageStep;
       text(context, weaponName(id), right.x + 28, y, 16, INK);
       text(
         context,
@@ -1315,38 +1503,26 @@ export function drawResults(
         "#41a6f6",
       );
     });
-  drawButton(context, SHARE_RECT, t("share.button"), view.shareReady);
-  drawButton(context, POST_RECT, t("share.x"), view.shareReady);
+  drawButton(context, layout.share, t("share.button"), view.shareReady);
+  drawButton(context, layout.post, t("share.x"), view.shareReady);
   drawButton(
     context,
-    WATCH_RECT,
+    layout.watch,
     view.replay ? t("replay.again") : t("replay.watch"),
     true,
   );
-  text(
-    context,
-    view.replay ? t("replay.keys") : t("results.keys"),
-    HUD_WIDTH / 2,
-    748,
-    18,
-    GOLD,
-    "center",
-  );
-  text(context, t("mastra.link"), HUD_WIDTH / 2, 780, 14, "#9fb0d0", "center");
-  if (view.replay) {
-    drawReplayTag(context, t("replay.tag"));
-  }
+  const keys = view.replay ? t("replay.keys") : t("results.keys");
+  text(context, keys, middle, layout.keysY, fitSize(context, keys, room, 18), GOLD, "center");
+  const link = t("mastra.link");
+  text(context, link, middle, layout.linkY, fitSize(context, link, room, 14), "#9fb0d0", "center");
   if (view.mismatch) {
-    text(
-      context,
-      t("replay.mismatch"),
-      HUD_WIDTH / 2,
-      158,
-      16,
-      "#ff9b9b",
-      "center",
-    );
+    const mismatch = t("replay.mismatch");
+    text(context, mismatch, middle, layout.mismatchY, fitSize(context, mismatch, room, 16), "#ff9b9b", "center");
   }
+}
+
+function stageWidth(): number {
+  return currentView().stage.width;
 }
 
 export function drawReplayTag(
@@ -1355,7 +1531,8 @@ export function drawReplayTag(
 ): void {
   const size = 18;
   const width = measure(context, label, size) + 32;
-  const rect = { x: HUD_WIDTH - 24 - width, y: 96, w: width, h: 36 };
+  const v = currentView();
+  const rect = { x: v.width - v.safe.right - 24 - width, y: v.safe.top + 96, w: width, h: 36 };
   context.fillStyle = SHADOW;
   context.fillRect(rect.x - 3, rect.y - 3, rect.w + 6, rect.h + 6);
   context.fillStyle = "#e43b44";
@@ -1368,7 +1545,9 @@ export function drawReplayHud(
   speed: number,
 ): void {
   drawReplayTag(context, t("replay.speed", { speed }));
-  text(context, t("replay.hint"), HUD_WIDTH - 24, 142, 15, "#9fb0d0", "right");
+  const v = currentView();
+  const hint = t("replay.hint");
+  text(context, hint, v.width - v.safe.right - 24, v.safe.top + 142, fitSize(context, hint, v.width - 48, 15), "#9fb0d0", "right");
 }
 
 export function drawNotice(
@@ -1376,12 +1555,13 @@ export function drawNotice(
   notice: string,
   alpha: number,
 ): void {
-  const size = 20;
+  const v = currentView();
+  const size = fitSize(context, notice, v.width - v.safe.left - v.safe.right - 72, 20);
   const width = measure(context, notice, size) + 48;
-  const rect = { x: HUD_WIDTH / 2 - width / 2, y: 18, w: width, h: 48 };
+  const rect = { x: v.width / 2 - width / 2, y: v.safe.top + 18, w: width, h: 48 };
   context.globalAlpha = Math.max(0, Math.min(1, alpha));
   panel(context, rect, GOLD);
-  text(context, notice, HUD_WIDTH / 2, rect.y + 14, size, INK, "center");
+  text(context, notice, v.width / 2, rect.y + 24 - size / 2, size, INK, "center");
   context.globalAlpha = 1;
 }
 
@@ -1416,16 +1596,18 @@ export function drawBossEntrance(context: CanvasRenderingContext2D, view: BossEn
   }
   const slide = 1 - (1 - Math.min(1, view.age / 0.3)) ** 3;
   const slam = Math.min(1, Math.max(0, (view.age - 0.2) / (ENTRANCE_SLAM_SECONDS - 0.2)));
-  const band = { x: 0, y: 150, w: HUD_WIDTH, h: 190 };
+  const screen = currentView();
+  const width = screen.width;
+  const band = { x: 0, y: screen.safe.top + (screen.portrait ? 236 : 150), w: width, h: 190 };
   context.save();
   context.globalAlpha = alpha;
   context.fillStyle = "rgba(18, 6, 12, 0.9)";
   context.fillRect(band.x, band.y, band.w, band.h);
   context.fillStyle = ENTRANCE_RED;
-  const stripe = Math.round((1 - slide) * HUD_WIDTH);
-  context.fillRect(-stripe, band.y, HUD_WIDTH, 6);
-  context.fillRect(stripe, band.y + band.h - 6, HUD_WIDTH, 6);
-  for (let x = -40 + ((view.age * 160) % 40); x < HUD_WIDTH; x += 40) {
+  const stripe = Math.round((1 - slide) * width);
+  context.fillRect(-stripe, band.y, width, 6);
+  context.fillRect(stripe, band.y + band.h - 6, width, 6);
+  for (let x = -40 + ((view.age * 160) % 40); x < width; x += 40) {
     context.fillStyle = "rgba(255, 77, 94, 0.08)";
     context.beginPath();
     context.moveTo(x, band.y + 6);
@@ -1435,7 +1617,7 @@ export function drawBossEntrance(context: CanvasRenderingContext2D, view: BossEn
     context.fill();
   }
   const box = 150;
-  const boxX = HUD_WIDTH / 2 - 380 - Math.round((1 - slide) * 500);
+  const boxX = Math.max(screen.safe.left + 16, width / 2 - 380) - Math.round((1 - slide) * 500);
   const boxY = band.y + (band.h - box) / 2;
   context.fillStyle = "#2a1420";
   context.fillRect(boxX, boxY, box, box);
@@ -1448,13 +1630,15 @@ export function drawBossEntrance(context: CanvasRenderingContext2D, view: BossEn
   context.strokeStyle = ENTRANCE_RED;
   context.lineWidth = 4;
   context.strokeRect(boxX + 2, boxY + 2, box - 4, box - 4);
-  const textX = boxX + box + 36 + Math.round((1 - slide) * 900);
-  text(context, view.label, textX, band.y + 30, 20, ENTRANCE_RED);
-  const nameSize = Math.round(58 * (1 + 0.7 * (1 - slam)));
+  const textX = boxX + box + (screen.portrait ? 20 : 36) + Math.round((1 - slide) * 900);
+  const room = width - screen.safe.right - 16 - (boxX + box + (screen.portrait ? 20 : 36));
+  text(context, view.label, textX, band.y + 30, fitSize(context, view.label, room, 20), ENTRANCE_RED);
+  const restSize = fitSize(context, view.name, room, 58);
+  const nameSize = Math.round(restSize * (1 + 0.7 * (1 - slam)));
   context.globalAlpha = alpha * (0.35 + 0.65 * slam);
-  text(context, view.name, textX, band.y + 62 - Math.round((nameSize - 58) / 2), nameSize, INK);
+  text(context, view.name, textX, band.y + 62 + Math.round((58 - restSize) / 2) - Math.round((nameSize - restSize) / 2), nameSize, INK);
   context.globalAlpha = alpha;
-  text(context, view.company, textX, band.y + 136, 24, "#ffb3b3");
+  text(context, view.company, textX, band.y + 136, fitSize(context, view.company, room, 24), "#ffb3b3");
   if (slam >= 1 && view.age < ENTRANCE_SLAM_SECONDS + 0.12) {
     context.fillStyle = "rgba(255, 255, 255, 0.25)";
     context.fillRect(band.x, band.y, band.w, band.h);
