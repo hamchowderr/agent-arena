@@ -990,7 +990,7 @@ export class ArenaGame {
         case "mine":
           this.renderer.pulse(event.x, event.y, event.radius, event.weapon === "durableWorkflow" ? "#ffcd75" : "#ef7d57");
           this.renderer.pulse(event.x, event.y, Math.trunc(event.radius * 0.5), "#ffffff");
-          if (event.order === 0 || this.frameCount % 2 === 0) {
+          if (event.order === 0) {
             this.effects.spawn("pow", event.x, event.y);
           }
           this.renderer.shake = Math.max(this.renderer.shake, 0.22);

@@ -149,7 +149,7 @@ export const WEAPONS = {
     speed: 0,
     knockback: 12,
     evolved: true,
-    levels: [level(36, 40, 3, 9, 100)],
+    levels: [level(36, 40, 3, 9, 84)],
   },
   durableWorkflow: {
     kind: "mine",

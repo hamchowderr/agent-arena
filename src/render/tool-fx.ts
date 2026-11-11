@@ -11,8 +11,8 @@ import { pixelTexture, spriteImage } from "./textures";
 const MAX_RAYS = 16;
 const MAX_BOLT_SEGMENTS = 160;
 const MAX_MINES = 40;
-const BOLT_LIFE = 12;
-const BOLT_JAGS = 4;
+const BOLT_LIFE = 16;
+const BOLT_JAGS = 6;
 const BOLT_REJAG_EVERY = 3;
 const RAY_LIFT = 6;
 const BOLT_LIFT = 7;
@@ -59,8 +59,8 @@ function flatPlane(): PlaneGeometry {
   return geometry;
 }
 
-function additive(map: CanvasTexture): MeshBasicMaterial {
-  return new MeshBasicMaterial({ map, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending, toneMapped: false });
+function band(map: CanvasTexture): MeshBasicMaterial {
+  return new MeshBasicMaterial({ map, transparent: true, alphaTest: 0.5, depthWrite: false, depthTest: false, toneMapped: false });
 }
 
 function rayLook(weapon: WeaponId): RayLook {
@@ -85,12 +85,12 @@ export class ToolFx {
   private readonly bolts: Bolt[] = [];
 
   constructor(scene: Scene) {
-    this.rayMaterials = { fileReader: additive(bandTexture(RAY_PROFILES.fileReader)), mapReduce: additive(bandTexture(RAY_PROFILES.mapReduce)) };
+    this.rayMaterials = { fileReader: band(bandTexture(RAY_PROFILES.fileReader)), mapReduce: band(bandTexture(RAY_PROFILES.mapReduce)) };
     this.rayGlowMaterials = {
-      fileReader: new MeshBasicMaterial({ color: PALETTE.r, transparent: true, opacity: 0.22, depthWrite: false, depthTest: false, blending: AdditiveBlending, toneMapped: false }),
-      mapReduce: new MeshBasicMaterial({ color: PALETTE.y, transparent: true, opacity: 0.22, depthWrite: false, depthTest: false, blending: AdditiveBlending, toneMapped: false }),
+      fileReader: new MeshBasicMaterial({ color: PALETTE.r, transparent: true, opacity: 0.12, depthWrite: false, depthTest: false, blending: AdditiveBlending, toneMapped: false }),
+      mapReduce: new MeshBasicMaterial({ color: PALETTE.y, transparent: true, opacity: 0.12, depthWrite: false, depthTest: false, blending: AdditiveBlending, toneMapped: false }),
     };
-    this.boltMaterials = { apiCall: additive(bandTexture(BOLT_PROFILES.apiCall)), mcpServer: additive(bandTexture(BOLT_PROFILES.mcpServer)) };
+    this.boltMaterials = { apiCall: band(bandTexture(BOLT_PROFILES.apiCall)), mcpServer: band(bandTexture(BOLT_PROFILES.mcpServer)) };
     const mineMaterial = (sprite: Sprite) => new MeshBasicMaterial({ map: pixelTexture(spriteImage([sprite]).canvas), transparent: true, alphaTest: 0.5, depthWrite: false, toneMapped: false });
     this.mineMaterials = { plain: mineMaterial(MINE), hot: mineMaterial(MINE_HOT), durable: mineMaterial(DURABLE_MINE), durableHot: mineMaterial(DURABLE_MINE_HOT) };
     this.mineSizes = { plain: MINE[0]?.length ?? 13, hot: MINE_HOT[0]?.length ?? 13, durable: DURABLE_MINE[0]?.length ?? 13, durableHot: DURABLE_MINE_HOT[0]?.length ?? 13 };
@@ -165,7 +165,7 @@ export class ToolFx {
       const endZ = end.y / SUB;
       const length = Math.hypot(endX - originX, endZ - originZ) * open;
       const angle = Math.atan2(endZ - originZ, endX - originX);
-      const width = ((ray.width / SUB) * 2 + 3) * close * flicker;
+      const width = (ray.width / SUB + 3) * close * flicker;
       const look = rayLook(ray.weapon);
       mesh.visible = !ray.hallucinated || state.tick % 2 === 0;
       mesh.material = this.rayMaterials[look];
@@ -176,7 +176,7 @@ export class ToolFx {
       glow.material = this.rayGlowMaterials[look];
       glow.position.set(mesh.position.x, 0.5, mesh.position.z);
       glow.rotation.set(0, -angle, 0);
-      glow.scale.set(Math.max(0.01, length), 1, Math.max(0.01, width * 3));
+      glow.scale.set(Math.max(0.01, length), 1, Math.max(0.01, width * 2));
     });
   }
 
@@ -193,10 +193,10 @@ export class ToolFx {
         continue;
       }
       if (bolt.age % BOLT_REJAG_EVERY === 1 || bolt.jags.length === 0) {
-        bolt.jags = Array.from({ length: (bolt.points.length / 2) * BOLT_JAGS }, () => (Math.random() - 0.5) * 9);
+        bolt.jags = Array.from({ length: (bolt.points.length / 2) * BOLT_JAGS }, () => Math.random() - 0.5);
       }
       const fade = 1 - bolt.age / BOLT_LIFE;
-      const thickness = (bolt.look === "mcpServer" ? 5 : 4) * (0.5 + fade * 0.5);
+      const thickness = (bolt.look === "mcpServer" ? 6 : 5) * (0.5 + fade * 0.5);
       for (let link = 0; link + 3 < bolt.points.length; link += 2) {
         const fromX = (bolt.points[link] ?? 0) / SUB;
         const fromZ = (bolt.points[link + 1] ?? 0) / SUB;
@@ -211,7 +211,7 @@ export class ToolFx {
         let lastZ = fromZ;
         for (let jag = 1; jag <= BOLT_JAGS; jag += 1) {
           const along = jag / BOLT_JAGS;
-          const offset = jag === BOLT_JAGS ? 0 : (bolt.jags[(link / 2) * BOLT_JAGS + jag] ?? 0);
+          const offset = jag === BOLT_JAGS ? 0 : (bolt.jags[(link / 2) * BOLT_JAGS + jag] ?? 0) * Math.max(8, span * 0.3);
           const x = fromX + dx * along + normalX * offset;
           const z = fromZ + dz * along + normalZ * offset;
           const segment = this.segments[used];
