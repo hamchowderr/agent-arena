@@ -10,6 +10,8 @@ import {
   bossScene,
   eliteScene,
   ENDING,
+  firstAttackScene,
+  kitNudgeScene,
   endingScene,
   INTRO,
   introScene,
@@ -41,7 +43,7 @@ const everyLine: StoryLine[] = [
   ...INTRO,
   ...ENDING,
   ...Object.values(TIER_LINES),
-  ...Object.values(WORLD_BEATS).flatMap((beats) => [...beats.arrival, beats.elite, beats.boss, beats.lesson]),
+  ...Object.values(WORLD_BEATS).flatMap((beats) => [...beats.threat, beats.crate, beats.stillComing, ...beats.arrival, ...beats.attack, beats.elite, beats.boss, beats.lesson]),
 ];
 
 describe("story script", () => {
@@ -51,6 +53,39 @@ describe("story script", () => {
       expect(beats.arrival.length).toBeGreaterThan(0);
       expect(beats.arrival[0]?.voice).toBe("rival");
       expect([beats.elite, beats.boss, beats.lesson].every((line) => line.voice === "guide")).toBe(true);
+    }
+  });
+
+  it("opens every world by saying which rival and boss are coming for you, then points at the crate", () => {
+    for (const [index, world] of WORLDS.entries()) {
+      const before = WORLDS[index - 1];
+      const scene = before ? payoffScene(before.id, world.id) : introScene(world.id, false, true);
+      const start = scene.lines.findIndex((line) => line === WORLD_BEATS[world.id].threat[0]);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const [coming, reply, stakes] = scene.lines.slice(start);
+      expect(scene.mode).toBe("hold");
+      expect([coming?.voice, reply?.voice, stakes?.voice]).toEqual(["guide", "you", "guide"]);
+      const said = t(coming?.key ?? "story.you").toLowerCase();
+      expect(said).toContain(t(`world.${world.id}.rival`).toLowerCase());
+      expect(said).toContain(t(`world.${world.id}.boss`).toLowerCase().replace(/^the /, ""));
+      expect(scene.lines[scene.lines.length - 1]).toBe(WORLD_BEATS[world.id].crate);
+      expect(scene.brief?.[scene.brief.length - 1]).toBe(WORLD_BEATS[world.id].crate);
+    }
+  });
+
+  it("names each world's own boss when the player dawdles at the crate", () => {
+    for (const world of WORLDS) {
+      const last = kitNudgeScene(world.id, 2)?.lines[0];
+      expect(t(last?.key ?? "story.you").toLowerCase()).toContain(t(`world.${world.id}.boss`).toLowerCase().replace(/^the /, ""));
+    }
+  });
+
+  it("has the guide brace you, then say how to dodge, when each boss first attacks", () => {
+    for (const world of WORLDS) {
+      const scene = firstAttackScene(world.id);
+      expect(scene.mode).toBe("hold");
+      expect(scene.repeat).toBe("once");
+      expect(scene.lines.map((line) => line.voice)).toEqual(["guide", "guide"]);
     }
   });
 

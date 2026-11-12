@@ -20,6 +20,7 @@ import {
   type ArenaEvent,
   type ArenaState,
   type Input,
+  type Opening,
 } from "../sim/arena/sim";
 import {
   act,
@@ -72,6 +73,7 @@ import {
   introScene,
   KIT_NUDGES,
   kitNudgeScene,
+  firstAttackScene,
   payoffScene,
   readingSeconds,
   RIVAL_COLOR,
@@ -238,6 +240,7 @@ export class ArenaGame {
   private tutorial: Tutorial;
   private lesson: readonly LessonLine[] = [];
   private kitNudges = 0;
+  private kitHeldFrom = 0;
   private device: Device = "keys";
   private teachNext = false;
   private ending = false;
@@ -291,7 +294,7 @@ export class ArenaGame {
       return;
     }
     this.begin(seed, false, world);
-    this.recording = startRecording(seed, this.state.startWorld, this.state.loadout, this.state.kit !== null);
+    this.recording = startRecording(seed, this.state.startWorld, this.state.loadout, this.state.opening);
     this.lastRecording = this.recording;
     this.lastWatched = null;
     this.shareCode = null;
@@ -373,7 +376,7 @@ export class ArenaGame {
     return this.story.speech?.scene.id === LESSON_ID;
   }
 
-  private begin(seed: number, watching: boolean, world: number, loadout = this.menu.loadout, opening = !watching): void {
+  private begin(seed: number, watching: boolean, world: number, loadout = this.menu.loadout, opening: Opening = watching ? "none" : "everyWorld"): void {
     this.playback = null;
     this.watched = null;
     this.hover = -1;
@@ -404,6 +407,7 @@ export class ArenaGame {
     this.tutorial = this.newTutorial(teaching);
     this.lesson = [];
     this.kitNudges = 0;
+    this.kitHeldFrom = 0;
     if (firstWorld) {
       this.story.play(introScene(firstWorld.id, teaching, this.state.kit !== null), watching);
     }
@@ -1226,6 +1230,14 @@ export class ArenaGame {
           }
           break;
         }
+        case "bossAttack": {
+          const world = WORLDS[event.world];
+          if (world) {
+            this.story.forget((id) => id.startsWith("tip.") || id.startsWith("elite."));
+            this.tell(firstAttackScene(world.id));
+          }
+          break;
+        }
         case "bossPhase": {
           const check = currentWorld(this.state).check;
           const part =
@@ -1294,13 +1306,23 @@ export class ArenaGame {
             life: 170,
           };
           if (cleared) {
-            this.tell(payoffScene(cleared.id));
             const next = WORLDS[event.world + 1];
+            const crate = next !== undefined && this.state.kit !== null;
+            if (crate && this.playback === null) {
+              this.story.cut(payoffScene(cleared.id, next.id));
+            } else {
+              this.tell(payoffScene(cleared.id, crate ? next.id : null));
+            }
+            if (crate) {
+              this.kitNudges = 0;
+              this.kitHeldFrom = this.state.heldTicks;
+            } else {
+              this.tell(next ? arrivalScene(next.id) : endingScene(cleared.id));
+            }
             const tier = tierScene(cleared.id, this.state.tier);
             if (tier) {
               this.tell(tier);
             }
-            this.tell(next ? arrivalScene(next.id) : endingScene(cleared.id));
           }
           break;
         }
@@ -1322,6 +1344,7 @@ export class ArenaGame {
         case "kitOpened":
           this.effects.spawn("spark", event.x, event.y);
           this.renderer.shake = Math.max(this.renderer.shake, 0.3);
+          this.story.forget((id) => id.startsWith("crate.nudge."));
           this.tell(arrivalScene(currentWorld(this.state).id));
           break;
         case "eliteArrives":
@@ -1441,7 +1464,7 @@ export class ArenaGame {
       return;
     }
     const due = KIT_NUDGES[this.kitNudges];
-    if (due && this.state.heldTicks >= due.afterSeconds * TICKS_PER_SECOND) {
+    if (due && this.state.heldTicks - this.kitHeldFrom >= due.afterSeconds * TICKS_PER_SECOND) {
       const scene = kitNudgeScene(currentWorld(this.state).id, this.kitNudges);
       this.kitNudges += 1;
       if (scene) {

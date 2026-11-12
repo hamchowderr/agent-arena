@@ -5,7 +5,7 @@ import { DEFAULT_LOADOUT } from "../sim/arena/content";
 import { pickRecommended } from "../sim/arena/bot";
 import { act } from "../sim/arena/replay";
 import { createArena, type ArenaState } from "../sim/arena/sim";
-import { HOW_TO_PLAY, introScene, KIT_LINE, THREAT, type Scene } from "./story";
+import { HOW_TO_PLAY, introScene, WORLD_BEATS, type Scene } from "./story";
 import { memoryOf, StoryPlayer } from "./story-player";
 import { BOSS_WARNING_SECONDS, FIGHT_KILLS, GOALS, LESSON_ID, MOVE_DISTANCE, NAG_SECONDS, pickLesson, staleLesson, Tutorial, type LessonLine } from "./tutorial";
 
@@ -41,7 +41,7 @@ function open(tutorial: Tutorial, state: ArenaState): void {
 describe("starter crate opening", () => {
   it("teaches walking to the crate, then the card lesson there, then dashing", () => {
     const { tutorial, said, taught } = setup();
-    const state = createArena(7, 0, DEFAULT_LOADOUT, true);
+    const state = createArena(7, 0, DEFAULT_LOADOUT, "everyWorld");
     open(tutorial, state);
     expect(tutorial.goal).toBe("move");
     expect(tutorial.objective(state)?.progress).toBeNull();
@@ -59,13 +59,14 @@ describe("starter crate opening", () => {
     expect(said()).toContain("tutorial.dash.say");
   });
 
-  it("sets up the boss as a threat and ends the intro pointing at the crate", () => {
-    const scene = introScene("hustlr", true, true);
+  it.each(Object.keys(WORLD_BEATS) as (keyof typeof WORLD_BEATS)[])("sets up %s's boss as a threat and ends the intro pointing at the crate", (world) => {
+    const beats = WORLD_BEATS[world];
+    const scene = introScene(world, world === "hustlr", true);
     const keys = scene.lines.map((line) => line.key);
-    expect(keys).toEqual(expect.arrayContaining(THREAT.map((line) => line.key)));
-    expect(keys[keys.length - 1]).toBe(KIT_LINE.key);
-    expect(keys).not.toContain("story.hustlr.rival");
-    expect(scene.brief?.map((line) => line.key)).toContain(KIT_LINE.key);
+    expect(keys).toEqual(expect.arrayContaining(beats.threat.map((line) => line.key)));
+    expect(keys[keys.length - 1]).toBe(beats.crate.key);
+    expect(keys).not.toContain(`story.${world}.rival`);
+    expect(scene.brief?.map((line) => line.key)).toContain(beats.crate.key);
   });
 });
 

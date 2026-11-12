@@ -27,7 +27,11 @@ export interface Scene {
 }
 
 export interface WorldBeats {
+  readonly threat: readonly StoryLine[];
+  readonly crate: StoryLine;
+  readonly stillComing: StoryLine;
   readonly arrival: readonly StoryLine[];
+  readonly attack: readonly StoryLine[];
   readonly elite: StoryLine;
   readonly boss: StoryLine;
   readonly lesson: StoryLine;
@@ -59,46 +63,66 @@ export const INTRO: readonly StoryLine[] = [
 
 export const INTRO_AGAIN: readonly StoryLine[] = [guide("story.intro.again", "grin")];
 
-export const THREAT: readonly StoryLine[] = [
-  guide("story.intro.coming", "serious"),
-  you("story.intro.why"),
-  guide("story.intro.seat", "smirk"),
-];
-
-export const KIT_LINE: StoryLine = guide("story.intro.crate", "grin");
-
-export const KIT_NUDGES: readonly { readonly afterSeconds: number; readonly line: StoryLine }[] = [
+export const KIT_NUDGES: readonly { readonly afterSeconds: number; readonly line: StoryLine | null }[] = [
   { afterSeconds: 10, line: guide("story.crate.openIt", "smirk") },
   { afterSeconds: 20, line: guide("story.crate.rightThere", "serious") },
-  { afterSeconds: 30, line: guide("story.crate.stillComing", "shocked") },
+  { afterSeconds: 30, line: null },
 ];
+
+const threat = (world: Exclude<WorldId, "hustlr">, coming: Face, stakes: Face): readonly StoryLine[] => [
+  guide(`story.${world}.coming`, coming),
+  you(`story.${world}.why`),
+  guide(`story.${world}.stakes`, stakes),
+];
+
+const attack = (world: WorldId, brace: Face): readonly StoryLine[] => [guide(`story.${world}.brace`, brace), guide(`story.${world}.mark`, "serious")];
 
 export const WORLD_BEATS: Readonly<Record<WorldId, WorldBeats>> = {
   hustlr: {
+    threat: [guide("story.intro.coming", "serious"), you("story.intro.why"), guide("story.intro.seat", "smirk")],
+    crate: guide("story.intro.crate", "grin"),
+    stillComing: guide("story.crate.stillComing", "shocked"),
+    attack: attack("hustlr", "smirk"),
     arrival: [rival("story.hustlr.rival"), guide("story.hustlr.arrival", "smirk")],
     elite: guide("story.hustlr.elite", "grin"),
     boss: guide("story.hustlr.boss", "serious"),
     lesson: guide("story.hustlr.lesson", "smile"),
   },
   notionally: {
+    threat: threat("notionally", "serious", "smirk"),
+    crate: guide("story.notionally.crate", "grin"),
+    stillComing: guide("story.notionally.stillComing", "shocked"),
+    attack: attack("notionally", "smirk"),
     arrival: [rival("story.notionally.rival"), guide("story.notionally.arrival", "serious")],
     elite: guide("story.notionally.elite", "smirk"),
     boss: guide("story.notionally.boss", "serious"),
     lesson: guide("story.notionally.lesson", "smile"),
   },
   meterly: {
+    threat: threat("meterly", "serious", "serious"),
+    crate: guide("story.meterly.crate", "grin"),
+    stillComing: guide("story.meterly.stillComing", "shocked"),
+    attack: attack("meterly", "serious"),
     arrival: [rival("story.meterly.rival"), guide("story.meterly.arrival", "serious")],
     elite: guide("story.meterly.elite", "grin"),
     boss: guide("story.meterly.boss", "serious"),
     lesson: guide("story.meterly.lesson", "smile"),
   },
   synergex: {
+    threat: threat("synergex", "smirk", "serious"),
+    crate: guide("story.synergex.crate", "grin"),
+    stillComing: guide("story.synergex.stillComing", "shocked"),
+    attack: attack("synergex", "smirk"),
     arrival: [rival("story.synergex.rival"), guide("story.synergex.arrival", "smirk")],
     elite: guide("story.synergex.elite", "smirk"),
     boss: guide("story.synergex.boss", "serious"),
     lesson: guide("story.synergex.lesson", "smile"),
   },
   trustMe: {
+    threat: threat("trustMe", "shocked", "smirk"),
+    crate: guide("story.trustMe.crate", "grin"),
+    stillComing: guide("story.trustMe.stillComing", "shocked"),
+    attack: attack("trustMe", "grin"),
     arrival: [rival("story.trustMe.rival"), guide("story.trustMe.arrival", "shocked")],
     elite: guide("story.trustMe.elite", "smirk"),
     boss: guide("story.trustMe.boss", "serious"),
@@ -120,17 +144,25 @@ export const HOW_TO_PLAY: readonly MessageKey[] = ["story.intro.move", "story.in
 export function introScene(world: WorldId, teaching = false, kit = false): Scene {
   const intro = teaching ? INTRO.filter((line) => !HOW_TO_PLAY.includes(line.key)) : INTRO;
   const repeat = teaching ? "always" : "brief";
+  const beats = WORLD_BEATS[world];
   if (kit) {
-    const named = intro.filter((line) => line.key !== "story.intro.move" && line.key !== "story.intro.tokens");
-    const howTo = intro.filter((line) => line.key === "story.intro.move" || line.key === "story.intro.tokens");
-    return { id: "intro", mode: "hold", world, lines: [...named, ...THREAT, ...howTo, KIT_LINE], repeat, brief: [...INTRO_AGAIN, KIT_LINE] };
+    const named = intro.filter((line) => !HOW_TO_PLAY.includes(line.key));
+    const howTo = intro.filter((line) => HOW_TO_PLAY.includes(line.key));
+    return { id: "intro", mode: "hold", world, lines: [...named, ...beats.threat, ...howTo, beats.crate], repeat, brief: [...INTRO_AGAIN, beats.crate] };
   }
-  return { id: "intro", mode: "hold", world, lines: [...intro, ...WORLD_BEATS[world].arrival], repeat, brief: [...INTRO_AGAIN, ...WORLD_BEATS[world].arrival.slice(0, 1)] };
+  return { id: "intro", mode: "hold", world, lines: [...intro, ...beats.arrival], repeat, brief: [...INTRO_AGAIN, ...beats.arrival.slice(0, 1)] };
 }
 
 export function kitNudgeScene(world: WorldId, index: number): Scene | null {
   const nudge = KIT_NUDGES[index];
-  return nudge ? { id: `crate.nudge.${index}`, mode: "auto", world, lines: [nudge.line], repeat: "always" } : null;
+  if (!nudge) {
+    return null;
+  }
+  return { id: `crate.nudge.${index}`, mode: "auto", world, lines: [nudge.line ?? WORLD_BEATS[world].stillComing], repeat: "always" };
+}
+
+export function firstAttackScene(world: WorldId): Scene {
+  return { id: `attack.${world}`, mode: "hold", world, lines: WORLD_BEATS[world].attack, repeat: "once" };
 }
 
 export function arrivalScene(world: WorldId): Scene {
@@ -147,9 +179,14 @@ export function bossScene(world: WorldId): Scene {
   return { id: `boss.${world}`, mode: "hold", world, lines: [pitch, bossLine(world, "bossTaunt"), WORLD_BEATS[world].boss], repeat: "brief", brief: [pitch] };
 }
 
-export function payoffScene(world: WorldId): Scene {
+export function payoffScene(world: WorldId, next: WorldId | null = null): Scene {
   const defeat = bossLine(world, "bossDefeat");
-  return { id: `payoff.${world}`, mode: "hold", world, lines: [defeat, you("story.keepMine"), WORLD_BEATS[world].lesson], repeat: "brief", brief: [defeat] };
+  const lines = [defeat, you("story.keepMine"), WORLD_BEATS[world].lesson];
+  if (next === null) {
+    return { id: `payoff.${world}`, mode: "hold", world, lines, repeat: "brief", brief: [defeat] };
+  }
+  const coming = WORLD_BEATS[next];
+  return { id: `payoff.${world}`, mode: "hold", world, lines: [...lines, ...coming.threat, coming.crate], repeat: "brief", brief: [defeat, coming.crate] };
 }
 
 export function endingScene(world: WorldId): Scene {

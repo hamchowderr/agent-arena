@@ -94,26 +94,42 @@ describe("replays", () => {
     const bytes = encodeReplay(recording, state);
     const thirdVersion = Uint8Array.from([3, ...bytes.slice(1, 4), ...bytes.slice(5)]);
     const replay = decodeReplay(thirdVersion);
-    expect(replay?.opening).toBe(false);
+    expect(replay?.opening).toBe("none");
     expect(replay && playReplay(replay).matches).toBe(true);
   });
 
+  it("reads links from when only world 1 opened on a crate", () => {
+    const state = createArena(41, 0, DEFAULT_LOADOUT, "firstWorld");
+    const recording = startRecording(41, 0, DEFAULT_LOADOUT, "firstWorld");
+    const right: Action = { kind: "step", input: { moveX: 1, moveY: 0, dash: false } };
+    while (state.tick < seconds(10) && state.status !== "dead") {
+      act(state, recording, state.status === "levelUp" ? { kind: "choose", index: 0 } : right);
+    }
+    const bytes = encodeReplay(recording, state);
+    bytes[0] = 4;
+    const replay = decodeReplay(bytes);
+    expect(replay?.opening).toBe("firstWorld");
+    expect(replay && playReplay(replay).matches).toBe(true);
+    bytes[4] = 2;
+    expect(decodeReplay(bytes)).toBeNull();
+  });
+
   it("replays a run that opens on the starter crate", () => {
-    const state = createArena(41, 0, DEFAULT_LOADOUT, true);
-    const recording = startRecording(41, 0, DEFAULT_LOADOUT, true);
+    const state = createArena(41, 0, DEFAULT_LOADOUT, "everyWorld");
+    const recording = startRecording(41, 0, DEFAULT_LOADOUT, "everyWorld");
     const right: Action = { kind: "step", input: { moveX: 1, moveY: 0, dash: false } };
     while (state.tick < seconds(30) && state.status !== "dead") {
       act(state, recording, state.status === "levelUp" ? { kind: "choose", index: 0 } : right);
     }
     const replay = decodeReplay(encodeReplay(recording, state));
-    expect(replay?.opening).toBe(true);
+    expect(replay?.opening).toBe("everyWorld");
     expect(replay && playReplay(replay).matches).toBe(true);
   });
 
-  it("refuses an opening flag that isn't 0 or 1", () => {
+  it("refuses an opening that doesn't exist", () => {
     const { state, recording } = recordBotRun(99, seconds(5));
     const bytes = encodeReplay(recording, state);
-    bytes[4] = 2;
+    bytes[4] = 3;
     expect(decodeReplay(bytes)).toBeNull();
   });
 

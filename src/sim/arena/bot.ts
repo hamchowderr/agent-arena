@@ -11,6 +11,9 @@ function sign(value: number): -1 | 0 | 1 {
 
 export function kitingBot(state: ArenaState): Input {
   const player = state.player;
+  if (state.kit !== null) {
+    return { moveX: sign(state.kit.x - player.x), moveY: sign(state.kit.y - player.y), dash: false };
+  }
   let awayX = 0;
   let awayY = 0;
   let panic = false;
