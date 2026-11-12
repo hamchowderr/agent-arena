@@ -308,6 +308,7 @@ export type ArenaEvent =
   | { readonly kind: "levelUp"; readonly level: number }
   | { readonly kind: "kitOpened"; readonly x: number; readonly y: number }
   | { readonly kind: "bossArrives"; readonly world: number }
+  | { readonly kind: "bossAttack"; readonly world: number; readonly pattern: BossPattern }
   | { readonly kind: "bossDown"; readonly world: number; readonly x: number; readonly y: number }
   | { readonly kind: "tierUp"; readonly tier: Tier }
   | { readonly kind: "dash" }
@@ -396,6 +397,7 @@ export interface ArenaState {
   readonly flames: Flame[];
   spawnCarry: number;
   worldStartTick: number;
+  readonly opening: Opening;
   kit: StarterKit | null;
   heldTicks: number;
   eliteSpawned: boolean;
@@ -424,7 +426,15 @@ export function clampStartWorld(world: number): number {
   return Number.isInteger(world) ? Math.max(0, Math.min(WORLDS.length - 1, world)) : 0;
 }
 
-export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = DEFAULT_LOADOUT, opening = false): ArenaState {
+export type Opening = "none" | "firstWorld" | "everyWorld";
+
+export const OPENINGS: readonly Opening[] = ["none", "firstWorld", "everyWorld"];
+
+export function crateAtStart(opening: Opening, startWorld: number): boolean {
+  return opening === "everyWorld" || (opening === "firstWorld" && startWorld === 0);
+}
+
+export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = DEFAULT_LOADOUT, opening: Opening = "none"): ArenaState {
   const context = CONTEXT_WINDOWS[loadout.context];
   const startWorld = clampStartWorld(startAt);
   const tier = WORLDS[startWorld]?.tier ?? 1;
@@ -477,7 +487,8 @@ export function createArena(seed: number, startAt = 0, loadout: ArenaLoadout = D
     flames: [],
     spawnCarry: 0,
     worldStartTick: 0,
-    kit: opening && startWorld === 0 ? { x: KIT_OFFSET, y: 0 } : null,
+    opening,
+    kit: crateAtStart(opening, startWorld) ? { x: KIT_OFFSET, y: 0 } : null,
     heldTicks: 0,
     eliteSpawned: false,
     lootSpawned: false,
@@ -1589,7 +1600,6 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   state.fight = null;
   state.shots.length = 0;
   state.hazards.length = 0;
-  state.pendingLevelUps += 1;
   state.worldStartTick = state.tick;
   state.eliteSpawned = false;
   state.lootSpawned = false;
@@ -1600,6 +1610,11 @@ function defeatBoss(state: ArenaState, boss: Enemy): void {
   if (state.bossesDown >= WORLDS.length) {
     move(state, "finalBossDown");
     return;
+  }
+  if (state.opening === "everyWorld") {
+    state.kit = { x: state.player.x + KIT_OFFSET, y: state.player.y };
+  } else {
+    state.pendingLevelUps += 1;
   }
   state.tier = Math.min(5, state.tier + 1) as Tier;
   state.player.health = Math.min(maxHealth(state), state.player.health + percentOf(maxHealth(state), 40));
@@ -1679,6 +1694,9 @@ function updateBossFight(state: ArenaState): void {
   const pattern = currentWorld(state).pattern;
   fight.attackTimer = bossAttackInterval(state, pattern, fight.phase);
   fight.volley += 1;
+  if (fight.volley === 1) {
+    state.events.push({ kind: "bossAttack", world: state.bossesDown, pattern });
+  }
   bossAttack(state, boss, fight, pattern);
 }
 

@@ -39,6 +39,17 @@ function pulseOnce(state: ArenaState): ArenaEvent[] {
 }
 
 describe("boss phases", () => {
+  it("tells the game when the boss starts its first attack, once per fight", () => {
+    const { state } = arenaWithBoss(26);
+    const attacks: ArenaEvent[] = [];
+    for (let tick = 0; tick < seconds(20); tick += 1) {
+      state.player.health = 99999;
+      step(state, IDLE);
+      attacks.push(...state.events.filter((event) => event.kind === "bossAttack"));
+    }
+    expect(attacks).toEqual([{ kind: "bossAttack", world: 0, pattern: WORLDS[0]?.pattern }]);
+  });
+
   it("clamps a big hit at the phase floor instead of skipping a phase", () => {
     const { state, boss } = arenaWithBoss(21);
     boss.health = floorOf(boss, 1) + 1;
