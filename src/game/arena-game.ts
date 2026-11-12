@@ -1233,6 +1233,7 @@ export class ArenaGame {
         case "bossAttack": {
           const world = WORLDS[event.world];
           if (world) {
+            this.story.forget((id) => id.startsWith("tip.") || id.startsWith("elite."));
             this.tell(firstAttackScene(world.id));
           }
           break;
