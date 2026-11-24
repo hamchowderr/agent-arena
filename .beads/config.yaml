@@ -75,3 +75,4 @@ sync:
     remote: chowderr/agent_arena
 export:
     auto: true
+    git-add: false
